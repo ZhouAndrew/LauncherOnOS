@@ -50,5 +50,70 @@ class LauncherTest(unittest.TestCase):
         self.assertNotEqual(self.cli('install', str(self.script)).returncode, 0)
 
 
+    def test_invalid_id_cannot_delete_another_tool(self):
+        self.assertEqual(self.cli('install', str(self.script)).returncode, 0)
+        self.assertNotEqual(self.cli('uninstall', 'hello!!!').returncode, 0)
+        self.assertTrue((self.root / 'app/tools/hello.sh').exists())
+
+    def test_broken_export_does_not_publish_partial_archive(self):
+        self.assertEqual(self.cli('install', str(self.script)).returncode, 0)
+        (self.root / 'app/tools/hello.sh').write_text('modified')
+        archive = self.root / 'partial.tar.gz'
+        self.assertNotEqual(self.cli('export', 'all', str(archive)).returncode, 0)
+        self.assertFalse(archive.exists())
+        self.assertEqual(list(self.root.glob('.launcheronos-*')), [])
+
+    def test_export_does_not_replace_existing_destination(self):
+        self.assertEqual(self.cli('install', str(self.script)).returncode, 0)
+        archive = self.root / 'existing.tar.gz'
+        archive.write_text('keep me')
+        self.assertNotEqual(self.cli('export', 'all', str(archive)).returncode, 0)
+        self.assertEqual(archive.read_text(), 'keep me')
+
+    def test_register_symlink_while_install_rejects_it(self):
+        link = self.root / 'shortcut.sh'
+        link.symlink_to(self.script)
+        self.assertEqual(self.cli('register', str(link)).returncode, 0)
+        self.assertIn('shortcut', self.cli('list').stdout)
+        self.assertNotEqual(self.cli('install', str(link)).returncode, 0)
+        self.assertEqual(self.cli('uninstall', 'shortcut').returncode, 0)
+        self.assertTrue(link.is_symlink())
+        self.assertTrue(self.script.exists())
+
+    def test_executable_python_suffix_respects_shebang(self):
+        script = self.root / 'not_python.py'
+        script.write_text('#!/bin/sh\necho shebang-used\n')
+        script.chmod(0o700)
+        self.assertEqual(self.cli('install', str(script)).returncode, 0)
+        run = self.cli('run', 'not_python')
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertIn('shebang-used', run.stdout)
+
+    def test_changed_managed_tool_refuses_to_run(self):
+        self.assertEqual(self.cli('install', str(self.script)).returncode, 0)
+        (self.root / 'app/tools/hello.sh').write_text('changed')
+        self.assertNotEqual(self.cli('run', 'hello').returncode, 0)
+
+    def test_registry_is_not_world_readable(self):
+        self.assertEqual(self.cli('install', str(self.script)).returncode, 0)
+        registry = self.root / 'app/registry.json'
+        self.assertEqual(registry.stat().st_mode & 0o077, 0)
+
+    def test_non_ascii_filename_gets_safe_tool_id(self):
+        other = self.root / '工具.sh'
+        other.write_text('#!/bin/sh\necho ok\n')
+        result = self.cli('install', str(other))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(result.stdout.strip().startswith('tool-'))
+
+    def test_duplicate_export_not_overwritten(self):
+        self.assertEqual(self.cli('install', str(self.script)).returncode, 0)
+        archive = self.root / 'backup.tar.gz'
+        self.assertEqual(self.cli('export', 'all', str(archive)).returncode, 0)
+        original = archive.read_bytes()
+        self.assertNotEqual(self.cli('export', 'all', str(archive)).returncode, 0)
+        self.assertEqual(archive.read_bytes(), original)
+
+
 if __name__ == '__main__':
     unittest.main()
