@@ -10,7 +10,6 @@ import json
 import os
 from pathlib import Path
 import re
-import shlex
 import shutil
 import subprocess
 import sys
@@ -262,65 +261,15 @@ def export_archive(item: str, destination: Path) -> None:
 
 
 def manual(path: str) -> int:
-    """Show a local Markdown file with the existing Glow program."""
+    """Read an existing Markdown manual with the installed Glow reader."""
     doc = Path(path).expanduser()
     if not doc.is_file() or doc.suffix.lower() != '.md':
-        raise ValueError('Expected an existing .md manual file')
+        raise ValueError('Expected an existing Markdown (.md) file')
     glow = shutil.which('glow')
-    if glow is None:
-        raise ValueError('Glow not found. Install Glow to view formatted manuals.')
+    if not glow:
+        raise ValueError('Glow is not installed; install it to read manuals.')
     return subprocess.run([glow, '-p', str(doc)], check=False).returncode
 
-
-CONSOLE_HELP = """Commands: list, scan [dir], search TERM, info ID,
-  install FILE, register FILE, run ID, export ID PATH, uninstall ID,
-  manual FILE.md, help, exit
-Type: help COMMAND   for detailed command help."""
-
-
-def menu() -> None:
-    """Interactive command console using the existing one-shot CLI."""
-    print('LauncherOnOS | type help, exit to quit')
-    while True:
-        try:
-            line = input('launcheronos> ')
-        except (EOFError, KeyboardInterrupt):
-            print()
-            return
-        try:
-            words = shlex.split(line)
-        except ValueError as exc:
-            print('Error:', exc, file=sys.stderr)
-            continue
-        if not words:
-            continue
-        if words[0] in ('exit', 'quit'):
-            return
-        if words[0] in ('help', '?'):
-            if len(words) == 2:
-                try:
-                    main([words[1], '--help'])
-                except SystemExit:
-                    pass
-            else:
-                print(CONSOLE_HELP)
-            continue
-        if words[0] == 'menu':
-            print('Already in the command console')
-            continue
-        if words[0] == 'uninstall' and len(words) == 2:
-            try:
-                if input(f'Unregister {words[1]}? [y/N]: ').strip().lower() != 'y':
-                    print('Cancelled')
-                    continue
-            except (EOFError, KeyboardInterrupt):
-                print('\nCancelled')
-                continue
-        try:
-            main(words)
-        except SystemExit:
-            # Invalid input or --help must not terminate this console.
-            continue
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -339,7 +288,7 @@ def main(argv: list[str] | None = None) -> int:
         sp.add_argument('path')
         sp.add_argument('--id')
         sp.add_argument('--description')
-    sp = sub.add_parser('manual', help='render a local Markdown manual using Glow')
+    sp = sub.add_parser('manual', help='read a Markdown manual with Glow')
     sp.add_argument('file')
     sp = sub.add_parser('run', help='launch an explicitly selected tool')
     sp.add_argument('tool_id')
@@ -352,7 +301,7 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
     try:
         if args.command in (None, 'menu'):
-            menu()
+            p.print_help()
         elif args.command == 'list':
             for k, v in sorted(database().items()):
                 print(f'{k}\t[{v["mode"]}]\t{v["description"]}')
