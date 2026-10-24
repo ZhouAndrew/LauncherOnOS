@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import io
 import json
@@ -15,6 +16,7 @@ import sys
 import tarfile
 import tempfile
 from datetime import datetime, timezone
+from contextlib import contextmanager
 
 APP_DIR = Path(os.environ.get('LAUNCHERONOS_HOME', Path.home() / '.local/share/launcheronos')).expanduser()
 TOOLS_DIR = APP_DIR / 'tools'
@@ -36,6 +38,20 @@ def inferred_id(path: Path) -> str:
     if not name or not name[0].isalpha():
         name = 'tool-' + hashlib.sha256(path.name.encode()).hexdigest()[:12]
     return slug(name)
+
+
+@contextmanager
+def registry_lock():
+    """Serialize registry mutations across independent CLI processes."""
+    APP_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+    lock_path = APP_DIR / '.registry.lock'
+    with lock_path.open('a+') as lock:
+        lock_path.chmod(0o600)
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
 
 def database() -> dict:
@@ -88,6 +104,11 @@ def file_check(raw_path: str, external: bool = False) -> Path:
 
 
 def install(path: str, tool_id: str | None = None, description: str | None = None, external: bool = False) -> str:
+    with registry_lock():
+        return _install(path, tool_id, description, external)
+
+
+def _install(path: str, tool_id: str | None = None, description: str | None = None, external: bool = False) -> str:
     src = file_check(path, external=external)
     if not external and src.stat().st_size > 10 * 1024 * 1024:
         raise ValueError('Standalone script exceeds 10 MiB; register as external tool instead')
@@ -177,6 +198,11 @@ def execute(key: str, args: list[str]) -> int:
 
 
 def uninstall(key: str) -> None:
+    with registry_lock():
+        _uninstall(key)
+
+
+def _uninstall(key: str) -> None:
     key = slug(key)
     data = database()
     entry = data[key]
