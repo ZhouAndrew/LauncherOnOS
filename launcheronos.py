@@ -260,46 +260,196 @@ def export_archive(item: str, destination: Path) -> None:
         staged.unlink(missing_ok=True)
 
 
-def menu() -> None:
-    while True:
-        print('\n=== LauncherOnOS ===')
-        print('1 List    2 Search    3 Info    4 Scan ~/bin    5 Install script')
-        print('6 Register external tool    7 Launch    8 Export    9 Uninstall    0 Exit')
-        choice = input('Choose: ').strip()
-        if choice in ('0', 'q'):
-            return
+
+# Manuals are imported locally; personal documents are never uploaded.
+MANUALS_DIR = APP_DIR / 'manuals'
+
+
+def list_manuals() -> list[str]:
+    if not MANUALS_DIR.is_dir():
+        return []
+    return sorted(p.name[:-3] for p in MANUALS_DIR.glob('*.md')
+                  if p.is_file() and not p.is_symlink())
+
+
+def import_manuals(archive: Path) -> int:
+    """Import ONLY scripts/*.md from a local manual ZIP, never scripts themselves."""
+    import zipfile
+
+    archive = archive.expanduser()
+    if not archive.is_file():
+        raise FileNotFoundError(archive)
+    documents = {}
+    with zipfile.ZipFile(archive) as bundle:
+        for entry in bundle.infolist():
+            parts = entry.filename.replace('\\', '/').split('/')
+            if (entry.is_dir() or len(parts) < 2 or parts[-2] != 'scripts'
+                    or not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9._-]{0,120}\.md',
+                                        parts[-1])):
+                continue
+            if entry.file_size > 1024 * 1024 or len(documents) >= 300:
+                raise ValueError('Manual archive exceeds safe import limits')
+            name = parts[-1]
+            if name in documents:
+                raise ValueError(f'Duplicate manual name: {name}')
+            documents[name] = bundle.read(entry)
+    if not documents or sum(len(b) for b in documents.values()) > 16 * 1024 * 1024:
+        raise ValueError('No script manuals found, or archive too large')
+    for name, content in documents.items():
+        existing = MANUALS_DIR / name
+        if existing.is_symlink() or (existing.exists() and existing.read_bytes() != content):
+            raise FileExistsError(f'Manual already exists with different contents: {name}')
+    MANUALS_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+    count = 0
+    for name, content in documents.items():
+        destination = MANUALS_DIR / name
+        if destination.exists():
+            continue
+        with tempfile.NamedTemporaryFile(dir=MANUALS_DIR, prefix='.manual-', delete=False) as file:
+            temp = Path(file.name)
+            try:
+                file.write(content)
+                file.flush()
+                os.fchmod(file.fileno(), 0o600)
+            except BaseException:
+                temp.unlink(missing_ok=True)
+                raise
         try:
-            if choice == '1':
-                for k, e in sorted(database().items()):
-                    print(f'{k:27} [{e["mode"]}] {e["description"]}')
-            elif choice == '2':
-                print('\n'.join(search(input('Search: '))) or 'No matches')
-            elif choice == '3':
-                print(json.dumps(info(input('Tool ID: ')), indent=2))
-            elif choice == '4':
-                for p in scan():
-                    print(f'{p.name:30} {summary(p)}')
-            elif choice in ('5', '6'):
-                path = input('Script or executable path: ').strip()
-                print('Registered:', install(path, external=(choice == '6')))
-            elif choice == '7':
-                key = input('Tool ID: ').strip()
-                if input('Execute this tool? [y/N]: ').strip().lower() == 'y':
-                    print('Exit status:', execute(key, []))
-            elif choice == '8':
-                key = input('Tool ID or all: ').strip()
-                dest = Path(input('Export tar.gz path: ').strip())
-                export_archive(key, dest)
-                print('Exported:', dest)
-            elif choice == '9':
-                key = input('Tool ID: ').strip()
-                if input(f'Unregister {key}? [y/N]: ').strip().lower() == 'y':
-                    uninstall(key)
-                    print('Unregistered:', key)
+            # Refuse unexpected collisions; importing never overwrites manuals.
+            os.link(temp, destination)
+            count += 1
+        finally:
+            temp.unlink(missing_ok=True)
+    return count
+
+
+def find_manual(target: str) -> Path:
+    """Find a local Markdown manual without executing or importing any script."""
+    direct = Path(target).expanduser()
+    if direct.suffix.lower() == '.md' and direct.is_file():
+        return direct
+    names = [target]
+    record = database().get(target)
+    if record:
+        source_name = Path(record.get('source', '')).name
+        names.extend([source_name, Path(source_name).stem])
+    for name in names:
+        if not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9._-]{0,120}', name):
+            continue
+        for candidate_name in (name + '.md', name + '.py.md', name + '.sh.md'):
+            candidate = MANUALS_DIR / candidate_name
+            if candidate.is_file() and not candidate.is_symlink():
+                return candidate
+    raise FileNotFoundError(f'No manual for {target}. Use: manual import FILE.zip')
+
+
+def render_manual(path: Path) -> int:
+    """Use an installed renderer. Never fall back to unformatted Markdown."""
+    if shutil.which('glow'):
+        return subprocess.run(['glow', '-p', str(path)], check=False).returncode
+    if shutil.which('pandoc') and shutil.which('xdg-open'):
+        cache = APP_DIR / 'rendered'
+        cache.mkdir(parents=True, exist_ok=True, mode=0o700)
+        # Rendered HTML is cached because xdg-open may return before it is read.
+        output = cache / (hashlib.sha256(str(path.resolve()).encode()).hexdigest() + '.html')
+        with tempfile.NamedTemporaryFile(dir=cache, suffix='.html', delete=False) as f:
+            staged = Path(f.name)
+            os.fchmod(f.fileno(), 0o600)
+        try:
+            subprocess.run(['pandoc', '--standalone', '--from=markdown-raw_html',
+                            '--to=html5', str(path), '-o', str(staged)], check=True)
+            staged.replace(output)
+        finally:
+            staged.unlink(missing_ok=True)
+        subprocess.Popen(['xdg-open', str(output)], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True)
+        return 0
+    raise ValueError('A Markdown renderer is required: install Glow (recommended), '
+                     'or Pandoc with xdg-open. The raw Markdown will not be shown.')
+
+
+def manual_command(target: str, path: str | None = None) -> int:
+    if target == 'list' and path is None:
+        manuals = list_manuals()
+        print('\n'.join(manuals) if manuals else 'No imported manuals')
+        return 0
+    if target == 'import' and path:
+        print(f'Imported {import_manuals(Path(path))} new script manuals')
+        return 0
+    if path is not None or target == 'import':
+        raise ValueError('Usage: manual <name> | manual list | manual import FILE.zip')
+    return render_manual(find_manual(target))
+
+
+CONSOLE_HELP = """LauncherOnOS command console
+  help [command]                 Show commands or help for one command
+  list                           List registered tools
+  scan [directory]               Discover scripts without running them
+  search <term>                  Search local and registered tools
+  info <id>                      Show tool information
+  manual list                    List available formatted manuals
+  manual <id>                    Read the manual in Glow (or browser)
+  manual import <file.zip>       Import manuals only, not script files
+  install <file> [--id ID]       Copy a standalone script
+  register <file> [--id ID]      Register an existing executable
+  run <id> [args...]             Execute the selected tool
+  export <id|all> <file.tar.gz>  Export managed files and metadata
+  uninstall <id>                 Unregister tool (asks for confirmation)
+  exit                           Leave console
+Quoted paths with spaces are supported. Use ? as an alias for help."""
+
+
+def menu() -> None:
+    """A command prompt, not a numerical menu; one-shot CLI remains available."""
+    import shlex
+
+    print('LauncherOnOS console — type help for commands, exit to quit')
+    commands = {'list', 'scan', 'search', 'info', 'manual', 'install',
+                'register', 'run', 'export', 'uninstall'}
+    while True:
+        try:
+            line = input('launcheronos> ').strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return
+        if not line:
+            continue
+        try:
+            tokens = shlex.split(line)
+        except ValueError as exc:
+            print(f'Invalid command: {exc}', file=sys.stderr)
+            continue
+        if not tokens:
+            continue
+        cmd = tokens[0].lower()
+        if cmd in ('quit', 'exit', 'q'):
+            return
+        if cmd in ('help', '?'):
+            if len(tokens) == 2 and tokens[1] in commands:
+                try:
+                    main([tokens[1], '--help'])
+                except SystemExit:
+                    pass
             else:
-                print('Unknown choice')
-        except (ValueError, KeyError, FileNotFoundError, PermissionError, OSError) as exc:
-            print('Error:', exc, file=sys.stderr)
+                print(CONSOLE_HELP)
+            continue
+        if cmd not in commands:
+            print(f'Unknown command: {tokens[0]}. Type help.')
+            continue
+        if cmd == 'uninstall' and len(tokens) == 2:
+            try:
+                if input(f'Unregister {tokens[1]}? [y/N]: ').strip().lower() != 'y':
+                    print('Cancelled')
+                    continue
+            except (EOFError, KeyboardInterrupt):
+                print('\nCancelled')
+                continue
+        try:
+            main(tokens)
+        except SystemExit:
+            # argparse --help or invalid arguments must not close the console.
+            continue
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -318,6 +468,9 @@ def main(argv: list[str] | None = None) -> int:
         sp.add_argument('path')
         sp.add_argument('--id')
         sp.add_argument('--description')
+    sp = sub.add_parser('manual', help='view a formatted local Markdown manual')
+    sp.add_argument('target', nargs='?', default='list')
+    sp.add_argument('path', nargs='?')
     sp = sub.add_parser('run', help='launch an explicitly selected tool')
     sp.add_argument('tool_id')
     sp.add_argument('args', nargs=argparse.REMAINDER)
@@ -342,6 +495,8 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(info(args.tool_id), indent=2))
         elif args.command in ('install', 'register'):
             print(install(args.path, args.id, args.description, args.command == 'register'))
+        elif args.command == 'manual':
+            return manual_command(args.target, args.path)
         elif args.command == 'run':
             return execute(args.tool_id, args.args)
         elif args.command == 'export':
