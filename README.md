@@ -6,6 +6,7 @@ An interactive, user-scoped command-line manager for personal Linux scripts and 
 
 ```bash
 bash install.sh
+# On later versions: bash install.sh --upgrade
 ~/.local/bin/launcheronos menu
 ```
 
@@ -56,6 +57,7 @@ Fixed and regression-tested:
 - Executable scripts honor their own shebang, preserving Python virtualenv entrypoints.
 - Managed scripts are verified before execution, and registry files use private permissions.
 - Registry writes are serialized with an advisory file lock so concurrent installs/uninstalls do not lose entries.
+- The CLI installer supports an explicit `--upgrade`, backs up an existing LauncherOnOS binary, and refuses to replace an unknown executable.
 - Auto-generated IDs support non-ASCII filenames.
 
 Known limitations: standalone script installation does not resolve external dependencies; imported restore archives, automatic upgrades, and whole virtual-environment packaging are not implemented. A registered external tool is never bundled into export archives. The repository's CI tests are not a substitute for verification on the user's own Linux Mint system.
