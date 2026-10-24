@@ -7,10 +7,10 @@ An interactive, user-scoped command-line manager for personal Linux scripts and 
 ```bash
 bash install.sh
 # On later versions: bash install.sh --upgrade
-~/.local/bin/launcheronos menu
+~/.local/bin/launcheronos --help
 ```
 
-Or run directly: `python3 launcheronos.py menu`.
+Or run directly: `python3 launcheronos.py --help`.
 
 The default interactive interface is a **command console**, not a numbered menu:
 
@@ -38,7 +38,7 @@ launcheronos> exit
 | `launcheronos export all ~/tools-backup.tar.gz` | Export managed scripts and metadata |
 | `launcheronos uninstall my-tool` | Remove a managed copy, or unregister an external entry |
 
-Running `launcheronos` without arguments opens the interactive menu.
+Running `launcheronos` without arguments displays command help.
 
 ## Safety and behavior
 
