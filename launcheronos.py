@@ -71,13 +71,13 @@ def file_check(raw_path: str) -> Path:
     path = Path(raw_path).expanduser().absolute()
     if path.is_symlink() or not path.is_file():
         raise ValueError('Expected a regular file, not a symlink or directory')
-    if path.stat().st_size > 10 * 1024 * 1024:
-        raise ValueError('Single-file tool exceeds 10 MiB; use register for external apps')
     return path
 
 
 def install(path: str, tool_id: str | None = None, description: str | None = None, external: bool = False) -> str:
     src = file_check(path)
+    if not external and src.stat().st_size > 10 * 1024 * 1024:
+        raise ValueError('Standalone script exceeds 10 MiB; register as external tool instead')
     key = slug(tool_id or src.stem)
     data = database()
     if key in data:
