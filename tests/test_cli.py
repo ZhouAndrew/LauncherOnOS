@@ -137,9 +137,9 @@ class LauncherTest(unittest.TestCase):
 
     def test_manual_uses_installed_glow(self):
         manual = self.root / 'guide.md'
-        manual.write_text('# Guide\\n')
+        manual.write_text('# Guide\n')
         glow = self.root / 'glow'
-        glow.write_text('#!/bin/sh\\nprintf "%s\\\\n" "$@"\\n')
+        glow.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
         glow.chmod(0o755)
         env = dict(self.env, PATH=str(self.root))
         result = subprocess.run(
