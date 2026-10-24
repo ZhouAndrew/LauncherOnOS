@@ -12,6 +12,17 @@ bash install.sh
 
 Or run directly: `python3 launcheronos.py menu`.
 
+The default interactive interface is a **command console**, not a numbered menu:
+
+```text
+launcheronos> search wechat
+launcheronos> info my-tool
+launcheronos> manual /path/to/manual.md
+launcheronos> exit
+```
+
+`manual FILE.md` calls the installed [Glow](https://github.com/charmbracelet/glow) Markdown reader to render the page in the terminal; LauncherOnOS does not implement a Markdown renderer or execute the manual. Install Glow separately. The same command also works outside the interactive console: `launcheronos manual FILE.md`.
+
 ## Commands
 
 | Command | Purpose |
@@ -22,6 +33,7 @@ Or run directly: `python3 launcheronos.py menu`.
 | `launcheronos register ~/bin/podman-compose` | Track an existing binary/venv launcher, **without copying** it |
 | `launcheronos list` | List registered tools |
 | `launcheronos info my-tool` | Show a registered entry |
+| `launcheronos manual /path/to/manual.md` | Render an existing Markdown manual through Glow |
 | `launcheronos run my-tool` | Launch explicitly selected tool |
 | `launcheronos export all ~/tools-backup.tar.gz` | Export managed scripts and metadata |
 | `launcheronos uninstall my-tool` | Remove a managed copy, or unregister an external entry |
