@@ -5,7 +5,7 @@ An interactive, user-scoped command-line manager for personal Linux scripts and 
 ## Quick start
 
 ```bash
-./install.sh
+bash install.sh
 ~/.local/bin/launcheronos menu
 ```
 
