@@ -260,52 +260,22 @@ def export_archive(item: str, destination: Path) -> None:
         staged.unlink(missing_ok=True)
 
 
-def menu() -> None:
-    while True:
-        print('\n=== LauncherOnOS ===')
-        print('1 List    2 Search    3 Info    4 Scan ~/bin    5 Install script')
-        print('6 Register external tool    7 Launch    8 Export    9 Uninstall    0 Exit')
-        choice = input('Choose: ').strip()
-        if choice in ('0', 'q'):
-            return
-        try:
-            if choice == '1':
-                for k, e in sorted(database().items()):
-                    print(f'{k:27} [{e["mode"]}] {e["description"]}')
-            elif choice == '2':
-                print('\n'.join(search(input('Search: '))) or 'No matches')
-            elif choice == '3':
-                print(json.dumps(info(input('Tool ID: ')), indent=2))
-            elif choice == '4':
-                for p in scan():
-                    print(f'{p.name:30} {summary(p)}')
-            elif choice in ('5', '6'):
-                path = input('Script or executable path: ').strip()
-                print('Registered:', install(path, external=(choice == '6')))
-            elif choice == '7':
-                key = input('Tool ID: ').strip()
-                if input('Execute this tool? [y/N]: ').strip().lower() == 'y':
-                    print('Exit status:', execute(key, []))
-            elif choice == '8':
-                key = input('Tool ID or all: ').strip()
-                dest = Path(input('Export tar.gz path: ').strip())
-                export_archive(key, dest)
-                print('Exported:', dest)
-            elif choice == '9':
-                key = input('Tool ID: ').strip()
-                if input(f'Unregister {key}? [y/N]: ').strip().lower() == 'y':
-                    uninstall(key)
-                    print('Unregistered:', key)
-            else:
-                print('Unknown choice')
-        except (ValueError, KeyError, FileNotFoundError, PermissionError, OSError) as exc:
-            print('Error:', exc, file=sys.stderr)
+def manual(path: str) -> int:
+    """Read an existing Markdown manual with the installed Glow reader."""
+    doc = Path(path).expanduser()
+    if not doc.is_file() or doc.suffix.lower() != '.md':
+        raise ValueError('Expected an existing Markdown (.md) file')
+    glow = shutil.which('glow')
+    if not glow:
+        raise ValueError('Glow is not installed; install it to read manuals.')
+    return subprocess.run([glow, '-p', str(doc)], check=False).returncode
+
 
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest='command')
-    sub.add_parser('menu', help='interactive management menu')
+    sub.add_parser('menu', help='legacy alias for command help')
     sub.add_parser('list', help='list registered tools')
     sp = sub.add_parser('scan', help='scan files without executing them')
     sp.add_argument('directory', nargs='?', default=str(DEFAULT_SCAN))
@@ -318,6 +288,8 @@ def main(argv: list[str] | None = None) -> int:
         sp.add_argument('path')
         sp.add_argument('--id')
         sp.add_argument('--description')
+    sp = sub.add_parser('manual', help='read a Markdown manual with Glow')
+    sp.add_argument('file')
     sp = sub.add_parser('run', help='launch an explicitly selected tool')
     sp.add_argument('tool_id')
     sp.add_argument('args', nargs=argparse.REMAINDER)
@@ -329,7 +301,7 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
     try:
         if args.command in (None, 'menu'):
-            menu()
+            p.print_help()
         elif args.command == 'list':
             for k, v in sorted(database().items()):
                 print(f'{k}\t[{v["mode"]}]\t{v["description"]}')
@@ -342,6 +314,8 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(info(args.tool_id), indent=2))
         elif args.command in ('install', 'register'):
             print(install(args.path, args.id, args.description, args.command == 'register'))
+        elif args.command == 'manual':
+            return manual(args.file)
         elif args.command == 'run':
             return execute(args.tool_id, args.args)
         elif args.command == 'export':

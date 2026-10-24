@@ -7,10 +7,20 @@ An interactive, user-scoped command-line manager for personal Linux scripts and 
 ```bash
 bash install.sh
 # On later versions: bash install.sh --upgrade
-~/.local/bin/launcheronos menu
+~/.local/bin/launcheronos --help
 ```
 
-Or run directly: `python3 launcheronos.py menu`.
+Or run directly: `python3 launcheronos.py --help`.
+
+Use your existing Linux terminal as the console. No nested menu or custom REPL.
+
+```bash
+launcheronos search wechat
+launcheronos info my-tool
+launcheronos manual /path/to/manual.md
+```
+
+The `manual` command delegates formatted Markdown reading to the existing [Glow](https://github.com/charmbracelet/glow) program (`glow -p FILE.md`). Glow must be installed separately. The core LauncherOnOS script still only needs Python 3.10+ and its standard library.
 
 ## Commands
 
@@ -22,11 +32,12 @@ Or run directly: `python3 launcheronos.py menu`.
 | `launcheronos register ~/bin/podman-compose` | Track an existing binary/venv launcher, **without copying** it |
 | `launcheronos list` | List registered tools |
 | `launcheronos info my-tool` | Show a registered entry |
+| `launcheronos manual /path/to/manual.md` | Render an existing Markdown manual through Glow |
 | `launcheronos run my-tool` | Launch explicitly selected tool |
 | `launcheronos export all ~/tools-backup.tar.gz` | Export managed scripts and metadata |
 | `launcheronos uninstall my-tool` | Remove a managed copy, or unregister an external entry |
 
-Running `launcheronos` without arguments opens the interactive menu.
+Running `launcheronos` without arguments displays command help.
 
 ## Safety and behavior
 
