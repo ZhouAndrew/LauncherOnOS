@@ -46,3 +46,16 @@ Running `launcheronos` without arguments opens the interactive menu.
 ```bash
 python3 -m unittest discover -s tests -v
 ```
+
+## Reliability audit (v0.1.1)
+
+Fixed and regression-tested:
+- Exact tool ID validation prevents accidental deletion when an ID contains extra punctuation.
+- Archives are staged and published atomically. Failed exports leave no misleading destination archive.
+- Registered symlinks are supported; copied scripts continue to reject symlink sources.
+- Executable scripts honor their own shebang, preserving Python virtualenv entrypoints.
+- Managed scripts are verified before execution, and registry files use private permissions.
+- Registry writes are serialized with an advisory file lock so concurrent installs/uninstalls do not lose entries.
+- Auto-generated IDs support non-ASCII filenames.
+
+Known limitations: standalone script installation does not resolve external dependencies; imported restore archives, automatic upgrades, and whole virtual-environment packaging are not implemented. A registered external tool is never bundled into export archives. The repository's CI tests are not a substitute for verification on the user's own Linux Mint system.
