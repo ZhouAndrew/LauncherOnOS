@@ -12,16 +12,15 @@ bash install.sh
 
 Or run directly: `python3 launcheronos.py --help`.
 
-The default interactive interface is a **command console**, not a numbered menu:
+Use your existing Linux terminal as the console. No nested menu or custom REPL.
 
-```text
-launcheronos> search wechat
-launcheronos> info my-tool
-launcheronos> manual /path/to/manual.md
-launcheronos> exit
+```bash
+launcheronos search wechat
+launcheronos info my-tool
+launcheronos manual /path/to/manual.md
 ```
 
-`manual FILE.md` calls the installed [Glow](https://github.com/charmbracelet/glow) Markdown reader to render the page in the terminal; LauncherOnOS does not implement a Markdown renderer or execute the manual. Install Glow separately. The same command also works outside the interactive console: `launcheronos manual FILE.md`.
+The `manual` command delegates formatted Markdown reading to the existing [Glow](https://github.com/charmbracelet/glow) program (`glow -p FILE.md`). Glow must be installed separately. The core LauncherOnOS script still only needs Python 3.10+ and its standard library.
 
 ## Commands
 
