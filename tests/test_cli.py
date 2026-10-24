@@ -129,20 +129,17 @@ class LauncherTest(unittest.TestCase):
         self.assertEqual(archive.read_bytes(), original)
 
 
-    def test_console_accepts_commands_instead_of_numbered_menu(self):
-        result = subprocess.run(
-            [sys.executable, str(SRC), 'menu'],
-            env=self.env, text=True, input='help\nlist\nexit\n',
-            capture_output=True, timeout=10)
+    def test_default_shows_command_help(self):
+        result = self.cli()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn('launcheronos>', result.stdout)
-        self.assertIn('manual FILE.md', result.stdout)
+        self.assertIn('manual', result.stdout)
+        self.assertNotIn('1 List    2 Search', result.stdout)
 
-    def test_manual_delegates_rendering_to_existing_glow(self):
+    def test_manual_uses_installed_glow(self):
         manual = self.root / 'guide.md'
-        manual.write_text('# Guide\n')
+        manual.write_text('# Guide\\n')
         glow = self.root / 'glow'
-        glow.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+        glow.write_text('#!/bin/sh\\nprintf "%s\\\\n" "$@"\\n')
         glow.chmod(0o755)
         env = dict(self.env, PATH=str(self.root))
         result = subprocess.run(
@@ -150,6 +147,7 @@ class LauncherTest(unittest.TestCase):
             env=env, text=True, capture_output=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.splitlines(), ['-p', str(manual)])
+
 
 if __name__ == '__main__':
     unittest.main()
