@@ -275,7 +275,7 @@ def manual(path: str) -> int:
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest='command')
-    sub.add_parser('menu', help='interactive management menu')
+    sub.add_parser('menu', help='legacy alias for command help')
     sub.add_parser('list', help='list registered tools')
     sp = sub.add_parser('scan', help='scan files without executing them')
     sp.add_argument('directory', nargs='?', default=str(DEFAULT_SCAN))
