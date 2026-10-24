@@ -1,4 +1,5 @@
 import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import subprocess
 import sys
@@ -105,6 +106,19 @@ class LauncherTest(unittest.TestCase):
         result = self.cli('install', str(other))
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(result.stdout.strip().startswith('tool-'))
+
+    def test_parallel_installs_keep_all_entries(self):
+        scripts = []
+        for i in range(8):
+            file = self.root / f'parallel{i}.sh'
+            file.write_text('#!/bin/sh\nexit 0\n')
+            scripts.append(file)
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            results = list(pool.map(lambda file: self.cli('install', str(file)), scripts))
+        self.assertTrue(all(result.returncode == 0 for result in results),
+                        [result.stderr for result in results])
+        listing = self.cli('list').stdout
+        self.assertEqual(len(listing.strip().splitlines()), 8)
 
     def test_duplicate_export_not_overwritten(self):
         self.assertEqual(self.cli('install', str(self.script)).returncode, 0)
