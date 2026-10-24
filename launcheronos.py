@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import io
 import json
@@ -13,7 +14,9 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 from datetime import datetime, timezone
+from contextlib import contextmanager
 
 APP_DIR = Path(os.environ.get('LAUNCHERONOS_HOME', Path.home() / '.local/share/launcheronos')).expanduser()
 TOOLS_DIR = APP_DIR / 'tools'
@@ -23,10 +26,32 @@ VALID_ID = re.compile(r'^[a-z][a-z0-9_-]{0,63}$')
 
 
 def slug(value: str) -> str:
-    value = re.sub(r'[^a-z0-9_-]+', '-', value.lower()).strip('-_')
+    """Validate an existing ID *without* silently changing its meaning."""
     if not VALID_ID.fullmatch(value):
-        raise ValueError('Invalid tool name; use 1–64 ASCII letters, digits, hyphens or underscores')
+        raise ValueError('Invalid tool ID; use lowercase ASCII letters, digits, - or _')
     return value
+
+
+def inferred_id(path: Path) -> str:
+    """Make a safe default from a filename, including non-ASCII filenames."""
+    name = re.sub(r'[^a-z0-9_-]+', '-', path.stem.lower()).strip('-_')[:58]
+    if not name or not name[0].isalpha():
+        name = 'tool-' + hashlib.sha256(path.name.encode()).hexdigest()[:12]
+    return slug(name)
+
+
+@contextmanager
+def registry_lock():
+    """Serialize registry mutations across independent CLI processes."""
+    APP_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+    lock_path = APP_DIR / '.registry.lock'
+    with lock_path.open('a+') as lock:
+        lock_path.chmod(0o600)
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
 
 def database() -> dict:
@@ -39,12 +64,16 @@ def database() -> dict:
 
 
 def save(data: dict) -> None:
-    APP_DIR.mkdir(parents=True, exist_ok=True)
-    temp = DB_FILE.with_name(DB_FILE.name + '.tmp')
-    with temp.open('w', encoding='utf-8') as fh:
+    APP_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with tempfile.NamedTemporaryFile('w', encoding='utf-8', dir=APP_DIR,
+                                     prefix='.registry-', delete=False) as fh:
+        temp = Path(fh.name)
         json.dump(data, fh, ensure_ascii=False, indent=2, sort_keys=True)
         fh.write('\n')
-    temp.replace(DB_FILE)
+    try:
+        temp.replace(DB_FILE)
+    finally:
+        temp.unlink(missing_ok=True)
 
 
 def sha256(path: Path) -> str:
@@ -67,18 +96,23 @@ def summary(path: Path) -> str:
     return 'No description; inspect the file before running'
 
 
-def file_check(raw_path: str) -> Path:
+def file_check(raw_path: str, external: bool = False) -> Path:
     path = Path(raw_path).expanduser().absolute()
-    if path.is_symlink() or not path.is_file():
-        raise ValueError('Expected a regular file, not a symlink or directory')
+    if (path.is_symlink() and not external) or not path.is_file():
+        raise ValueError('Expected a regular file (symlinks are allowed only with register)')
     return path
 
 
 def install(path: str, tool_id: str | None = None, description: str | None = None, external: bool = False) -> str:
-    src = file_check(path)
+    with registry_lock():
+        return _install(path, tool_id, description, external)
+
+
+def _install(path: str, tool_id: str | None = None, description: str | None = None, external: bool = False) -> str:
+    src = file_check(path, external=external)
     if not external and src.stat().st_size > 10 * 1024 * 1024:
         raise ValueError('Standalone script exceeds 10 MiB; register as external tool instead')
-    key = slug(tool_id or src.stem)
+    key = slug(tool_id) if tool_id is not None else inferred_id(src)
     data = database()
     if key in data:
         raise ValueError(f'Already registered: {key}. Uninstall it first.')
@@ -88,15 +122,19 @@ def install(path: str, tool_id: str | None = None, description: str | None = Non
         TOOLS_DIR.mkdir(parents=True, exist_ok=True)
         if destination.exists() or destination.is_symlink():
             raise FileExistsError(f'Existing managed destination: {destination}')
-        shutil.copy2(src, destination, follow_symlinks=False)
-        destination.chmod(destination.stat().st_mode | 0o700)
+        try:
+            shutil.copy2(src, destination, follow_symlinks=False)
+            destination.chmod(destination.stat().st_mode | 0o700)
+        except BaseException:
+            destination.unlink(missing_ok=True)
+            raise
     entry = {
         'id': key,
         'description': description or summary(src),
         'mode': 'external' if external else 'managed',
         'path': str(src if external else destination),
         'source': str(src),
-        'sha256': sha256(src),
+        'sha256': sha256(src if external else destination),
         'added': datetime.now(timezone.utc).isoformat(),
     }
     try:
@@ -141,7 +179,14 @@ def execute(key: str, args: list[str]) -> int:
     if not path.is_file():
         raise FileNotFoundError(f'Missing tool: {path}')
     # Only explicit user invocation executes code. Scanning and installing never do.
-    if path.suffix == '.py':
+    if entry['mode'] == 'managed' and sha256(path) != entry['sha256']:
+        raise ValueError('Managed tool changed since installation; refusing to launch')
+    # Respect an executable script's shebang, including virtualenv/pipx entrypoints.
+    with path.open('rb') as stream:
+        has_shebang = stream.read(2) == b'#!'
+    if os.access(path, os.X_OK) and has_shebang:
+        command = [str(path)]
+    elif path.suffix == '.py':
         command = [sys.executable, str(path)]
     elif path.suffix == '.sh':
         command = ['/bin/bash', str(path)]
@@ -153,6 +198,11 @@ def execute(key: str, args: list[str]) -> int:
 
 
 def uninstall(key: str) -> None:
+    with registry_lock():
+        _uninstall(key)
+
+
+def _uninstall(key: str) -> None:
     key = slug(key)
     data = database()
     entry = data[key]
@@ -171,33 +221,43 @@ def uninstall(key: str) -> None:
 
 
 def export_archive(item: str, destination: Path) -> None:
+    """Publish an export only after the complete archive is successfully built."""
     entries = database()
     keys = sorted(entries) if item == 'all' else [slug(item)]
     if not all(k in entries for k in keys):
         raise KeyError(f'Unknown tool: {item}')
     destination = destination.expanduser().absolute()
-    if destination.exists():
+    if destination.exists() or destination.is_symlink():
         raise FileExistsError(f'Refusing to overwrite: {destination}')
-    manifest = []
-    with tarfile.open(destination, 'x:gz') as tar:
-        for key in keys:
-            e = entries[key]
-            item_record = {k: e[k] for k in ('id', 'description', 'mode', 'sha256', 'added')}
-            if e['mode'] == 'managed':
-                path = Path(e['path'])
-                if path.is_symlink() or not path.is_file() or sha256(path) != e['sha256']:
-                    raise ValueError(f'Export aborted: modified or missing tool {key}')
-                archive_name = 'tools/' + path.name
-                tar.add(path, arcname=archive_name, recursive=False)
-                item_record['file'] = archive_name
-            else:
-                item_record['note'] = 'Externally managed entry: executable not bundled'
-            manifest.append(item_record)
-        payload = json.dumps({'schema': 1, 'tools': manifest}, indent=2).encode()
-        meta = tarfile.TarInfo('manifest.json')
-        meta.size = len(payload)
-        meta.mode = 0o600
-        tar.addfile(meta, io.BytesIO(payload))
+    # Temp file is created on the same filesystem; hard-link publishes without
+    # ever overwriting an existing destination (even under a concurrent race).
+    with tempfile.NamedTemporaryFile(dir=destination.parent, prefix='.launcheronos-',
+                                     suffix='.tmp', delete=False) as tmp:
+        staged = Path(tmp.name)
+    try:
+        manifest = []
+        with tarfile.open(staged, 'w:gz') as tar:
+            for key in keys:
+                e = entries[key]
+                item_record = {k: e[k] for k in ('id', 'description', 'mode', 'sha256', 'added')}
+                if e['mode'] == 'managed':
+                    path = Path(e['path'])
+                    if path.is_symlink() or not path.is_file() or sha256(path) != e['sha256']:
+                        raise ValueError(f'Export aborted: modified or missing tool {key}')
+                    archive_name = 'tools/' + path.name
+                    tar.add(path, arcname=archive_name, recursive=False)
+                    item_record['file'] = archive_name
+                else:
+                    item_record['note'] = 'Externally managed entry: executable not bundled'
+                manifest.append(item_record)
+            payload = json.dumps({'schema': 1, 'tools': manifest}, indent=2).encode()
+            meta = tarfile.TarInfo('manifest.json')
+            meta.size = len(payload)
+            meta.mode = 0o600
+            tar.addfile(meta, io.BytesIO(payload))
+        os.link(staged, destination)
+    finally:
+        staged.unlink(missing_ok=True)
 
 
 def menu() -> None:
@@ -206,7 +266,7 @@ def menu() -> None:
         print('1 List    2 Search    3 Info    4 Scan ~/bin    5 Install script')
         print('6 Register external tool    7 Launch    8 Export    9 Uninstall    0 Exit')
         choice = input('Choose: ').strip()
-        if choice == '0':
+        if choice in ('0', 'q'):
             return
         try:
             if choice == '1':
