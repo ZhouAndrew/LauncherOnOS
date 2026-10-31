@@ -1,0 +1,26 @@
+name: System Extension Manager
+on:
+  push:
+    branches: [main, feat/system-extension-manager-anki]
+  pull_request:
+jobs:
+  manager:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test dependencies
+        run: sudo apt-get update && sudo apt-get install -y python3-tk xvfb desktop-file-utils zip unzip libglib2.0-bin xz-utils
+      - name: Build bundled extensions only
+        run: python3 system-extension-manager/build.py --extensions-only
+      - name: Check reproducible catalog and packages
+        run: git diff --exit-code -- system-extension-manager/extensions.json system-extension-manager/packages
+      - name: Validate desktop entries
+        run: desktop-file-validate system-extension-manager/system-extension-manager.desktop system-extension-manager/sources/anki-time-travel/anki-time-travel.desktop
+      - name: Test CLI, real extension builds, Anki import and ZIP/Trash
+        run: xvfb-run -a python3 -m unittest discover -s system-extension-manager/tests -v
+      - name: Archive portable source test release
+        run: git archive --format=zip --prefix=System-Extension-Manager/ HEAD:system-extension-manager > System-Extension-Manager-source.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: System-Extension-Manager
+          path: System-Extension-Manager-source.zip
