@@ -1,0 +1,65 @@
+[
+  {
+    "id": "zip-trash",
+    "name": "ZIP and Trash",
+    "package": "mint-toolbox-extension-zip-trash",
+    "version": "0.4.2",
+    "description": "Nemo right-click ZIP compression, exact-content verification and GIO Trash. Preserves file, directory, dangling and circular symbolic links without following their targets.",
+    "deb": "packages/mint-toolbox-extension-zip-trash_0.4.2_all.deb",
+    "sha256": "05aa3b3d1011580e35460a297d74cc1220de240cddd05665d98e86ab28517dd1",
+    "source": {
+      "kind": "bundled",
+      "requires": [
+        "python3",
+        "dpkg-deb",
+        "xz"
+      ],
+      "files": {
+        "sources/zip-trash/build.py": "2e64c55916d1c9bd74fd4b12ff84d20fe5902126d3b865c837d7ef8d73d09cee",
+        "sources/zip-trash/execution.py": "c945bac6e3a39e7fcf30db5ce1e7b58a82b671587938f0e357974e6dae00a0ad",
+        "sources/zip-trash/zip-trash.nemo_action": "d08b84f4e80297f3baf33e22ce6f715a07eaf14b39ae43c4fa21423c8e452a99",
+        "sources/zip-trash/zip_trash.py": "1fe5d9b0509e3e9c3d66e7056fe5329732c1879afefc7d6381d0af59a34f68be"
+      },
+      "argv": [
+        "python3",
+        "sources/zip-trash/build.py",
+        "--output-dir",
+        "{output}"
+      ]
+    }
+  },
+  {
+    "id": "anki-time-travel",
+    "name": "Anki Time Travel",
+    "package": "anki-time-travel",
+    "version": "0.1.3",
+    "launch": [
+      "/usr/bin/anki-time-travel",
+      "--gui"
+    ],
+    "description": "Import historical Anki PDF statistics into local WordPress, with a CLI, file chooser and live logs. Preserves historical dates and verifies imported posts, attachments and the exact post permalink. Requires WP-CLI and an accessible existing WordPress site.",
+    "deb": "packages/anki-time-travel_0.1.3_all.deb",
+    "sha256": "34e2b5835a1d2038eb319ca2f682715e6fc1480301ff2c6c917844fb922738c2",
+    "source": {
+      "kind": "bundled",
+      "requires": [
+        "python3",
+        "dpkg-deb",
+        "xz"
+      ],
+      "files": {
+        "sources/anki-time-travel/anki-time-travel.desktop": "43fbf6f7c2d1fc9e03b61f36127983d41be71d4d1ec63e87f8d613b021ce6438",
+        "sources/anki-time-travel/anki-time-travel.sh": "c65fc28291ea0f57b2508d8608eb358525620a8eb4233a8f0b7a71e9c1d64b5f",
+        "sources/anki-time-travel/app.py": "010add0e089f9773d0c4e7bef802c38fc93510c6a5585b175f4dbe183a148c5d",
+        "sources/anki-time-travel/build.py": "2c9b16de68f38ca6f6670ca003d456d0dba900fd475df3b2109b372b26268c32",
+        "sources/anki-time-travel/execution.py": "c945bac6e3a39e7fcf30db5ce1e7b58a82b671587938f0e357974e6dae00a0ad"
+      },
+      "argv": [
+        "python3",
+        "sources/anki-time-travel/build.py",
+        "--output-dir",
+        "{output}"
+      ]
+    }
+  }
+]

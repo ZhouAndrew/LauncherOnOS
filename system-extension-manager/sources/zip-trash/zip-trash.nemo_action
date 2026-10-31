@@ -1,0 +1,11 @@
+[Nemo Action]
+Active=true
+Name=Compress to ZIP and delete
+Comment=Verify ZIP contents, then move originals to Trash
+Exec=/usr/bin/mint-toolbox-zip-trash --gui %F
+Icon-Name=package-x-generic
+Selection=notnone
+Extensions=any;
+Dependencies=zip;unzip;gio;/usr/bin/mint-toolbox-zip-trash;
+Quote=double
+UriScheme=file

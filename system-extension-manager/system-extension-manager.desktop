@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=System Extension Manager
+Comment=Enable, disable and open system extensions
+Exec=/usr/bin/system-extension-manager --gui
+TryExec=/usr/bin/system-extension-manager
+Icon=application-x-addon
+Terminal=false
+Categories=Settings;
+StartupNotify=true
