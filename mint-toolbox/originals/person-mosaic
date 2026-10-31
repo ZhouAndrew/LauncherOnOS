@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+exec "/home/andrew/.local/share/person-mosaic/venv/bin/python"     "/home/andrew/.local/share/person-mosaic/person_mosaic.py"     "$@"

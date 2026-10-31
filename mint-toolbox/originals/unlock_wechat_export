@@ -1,0 +1,219 @@
+#!/usr/bin/env python3
+
+from pathlib import Path
+import argparse
+import re
+import sys
+
+
+FORCE_CSS = """
+<style id="wceForceShow">
+html, body {
+    margin: 0 !important;
+    min-height: 100% !important;
+}
+
+.wce-root,
+.wce-index {
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+#wceBrandAttribution {
+    display: none !important;
+}
+</style>
+"""
+
+
+def unlock_html(src: Path, overwrite: bool = False) -> tuple[bool, str]:
+    """
+    处理单个 messages.html，
+    在同目录生成 messages-unlocked.html。
+    """
+
+    dst = src.with_name("messages-unlocked.html")
+
+    if dst.exists() and not overwrite:
+        return False, f"跳过，目标已存在：{dst}"
+
+    try:
+        html = src.read_text(encoding="utf-8")
+    except Exception as exc:
+        return False, f"读取失败：{src}\n  原因：{exc}"
+
+    original_size = len(html.encode("utf-8"))
+
+    # 1. 删除隐藏聊天主体的完整性 Gate CSS
+    html = re.sub(
+        r'<style\b[^>]*\bid=["\']wceGateStyle["\'][^>]*>.*?</style>',
+        '',
+        html,
+        flags=re.I | re.S,
+    )
+
+    # 2. 删除完整性验证脚本
+    html = re.sub(
+        r'<script\b[^>]*\bdata-wce-integrity-bundle=["\']1["\'][^>]*>'
+        r'.*?</script>',
+        '',
+        html,
+        flags=re.I | re.S,
+    )
+
+    # 3. 删除 WCE 运行时脚本 r-*.js
+    # 避免它再次执行校验并显示失败页面
+    html = re.sub(
+        r'<script\b[^>]*\bsrc=["\'][^"\']*/assets/_wce/r-[^"\']+\.js["\']'
+        r'[^>]*>.*?</script>',
+        '',
+        html,
+        flags=re.I | re.S,
+    )
+
+    # 兼容 ../../assets/_wce/r-xxx.js 这种写法
+    html = re.sub(
+        r'<script\b[^>]*\bsrc=["\'][^"\']*assets/_wce/r-[^"\']+\.js["\']'
+        r'[^>]*>.*?</script>',
+        '',
+        html,
+        flags=re.I | re.S,
+    )
+
+    # 4. 删除“需要 JavaScript”的顶部提示
+    html = re.sub(
+        r'<div\b[^>]*\bid=["\']wceJsMissing["\'][^>]*>.*?</div>',
+        '',
+        html,
+        flags=re.I | re.S,
+    )
+
+    # 5. 给 <html> 强制添加校验通过状态
+    html_tag_match = re.search(r'<html\b([^>]*)>', html, flags=re.I)
+
+    if html_tag_match:
+        old_tag = html_tag_match.group(0)
+
+        new_tag = old_tag
+
+        if not re.search(
+            r'\bdata-wce-brand-ok\s*=',
+            new_tag,
+            flags=re.I,
+        ):
+            new_tag = new_tag[:-1] + ' data-wce-brand-ok="1">'
+
+        if not re.search(
+            r'\bdata-wce-integrity-ok\s*=',
+            new_tag,
+            flags=re.I,
+        ):
+            new_tag = new_tag[:-1] + ' data-wce-integrity-ok="1">'
+
+        html = html.replace(old_tag, new_tag, 1)
+
+    # 6. 强制显示聊天主体
+    if 'id="wceForceShow"' not in html and "id='wceForceShow'" not in html:
+        if re.search(r'</head\s*>', html, flags=re.I):
+            html = re.sub(
+                r'</head\s*>',
+                FORCE_CSS + "\n</head>",
+                html,
+                count=1,
+                flags=re.I,
+            )
+        else:
+            html = FORCE_CSS + "\n" + html
+
+    try:
+        dst.write_text(html, encoding="utf-8")
+    except Exception as exc:
+        return False, f"写入失败：{dst}\n  原因：{exc}"
+
+    new_size = dst.stat().st_size
+
+    return True, (
+        f"成功：{src.parent.name}\n"
+        f"  原始：{src.name} ({original_size} bytes)\n"
+        f"  输出：{dst.name} ({new_size} bytes)"
+    )
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description=(
+            "批量移除 WeChatDataAnalysis 导出 HTML 的完整性验证，"
+            "并生成 messages-unlocked.html。"
+        )
+    )
+
+    parser.add_argument(
+        "root",
+        nargs="?",
+        default=".",
+        help="微信导出目录，默认是当前目录",
+    )
+
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="覆盖已经存在的 messages-unlocked.html",
+    )
+
+    args = parser.parse_args()
+
+    root = Path(args.root).expanduser().resolve()
+
+    if not root.exists():
+        print(f"错误：目录不存在：{root}", file=sys.stderr)
+        return 1
+
+    conversations_dir = root / "conversations"
+
+    if not conversations_dir.is_dir():
+        print(
+            f"错误：未找到 conversations 目录：{conversations_dir}",
+            file=sys.stderr,
+        )
+        return 1
+
+    files = sorted(conversations_dir.glob("*/messages.html"))
+
+    if not files:
+        print(
+            f"错误：没有找到 conversations/*/messages.html",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"导出目录：{root}")
+    print(f"发现对话：{len(files)} 个")
+    print()
+
+    success_count = 0
+    skipped_count = 0
+
+    for src in files:
+        success, message = unlock_html(
+            src,
+            overwrite=args.overwrite,
+        )
+
+        print(message)
+        print()
+
+        if success:
+            success_count += 1
+        else:
+            skipped_count += 1
+
+    print("=" * 60)
+    print(f"处理完成")
+    print(f"成功：{success_count}")
+    print(f"跳过或失败：{skipped_count}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

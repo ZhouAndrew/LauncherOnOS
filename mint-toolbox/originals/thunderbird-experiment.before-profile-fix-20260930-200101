@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+PROFILE="/home/andrew/.thunderbird/4vs0bf41.default-esr-1"
+EXP_BIN="/home/andrew/.local/opt/thunderbird-experiment-153.1.0esr/thunderbird"
+BACKUP_ROOT="/home/andrew/Thunderbird-Experiment-Backups"
+VERSION="153.1.0esr"
+
+echo
+echo "================================================"
+echo " Thunderbird 实验版 $VERSION"
+echo " 与正式版共享真实数据"
+echo "================================================"
+echo
+
+# 同一个 Profile 不允许两个 Thunderbird 同时写
+if pgrep -u "$UID" -x thunderbird >/dev/null 2>&1 ||
+   pgrep -u "$UID" -x thunderbird-bin >/dev/null 2>&1; then
+    echo "✗ 已有 Thunderbird 正在运行。"
+    echo
+    echo "正式版和实验版共享同一个 Profile，不能同时运行。"
+    echo
+    read -r -p "按 Enter 关闭..."
+    exit 1
+fi
+
+mkdir -p "$BACKUP_ROOT"
+
+STAMP="$(date '+%Y%m%d-%H%M%S')"
+DEST="$BACKUP_ROOT/$STAMP-before-experiment"
+
+echo "实验启动前备份："
+echo "  $PROFILE"
+echo "        ↓"
+echo "  $DEST"
+echo
+
+mkdir -p "$DEST"
+
+if ! cp -a --reflink=auto       "$PROFILE"       "$DEST/profile"
+then
+    echo
+    echo "✗ 备份失败。"
+    echo "为了保护正式数据，实验 Thunderbird 不启动。"
+    read -r -p "按 Enter 关闭..."
+    exit 1
+fi
+
+rm -f     "$DEST/profile/.parentlock"     "$DEST/profile/lock"     2>/dev/null || true
+
+printf '%s\n' "$PROFILE" >     "$DEST/original-profile-path.txt"
+
+printf '%s\n' "$VERSION" >     "$DEST/thunderbird-version.txt"
+
+echo "✓ Profile 快照完成"
+
+# 保留最近 7 份自动实验备份
+mapfile -t OLD_BACKUPS < <(
+    find "$BACKUP_ROOT"         -mindepth 1         -maxdepth 1         -type d         -name '*-before-experiment'         -printf '%T@ %p\n' |
+    sort -nr |
+    tail -n +8 |
+    cut -d' ' -f2-
+)
+
+if [ "${#OLD_BACKUPS[@]}" -gt 0 ]; then
+    for OLD in "${OLD_BACKUPS[@]}"; do
+        rm -rf -- "$OLD"
+    done
+fi
+
+echo
+echo "==============================================="
+echo " EXPERIMENTAL THUNDERBIRD"
+echo " 程序：独立"
+echo " 数据：与正式版共享"
+echo "==============================================="
+echo
+
+set +e
+
+"$EXP_BIN"     --no-remote     --profile "$PROFILE"     "$@"
+
+RC=$?
+
+set -e
+
+echo
+echo "Thunderbird 实验版已退出。"
+echo
+echo "本次启动前数据快照："
+echo "  $DEST"
+echo
+
+exit "$RC"

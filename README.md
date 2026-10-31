@@ -72,3 +72,7 @@ Fixed and regression-tested:
 - Auto-generated IDs support non-ASCII filenames.
 
 Known limitations: standalone script installation does not resolve external dependencies; imported restore archives, automatic upgrades, and whole virtual-environment packaging are not implemented. A registered external tool is never bundled into export archives. The repository's CI tests are not a substitute for verification on the user's own Linux Mint system.
+
+## Mint Toolbox
+
+The GUI-first Mint Toolbox lives in [`mint-toolbox/`](mint-toolbox/README.md). It includes bundled Debian system extensions and a Nemo ZIP-and-Trash context-menu action.

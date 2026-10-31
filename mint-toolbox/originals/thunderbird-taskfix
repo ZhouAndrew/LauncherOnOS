@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+APP="/home/andrew/.local/opt/thunderbird-taskfix-153.1.0/thunderbird"
+PROFILE="/home/andrew/.local/share/thunderbird-taskfix/profile"
+
+if [[ "${1:-}" == "--system-profile" ]]; then
+  shift
+  # Use the normal Thunderbird profile. Close the distro Thunderbird first;
+  # otherwise Mozilla's remote-instance handling can route the launch to the
+  # already-running unpatched process.
+  exec "$APP" -no-remote "$@"
+fi
+
+mkdir -p "$PROFILE"
+exec "$APP" -no-remote -profile "$PROFILE" "$@"

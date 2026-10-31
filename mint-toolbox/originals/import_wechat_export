@@ -1,0 +1,372 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import hashlib
+import html
+import os
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from urllib.parse import quote
+
+WORDPRESS_ROOT = Path("/var/www/html/wordpress")
+ARCHIVE_SUBDIR = Path("wp-content/uploads/wechat-archive")
+UNLOCK_COMMAND = "unlock_wechat_export"
+META_KEY = "_wechat_archive_source"
+POST_TYPE = "post"
+SCRIPT_VERSION = "2026-07-14-post-only-v1"
+
+
+def run(cmd: list[str], *, cwd: Path | None = None, capture: bool = False) -> str:
+    print("+", " ".join(cmd))
+    result = subprocess.run(
+        cmd,
+        cwd=str(cwd) if cwd else None,
+        text=True,
+        stdout=subprocess.PIPE if capture else None,
+        stderr=subprocess.PIPE if capture else None,
+    )
+    if result.returncode != 0:
+        if capture:
+            if result.stdout:
+                print(result.stdout, file=sys.stderr)
+            if result.stderr:
+                print(result.stderr, file=sys.stderr)
+        raise RuntimeError(
+            f"命令执行失败（退出码 {result.returncode}）：{' '.join(cmd)}"
+        )
+    return (result.stdout or "").strip() if capture else ""
+
+
+def sudo_cmd(*args: str) -> list[str]:
+    if os.geteuid() == 0:
+        return list(args)
+    return ["sudo", *args]
+
+
+def wp_cmd(wp_binary: str, *args: str, capture: bool = False) -> str:
+    wp_args = [wp_binary, f"--path={WORDPRESS_ROOT}", *args]
+    if os.geteuid() == 0:
+        cmd = ["runuser", "-u", "www-data", "--", *wp_args]
+    else:
+        cmd = ["sudo", "-u", "www-data", *wp_args]
+    return run(cmd, capture=capture)
+
+
+def find_wp_binary() -> str:
+    wp = shutil.which("wp")
+    if not wp:
+        raise RuntimeError("找不到 wp 命令。请确认 WP-CLI 已安装并位于 PATH 中。")
+    return wp
+
+
+def ensure_unlocked(source: Path) -> list[Path]:
+    files = sorted((source / "conversations").glob("*/messages-unlocked.html"))
+    if files:
+        return files
+
+    unlock = shutil.which(UNLOCK_COMMAND)
+    if not unlock:
+        raise RuntimeError(
+            f"没有发现 messages-unlocked.html，并且找不到 {UNLOCK_COMMAND} 命令。"
+        )
+
+    print(f"未发现已解锁 HTML，自动运行 {UNLOCK_COMMAND} ...")
+    run([unlock], cwd=source)
+
+    files = sorted((source / "conversations").glob("*/messages-unlocked.html"))
+    if not files:
+        raise RuntimeError("解锁命令执行完成，但仍未发现 messages-unlocked.html。")
+    return files
+
+
+def conversation_title(conversation_dir: str) -> str:
+    """
+    从目录名提取联系人/群聊标题。
+
+    例如：
+      0001_文件传输助手_filehelper_abaf4442
+      -> 文件传输助手
+    """
+    name = re.sub(r"^\d+_", "", conversation_dir)
+
+    patterns = [
+        r"^(.*)_filehelper_[0-9a-fA-F]+$",
+        r"^(.*)_wxid_[^_]+_[0-9a-fA-F]+$",
+        r"^(.*)_[^_]+_[0-9a-fA-F]{6,}$",
+    ]
+
+    for pattern in patterns:
+        match = re.match(pattern, name)
+        if match and match.group(1):
+            return match.group(1)
+
+    return name
+
+
+def post_content(public_url: str, title: str) -> str:
+    """
+    生成文章正文，并强制 iframe 突破主题正文栏的最大宽度。
+
+    WordPress 主题通常会给文章正文设置 contentSize / max-width；
+    单纯写 width: 100% 只会占满正文栏，而不是整个浏览器窗口。
+
+    这里使用标准 full-bleed 技巧：
+      position: relative
+      left: 50%
+      width: 100vw
+      margin-left: -50vw
+
+    这样即使主题正文栏只有约 600～700px，聊天记录仍可占满整个视口宽度。
+    """
+    safe_url = html.escape(public_url, quote=True)
+    safe_title = html.escape(title, quote=True)
+
+    return f'''<!-- wp:html -->
+<div
+  class="wechat-archive-frame-wrap alignfull"
+  style="
+    position: relative !important;
+    left: 50% !important;
+    width: 100vw !important;
+    width: 100dvw !important;
+    max-width: none !important;
+    margin-left: -50vw !important;
+    margin-left: -50dvw !important;
+    margin-right: -50vw !important;
+    margin-right: -50dvw !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  "
+>
+  <iframe
+    src="{safe_url}"
+    title="{safe_title}"
+    loading="lazy"
+    scrolling="yes"
+    referrerpolicy="same-origin"
+    style="
+      width: 100% !important;
+      max-width: none !important;
+      height: 90vh;
+      min-height: 760px;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: 0 !important;
+      display: block !important;
+      background: #fff;
+    "
+  ></iframe>
+</div>
+<!-- /wp:html -->'''
+
+
+def make_slug(source_key: str) -> str:
+    digest = hashlib.sha1(source_key.encode("utf-8")).hexdigest()[:12]
+    return f"wechat-archive-{digest}"
+
+
+def find_existing_post(
+    wp_binary: str,
+    source_key: str,
+) -> str | None:
+    """只查找已经存在的 post。旧 page 完全忽略，不做转换。"""
+    output = wp_cmd(
+        wp_binary,
+        "post",
+        "list",
+        "--post_type=post",
+        f"--meta_key={META_KEY}",
+        f"--meta_value={source_key}",
+        "--field=ID",
+        "--format=ids",
+        capture=True,
+    )
+    ids = output.split()
+    return ids[0] if ids else None
+
+
+def create_or_update_post(
+    wp_binary: str,
+    *,
+    title: str,
+    content: str,
+    source_key: str,
+    dry_run: bool,
+) -> tuple[str, str, str | None]:
+    existing_id = find_existing_post(wp_binary, source_key)
+
+    if existing_id:
+        if dry_run:
+            return existing_id, "would-update", "post"
+
+        wp_cmd(
+            wp_binary,
+            "post",
+            "update",
+            existing_id,
+            f"--post_title=微信聊天：{title}",
+            f"--post_content={content}",
+            "--post_status=publish",
+        )
+
+        actual_type = wp_cmd(
+            wp_binary,
+            "post",
+            "get",
+            existing_id,
+            "--field=post_type",
+            capture=True,
+        ).strip()
+        if actual_type != "post":
+            raise RuntimeError(
+                f"更新后类型验证失败：文章 ID {existing_id} 当前类型为 {actual_type!r}"
+            )
+
+        return existing_id, "updated", "post"
+
+    if dry_run:
+        return "-", "would-create", None
+
+    slug = make_slug(source_key)
+    post_id = wp_cmd(
+        wp_binary,
+        "post",
+        "create",
+        f"--post_type={POST_TYPE}",
+        "--post_status=publish",
+        f"--post_title=微信聊天：{title}",
+        f"--post_name={slug}",
+        f"--post_content={content}",
+        "--porcelain",
+        capture=True,
+    ).strip()
+
+    if not post_id.isdigit():
+        raise RuntimeError(f"WP-CLI 没有返回有效文章 ID：{post_id!r}")
+
+    actual_type = wp_cmd(
+        wp_binary,
+        "post",
+        "get",
+        post_id,
+        "--field=post_type",
+        capture=True,
+    ).strip()
+    if actual_type != "post":
+        raise RuntimeError(
+            f"创建失败：新内容 ID {post_id} 的类型是 {actual_type!r}，不是 'post'"
+        )
+
+    wp_cmd(wp_binary, "post", "meta", "update", post_id, META_KEY, source_key)
+    return post_id, "created", None
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description=(
+            "把微信聊天导出目录及其附加资源原样复制到 WordPress，"
+            "并为每个 messages-unlocked.html 直接创建或更新一篇 post 文章。"
+        )
+    )
+    parser.add_argument(
+        "export_dir",
+        nargs="?",
+        default=".",
+        help="微信导出目录；省略时使用当前目录",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="只检查并显示将执行的操作，不复制文件、不修改 WordPress",
+    )
+    args = parser.parse_args()
+
+    source = Path(args.export_dir).expanduser().resolve()
+
+    if not source.is_dir():
+        raise RuntimeError(f"导出目录不存在：{source}")
+    if not (source / "conversations").is_dir():
+        raise RuntimeError(f"找不到 conversations 目录：{source / 'conversations'}")
+    if not WORDPRESS_ROOT.is_dir():
+        raise RuntimeError(f"找不到 WordPress 根目录：{WORDPRESS_ROOT}")
+
+    wp_binary = find_wp_binary()
+    unlocked_files = ensure_unlocked(source)
+
+    archive_root = WORDPRESS_ROOT / ARCHIVE_SUBDIR
+    destination = archive_root / source.name
+
+    print(f"脚本版本：{SCRIPT_VERSION}")
+    print("模式：POST ONLY（绝不创建 page）")
+    print(f"导出目录：{source}")
+    print(f"发现已解锁对话：{len(unlocked_files)} 个")
+    print(f"WordPress 目标：{destination}")
+    print("导入类型：post（文章）——直接创建，不转换 page")
+    print("显示宽度：全视口宽度（100vw）")
+
+    if not args.dry_run:
+        run(sudo_cmd("mkdir", "-p", str(destination)))
+        run(sudo_cmd("rsync", "-a", "--delete", f"{source}/", f"{destination}/"))
+        run(sudo_cmd("chown", "-R", "www-data:www-data", str(destination)))
+
+    created = 0
+    updated = 0
+    failed = 0
+
+    for unlocked in unlocked_files:
+        try:
+            rel = unlocked.relative_to(source)
+            public_rel = Path("/") / ARCHIVE_SUBDIR / source.name / rel
+            public_url = quote(public_rel.as_posix(), safe="/:")
+
+            title = conversation_title(unlocked.parent.name)
+            source_key = f"{source.name}/{rel.as_posix()}"
+            content = post_content(public_url, f"微信聊天：{title}")
+
+            post_id, action, previous_type = create_or_update_post(
+                wp_binary,
+                title=title,
+                content=content,
+                source_key=source_key,
+                dry_run=args.dry_run,
+            )
+
+            if action in {"created", "would-create"}:
+                created += 1
+                label = "将创建" if args.dry_run else "已创建"
+            else:
+                updated += 1
+                label = "将更新" if args.dry_run else "已更新"
+
+            print(f"[{label}] {title}  文章 ID: {post_id}")
+            print(f"         HTML: {public_url}")
+
+        except Exception as exc:
+            failed += 1
+            print(f"[失败] {unlocked.parent.name}: {exc}", file=sys.stderr)
+
+    if not args.dry_run:
+        wp_cmd(wp_binary, "cache", "flush")
+
+    print("\n" + "=" * 60)
+    print("处理完成")
+    print(f"创建文章：{created}")
+    print(f"更新文章：{updated}")
+    print(f"失败：{failed}")
+
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except KeyboardInterrupt:
+        print("\n已取消。", file=sys.stderr)
+        raise SystemExit(130)
+    except Exception as exc:
+        print(f"错误：{exc}", file=sys.stderr)
+        raise SystemExit(1)

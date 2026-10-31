@@ -1,0 +1,22 @@
+name: Mint Toolbox
+on:
+  push:
+    branches: [main, feat/mint-toolbox-system-plugins]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Desktop test dependencies
+        run: sudo apt-get update && sudo apt-get install -y zip unzip libglib2.0-bin python3-tk xvfb
+      - name: Build bundled extension
+        run: python3 mint-toolbox/packaging/build.py
+      - name: Verify reproducible package and catalog
+        run: git diff --exit-code -- mint-toolbox/debs mint-toolbox/system-plugins.json
+      - name: Test including GUI and real GIO trash
+        run: xvfb-run -a python3 -m unittest discover -s mint-toolbox/tests -v
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mint-Toolbox-v0.3.0
+          path: mint-toolbox/

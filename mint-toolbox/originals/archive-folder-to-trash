@@ -1,0 +1,87 @@
+#!/bin/bash
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+usage() {
+  echo "Usage: $0 FOLDER [OUTPUT_DIR]" >&2
+  echo "Example: $0 ~/Videos/OldFolder" >&2
+  exit 2
+}
+
+[[ $# -ge 1 && $# -le 2 ]] || usage
+
+src="${1%/}"
+
+if [[ ! -d "$src" ]]; then
+  echo "Error: not a folder: $src" >&2
+  exit 1
+fi
+
+src_abs="$(realpath -e -- "$src")"
+parent="$(dirname -- "$src_abs")"
+base="$(basename -- "$src_abs")"
+
+outdir="${2:-$parent}"
+mkdir -p -- "$outdir"
+outdir_abs="$(realpath -m -- "$outdir")"
+
+# Do not create the archive inside the folder being archived.
+case "$outdir_abs/" in
+  "$src_abs"/*)
+    echo "Error: output directory cannot be inside the source folder." >&2
+    exit 1
+    ;;
+esac
+
+stamp="$(date +%Y%m%d-%H%M%S)"
+archive="$outdir_abs/${base}-${stamp}.tar.gz"
+tmp_archive="${archive}.part"
+
+cleanup() {
+  [[ -f "$tmp_archive" ]] && rm -f -- "$tmp_archive"
+}
+trap cleanup EXIT
+
+echo "Archiving:"
+echo "  Source:  $src_abs"
+echo "  Archive: $archive"
+echo
+
+tar -C "$parent" -czf "$tmp_archive" -- "$base"
+
+echo "Testing archive structure..."
+tar -tzf "$tmp_archive" >/dev/null
+
+mv -- "$tmp_archive" "$archive"
+trap - EXIT
+
+echo
+echo "Archive created successfully:"
+echo "  $archive"
+echo
+echo
+echo "Preview of archive contents:"
+set +o pipefail
+tar -tzf "$archive" | head -80
+set -o pipefail
+
+echo
+echo "Moving original folder to Trash..."
+
+if command -v gio >/dev/null 2>&1; then
+  gio trash -- "$src_abs"
+elif command -v trash-put >/dev/null 2>&1; then
+  trash-put -- "$src_abs"
+else
+  echo "Archive was created, but I could not move the folder to Trash." >&2
+  echo "Install trash-cli or use a desktop environment with gio." >&2
+  echo "Original folder is still here:" >&2
+  echo "  $src_abs" >&2
+  exit 1
+fi
+
+echo
+echo "Done."
+echo "Original folder moved to Trash."
+echo "To inspect the archive without extracting:"
+echo "  tar -tzf \"$archive\" | less"

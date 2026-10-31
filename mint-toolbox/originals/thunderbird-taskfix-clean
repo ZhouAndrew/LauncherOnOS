@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+APP="/home/andrew/.local/opt/thunderbird-taskfix-clean-153.1.0/thunderbird"
+PROFILE="/home/andrew/.local/share/thunderbird-taskfix-clean/profile"
+exec "$APP" -no-remote -profile "$PROFILE" "$@"

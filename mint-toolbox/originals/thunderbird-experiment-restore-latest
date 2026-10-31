@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+PROFILE="/home/andrew/.local/share/thunderbird-taskfix/profile"
+BACKUP_ROOT="/home/andrew/Thunderbird-Experiment-Backups"
+
+echo
+echo "============================================================"
+echo " Thunderbird 实验数据恢复"
+echo "============================================================"
+echo
+
+if pgrep -u "$UID" -x thunderbird >/dev/null 2>&1 ||
+   pgrep -u "$UID" -x thunderbird-bin >/dev/null 2>&1; then
+    echo "✗ Thunderbird 正在运行。"
+    echo "关闭 Thunderbird 后才能恢复。"
+    exit 1
+fi
+
+LATEST="$(
+    find "$BACKUP_ROOT"         -mindepth 1         -maxdepth 1         -type d         -name '*-before-experiment'         -printf '%T@ %p\n' |
+    sort -nr |
+    head -n1 |
+    cut -d' ' -f2-
+)"
+
+if [ -z "$LATEST" ] || [ ! -d "$LATEST/profile" ]; then
+    echo "✗ 没有找到实验启动前备份。"
+    exit 1
+fi
+
+echo "准备恢复："
+echo
+echo "  $LATEST/profile"
+echo "       ↓"
+echo "  $PROFILE"
+echo
+
+read -r -p "确认恢复？输入 YES: " ANSWER
+
+if [ "$ANSWER" != "YES" ]; then
+    echo "已取消。"
+    exit 0
+fi
+
+EMERGENCY="$BACKUP_ROOT/$(date '+%Y%m%d-%H%M%S')-before-restore-current"
+
+mkdir -p "$EMERGENCY"
+
+echo
+echo "先保存当前损坏/实验状态："
+echo "  $EMERGENCY/profile"
+
+cp -a --reflink=auto     "$PROFILE"     "$EMERGENCY/profile"
+
+echo
+echo "恢复最近实验前数据..."
+
+rm -rf "$PROFILE.restore-new"
+
+cp -a --reflink=auto     "$LATEST/profile"     "$PROFILE.restore-new"
+
+OLD="$PROFILE.before-restore-$(date '+%Y%m%d-%H%M%S')"
+
+mv "$PROFILE" "$OLD"
+mv "$PROFILE.restore-new" "$PROFILE"
+
+rm -f     "$PROFILE/.parentlock"     "$PROFILE/lock"     2>/dev/null || true
+
+echo
+echo "✓ 恢复完成"
+echo
+echo "恢复来源："
+echo "  $LATEST"
+echo
+echo "恢复前状态仍保存在："
+echo "  $OLD"

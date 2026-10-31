@@ -1,0 +1,720 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import html
+import json
+import re
+import shutil
+import subprocess
+import sys
+from html.parser import HTMLParser
+from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.parse import urljoin, urlparse
+from urllib.request import Request, urlopen
+
+
+USER_AGENT = (
+    "Mozilla/5.0 (X11; Linux x86_64) "
+    "AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124 Safari/537.36"
+)
+
+TIMEOUT = 20
+MAX_HTML_SIZE = 4 * 1024 * 1024
+MAX_ICON_SIZE = 10 * 1024 * 1024
+
+
+class PageParser(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.in_title = False
+        self.title_parts = []
+        self.site_name = ""
+        self.icons = []
+        self.manifests = []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = {
+            key.lower(): value or ""
+            for key, value in attrs
+        }
+
+        tag = tag.lower()
+
+        if tag == "title":
+            self.in_title = True
+            return
+
+        if tag == "meta":
+            prop = (
+                attrs.get("property")
+                or attrs.get("name")
+                or ""
+            ).lower()
+
+            if prop in {
+                "og:site_name",
+                "application-name",
+            }:
+                content = attrs.get("content", "").strip()
+
+                if content and not self.site_name:
+                    self.site_name = content
+
+            return
+
+        if tag != "link":
+            return
+
+        href = attrs.get("href", "").strip()
+
+        if not href:
+            return
+
+        rel = attrs.get("rel", "").lower()
+        rel_tokens = set(re.split(r"\s+", rel))
+        rel_tokens.discard("")
+
+        if "manifest" in rel_tokens:
+            self.manifests.append(href)
+
+        icon_relations = {
+            "icon",
+            "shortcut",
+            "apple-touch-icon",
+            "apple-touch-icon-precomposed",
+            "mask-icon",
+        }
+
+        if rel_tokens & icon_relations:
+            self.icons.append(
+                {
+                    "href": href,
+                    "rel": " ".join(sorted(rel_tokens)),
+                    "sizes": attrs.get("sizes", "").lower(),
+                    "type": attrs.get("type", "").lower(),
+                }
+            )
+
+    def handle_endtag(self, tag):
+        if tag.lower() == "title":
+            self.in_title = False
+
+    def handle_data(self, data):
+        if self.in_title:
+            self.title_parts.append(data)
+
+    @property
+    def title(self):
+        value = "".join(self.title_parts)
+        return " ".join(value.split())
+
+
+def normalize_url(value):
+    value = value.strip()
+
+    if not value:
+        raise ValueError("URL 不能为空")
+
+    if "://" not in value:
+        value = "https://" + value
+
+    parsed = urlparse(value)
+
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError("只支持 HTTP 或 HTTPS 地址")
+
+    if not parsed.netloc:
+        raise ValueError("URL 格式不正确")
+
+    return value
+
+
+def fetch(url, max_size, accept):
+    request = Request(
+        url,
+        headers={
+            "User-Agent": USER_AGENT,
+            "Accept": accept,
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.7",
+        },
+    )
+
+    with urlopen(request, timeout=TIMEOUT) as response:
+        data = response.read(max_size + 1)
+
+        if len(data) > max_size:
+            raise ValueError("下载内容超过允许大小")
+
+        content_type = (
+            response.headers.get_content_type()
+            or "application/octet-stream"
+        )
+
+        charset = (
+            response.headers.get_content_charset()
+            or "utf-8"
+        )
+
+        return (
+            data,
+            response.geturl(),
+            content_type,
+            charset,
+        )
+
+
+def decode_page(data, charset):
+    encodings = [
+        charset,
+        "utf-8",
+        "gb18030",
+        "latin-1",
+    ]
+
+    for encoding in encodings:
+        try:
+            return data.decode(encoding)
+        except (LookupError, UnicodeDecodeError):
+            continue
+
+    return data.decode("utf-8", errors="replace")
+
+
+def parse_size(value):
+    if value == "any":
+        return 4096
+
+    best = 0
+
+    for item in value.split():
+        match = re.fullmatch(r"(\d+)x(\d+)", item)
+
+        if match:
+            width = int(match.group(1))
+            height = int(match.group(2))
+            best = max(best, min(width, height))
+
+    return best
+
+
+def icon_score(icon):
+    rel = icon.get("rel", "")
+    mime = icon.get("type", "")
+
+    if "apple-touch-icon" in rel:
+        relation_score = 500000
+    elif "icon" in rel and "mask-icon" not in rel:
+        relation_score = 400000
+    elif "mask-icon" in rel:
+        relation_score = 200000
+    elif "manifest-icon" in rel:
+        relation_score = 450000
+    else:
+        relation_score = 100000
+
+    format_score = 0
+
+    if "svg" in mime:
+        format_score = 9000
+    elif "png" in mime:
+        format_score = 7000
+    elif "icon" in mime or "ico" in mime:
+        format_score = 4000
+
+    return (
+        relation_score
+        + format_score
+        + parse_size(icon.get("sizes", ""))
+        + icon.get("extra_score", 0)
+    )
+
+
+def read_manifest(manifest_url):
+    try:
+        data, final_url, content_type, charset = fetch(
+            manifest_url,
+            1024 * 1024,
+            "application/manifest+json,"
+            "application/json,"
+            "text/plain;q=0.8,"
+            "*/*;q=0.1",
+        )
+
+        manifest = json.loads(
+            decode_page(data, charset)
+        )
+
+    except Exception:
+        return []
+
+    if not isinstance(manifest, dict):
+        return []
+
+    icons = manifest.get("icons", [])
+
+    if not isinstance(icons, list):
+        return []
+
+    results = []
+
+    for icon in icons:
+        if not isinstance(icon, dict):
+            continue
+
+        src = icon.get("src")
+
+        if not src:
+            continue
+
+        purpose = str(
+            icon.get("purpose", "any")
+        ).lower()
+
+        results.append(
+            {
+                "href": urljoin(final_url, str(src)),
+                "rel": "manifest-icon",
+                "sizes": str(icon.get("sizes", "")),
+                "type": str(icon.get("type", "")).lower(),
+                "extra_score": 5000 if "any" in purpose else 0,
+            }
+        )
+
+    return results
+
+
+def detect_extension(data, content_type, url):
+    content_type = content_type.lower().split(";", 1)[0]
+
+    mime_extensions = {
+        "image/png": ".png",
+        "image/svg+xml": ".svg",
+        "image/x-icon": ".ico",
+        "image/vnd.microsoft.icon": ".ico",
+        "image/jpeg": ".jpg",
+        "image/webp": ".webp",
+        "image/gif": ".gif",
+    }
+
+    if content_type in mime_extensions:
+        return mime_extensions[content_type]
+
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return ".png"
+
+    if data.startswith(b"\x00\x00\x01\x00"):
+        return ".ico"
+
+    if data.startswith(b"\xff\xd8\xff"):
+        return ".jpg"
+
+    if (
+        len(data) >= 12
+        and data[:4] == b"RIFF"
+        and data[8:12] == b"WEBP"
+    ):
+        return ".webp"
+
+    if data.startswith((b"GIF87a", b"GIF89a")):
+        return ".gif"
+
+    beginning = data[:2048].lstrip().lower()
+
+    if b"<svg" in beginning:
+        return ".svg"
+
+    extension = Path(
+        urlparse(url).path
+    ).suffix.lower()
+
+    if extension in {
+        ".png",
+        ".svg",
+        ".ico",
+        ".jpg",
+        ".jpeg",
+        ".webp",
+        ".gif",
+    }:
+        if extension == ".jpeg":
+            return ".jpg"
+
+        return extension
+
+    return None
+
+
+def download_icon(base_url, parser, icon_dir, stem):
+    candidates = []
+
+    for icon in parser.icons:
+        icon = dict(icon)
+        icon["href"] = urljoin(
+            base_url,
+            html.unescape(icon["href"]),
+        )
+        icon["extra_score"] = 0
+        candidates.append(icon)
+
+    for manifest in parser.manifests[:3]:
+        manifest_url = urljoin(
+            base_url,
+            html.unescape(manifest),
+        )
+
+        candidates.extend(
+            read_manifest(manifest_url)
+        )
+
+    parsed = urlparse(base_url)
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+
+    candidates.extend(
+        [
+            {
+                "href": urljoin(
+                    origin,
+                    "/apple-touch-icon.png",
+                ),
+                "rel": "fallback",
+                "sizes": "",
+                "type": "image/png",
+                "extra_score": -1000,
+            },
+            {
+                "href": urljoin(
+                    origin,
+                    "/favicon.ico",
+                ),
+                "rel": "fallback",
+                "sizes": "",
+                "type": "image/x-icon",
+                "extra_score": -2000,
+            },
+        ]
+    )
+
+    candidates.sort(
+        key=icon_score,
+        reverse=True,
+    )
+
+    attempted = set()
+
+    for candidate in candidates:
+        icon_url = candidate["href"]
+
+        if not icon_url:
+            continue
+
+        if icon_url.startswith("data:"):
+            continue
+
+        if icon_url in attempted:
+            continue
+
+        attempted.add(icon_url)
+
+        try:
+            data, final_url, content_type, charset = fetch(
+                icon_url,
+                MAX_ICON_SIZE,
+                "image/avif,"
+                "image/webp,"
+                "image/apng,"
+                "image/svg+xml,"
+                "image/*,"
+                "*/*;q=0.2",
+            )
+
+            extension = detect_extension(
+                data,
+                content_type,
+                final_url,
+            )
+
+            if not extension:
+                continue
+
+            if len(data) < 32:
+                continue
+
+            icon_dir.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+
+            icon_path = icon_dir / (
+                stem + extension
+            )
+
+            for old_icon in icon_dir.glob(
+                stem + ".*"
+            ):
+                if old_icon != icon_path:
+                    old_icon.unlink(
+                        missing_ok=True
+                    )
+
+            icon_path.write_bytes(data)
+
+            return icon_path
+
+        except Exception:
+            continue
+
+    return None
+
+
+def clean_name(value):
+    value = html.unescape(value)
+    value = re.sub(
+        r"[\r\n\t]+",
+        " ",
+        value,
+    )
+    value = " ".join(value.split())
+
+    return value.strip()[:120]
+
+
+def make_stem(host, url):
+    host = host.lower()
+    host = re.sub(r"^www\.", "", host)
+    host = re.sub(
+        r"[^a-z0-9._-]+",
+        "-",
+        host,
+    )
+    host = host.strip("-.") or "website"
+
+    digest = hashlib.sha256(
+        url.encode("utf-8")
+    ).hexdigest()[:8]
+
+    return f"webapp-{host}-{digest}"
+
+
+def desktop_value(value):
+    return (
+        value
+        .replace("\\", "\\\\")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+    )
+
+
+def exec_quote(value):
+    # .desktop 的 Exec 字段把 % 作为特殊字段代码。
+    value = value.replace("%", "%%")
+
+    for character in (
+        "\\",
+        '"',
+        "`",
+        "$",
+    ):
+        value = value.replace(
+            character,
+            "\\" + character,
+        )
+
+    return f'"{value}"'
+
+
+def create_desktop(name, url, icon, stem):
+    applications_dir = (
+        Path.home()
+        / ".local/share/applications"
+    )
+
+    applications_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    desktop_path = (
+        applications_dir
+        / f"{stem}.desktop"
+    )
+
+    if icon:
+        icon_value = str(icon.resolve())
+    else:
+        icon_value = "web-browser"
+
+    content = "\n".join(
+        [
+            "[Desktop Entry]",
+            "Version=1.0",
+            "Type=Application",
+            f"Name={desktop_value(name)}",
+            f"Comment={desktop_value('打开 ' + url)}",
+            f"Exec=xdg-open {exec_quote(url)}",
+            f"Icon={desktop_value(icon_value)}",
+            "Terminal=false",
+            "Categories=Network;WebBrowser;",
+            "StartupNotify=true",
+            "NoDisplay=false",
+            "",
+        ]
+    )
+
+    desktop_path.write_text(
+        content,
+        encoding="utf-8",
+    )
+
+    desktop_path.chmod(0o755)
+
+    return desktop_path
+
+
+def main():
+    parser_arguments = argparse.ArgumentParser(
+        description="把网页添加到 Linux Mint/Cinnamon 主菜单"
+    )
+
+    parser_arguments.add_argument(
+        "url",
+        nargs="?",
+        help="要添加的网页 URL",
+    )
+
+    parser_arguments.add_argument(
+        "--name",
+        help="自定义菜单名称；默认读取网页标题",
+    )
+
+    arguments = parser_arguments.parse_args()
+
+    entered_url = (
+        arguments.url
+        or input("请输入网页 URL：").strip()
+    )
+
+    try:
+        url = normalize_url(entered_url)
+
+    except ValueError as error:
+        print(
+            f"错误：{error}",
+            file=sys.stderr,
+        )
+        return 2
+
+    page_parser = PageParser()
+    final_url = url
+
+    print("正在读取网页标题和图标信息……")
+
+    try:
+        data, final_url, content_type, charset = fetch(
+            url,
+            MAX_HTML_SIZE,
+            "text/html,"
+            "application/xhtml+xml,"
+            "application/xml;q=0.9,"
+            "*/*;q=0.2",
+        )
+
+        page_parser.feed(
+            decode_page(data, charset)
+        )
+
+    except (
+        HTTPError,
+        URLError,
+        TimeoutError,
+        ValueError,
+        OSError,
+    ) as error:
+        print(
+            f"警告：读取网页失败：{error}",
+            file=sys.stderr,
+        )
+
+    hostname = (
+        urlparse(final_url).hostname
+        or urlparse(url).hostname
+        or "website"
+    )
+
+    name = clean_name(
+        arguments.name
+        or page_parser.site_name
+        or page_parser.title
+        or hostname
+    )
+
+    stem = make_stem(
+        hostname,
+        final_url,
+    )
+
+    icon_dir = (
+        Path.home()
+        / ".local/share/icons/web-apps"
+    )
+
+    print("正在查找并下载网页图标……")
+
+    icon = download_icon(
+        final_url,
+        page_parser,
+        icon_dir,
+        stem,
+    )
+
+    if icon is None:
+        print(
+            "警告：没有找到可用图标，"
+            "将使用系统默认浏览器图标。",
+            file=sys.stderr,
+        )
+
+    desktop_path = create_desktop(
+        name,
+        final_url,
+        icon,
+        stem,
+    )
+
+    database_updater = shutil.which(
+        "update-desktop-database"
+    )
+
+    if database_updater:
+        subprocess.run(
+            [
+                database_updater,
+                str(desktop_path.parent),
+            ],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    print()
+    print("添加完成：")
+    print(f"  名称：{name}")
+    print(f"  URL：{final_url}")
+    print(f"  启动项：{desktop_path}")
+    print(
+        f"  图标："
+        f"{icon if icon else 'web-browser'}"
+    )
+    print()
+    print("现在可以打开 Cinnamon 主菜单并搜索该名称。")
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

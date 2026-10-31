@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+exec "/home/andrew/.local/share/caldav-assistant-thunderbird-experimental/venv/bin/python" "/home/andrew/.local/share/caldav-assistant-thunderbird-experimental/host/native_host.py"
