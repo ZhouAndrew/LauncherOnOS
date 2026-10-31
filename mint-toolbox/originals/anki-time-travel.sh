@@ -21,7 +21,7 @@ set -Eeuo pipefail
 #   - performs final verification
 #
 # Expected filename:
-#   anki-stats-YYYY-MM-DD@HH-MM-SS.pdf
+#   anki-stats-YYYY-MM-DD@HH-MM-SS.pdf (optional numeric download suffix, e.g. -1)
 
 WP_PATH="${WP_PATH:-/var/www/html/wordpress}"
 
@@ -44,6 +44,7 @@ cleanup() {
     for d in "${cleanup_dirs[@]:-}"; do
         [ -n "$d" ] && [ -d "$d" ] && rm -rf -- "$d"
     done
+    return 0
 }
 trap cleanup EXIT
 trap 'printf "\n✗ Script failed at line %s.\n" "$LINENO" >&2' ERR
@@ -67,6 +68,24 @@ Multiple PDF files can be provided:
 EOF
     exit 2
 fi
+
+# Resolve every input against the launch directory before changing to WP_PATH.
+# Preflight all inputs before any WordPress command can run.
+CALLER_DIR="$PWD"
+PDF_NAME_RE='^anki-stats-([0-9]{4})-([0-9]{2})-([0-9]{2})@([0-9]{2})-([0-9]{2})-([0-9]{2})(-[0-9]+)?\.pdf$'
+pdf_inputs=()
+for input in "$@"; do
+    if [[ "$input" != /* ]]; then
+        input="$CALLER_DIR/$input"
+    fi
+    [ -f "$input" ] || die "PDF not found: $input"
+    base="${input##*/}"
+    if [[ ! "$base" =~ $PDF_NAME_RE ]]; then
+        die "Invalid filename format: $base
+Required: anki-stats-YYYY-MM-DD@HH-MM-SS.pdf (optional numeric suffix, e.g. -1)"
+    fi
+    pdf_inputs+=("$input")
+done
 
 need_cmd wp
 need_cmd date
@@ -107,9 +126,9 @@ process_one() {
     local BASE
     BASE="$(basename -- "$PDF")"
 
-    if [[ ! "$BASE" =~ ^anki-stats-([0-9]{4})-([0-9]{2})-([0-9]{2})@([0-9]{2})-([0-9]{2})-([0-9]{2})\.pdf$ ]]; then
+    if [[ ! "$BASE" =~ $PDF_NAME_RE ]]; then
         die "Invalid filename format: $BASE
-Required: anki-stats-YYYY-MM-DD@HH-MM-SS.pdf"
+Required: anki-stats-YYYY-MM-DD@HH-MM-SS.pdf (optional numeric suffix, e.g. -1)"
     fi
 
     local Y="${BASH_REMATCH[1]}"
@@ -309,6 +328,6 @@ EOF
     printf '============================================================\n'
 }
 
-for pdf in "$@"; do
+for pdf in "${pdf_inputs[@]}"; do
     process_one "$pdf"
 done
