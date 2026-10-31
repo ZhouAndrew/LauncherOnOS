@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Mint Toolbox
+Comment=Utilities, Anki PDF imports and system extensions
+Exec=/usr/bin/mint-toolbox --gui
+TryExec=/usr/bin/mint-toolbox
+Icon=applications-utilities
+Terminal=false
+Categories=Utility;
+StartupNotify=true

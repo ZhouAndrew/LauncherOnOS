@@ -39,6 +39,7 @@ Description: Historical Anki PDF import into local WordPress
 ''')
         write('usr/bin/anki-time-travel', '#!/bin/sh\nexec /usr/bin/python3 /usr/lib/anki-time-travel/app.py "$@"\n', 0o755)
         write('usr/lib/anki-time-travel/app.py', (ROOT / 'app.py').read_text())
+        write('usr/lib/anki-time-travel/anki_import.py', (ROOT.parent / 'mint-toolbox/anki_import.py').read_text())
         write('usr/lib/anki-time-travel/execution.py', (ROOT.parent / 'mint-toolbox/execution.py').read_text())
         write('usr/lib/anki-time-travel/anki-time-travel.sh', (ROOT.parent / 'mint-toolbox/originals/anki-time-travel.sh').read_text(), 0o755)
         write('usr/share/applications/anki-time-travel.desktop', (ROOT / 'anki-time-travel.desktop').read_text())

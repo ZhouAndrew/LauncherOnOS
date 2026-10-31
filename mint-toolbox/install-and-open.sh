@@ -10,4 +10,4 @@ if ! python3 -c 'import tkinter' >/dev/null 2>&1; then
     exit 1
 fi
 bash install.sh
-exec python3 "$HOME/.local/share/mint-toolbox/toolbox.py" --plugins
+exec python3 "$HOME/.local/share/mint-toolbox/toolbox.py" --gui

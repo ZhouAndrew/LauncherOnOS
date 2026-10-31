@@ -22,6 +22,7 @@ from typing import Any
 
 import extensions
 import system_plugins
+import anki_import
 
 ROOT = Path(__file__).resolve().parent
 CATALOG = ROOT / 'catalog.json'
@@ -488,7 +489,7 @@ def launch_gui() -> int:
     import tkinter as tk
     from tkinter import ttk, messagebox
     root = tk.Tk()
-    root.title('Mint Toolbox v0.4.2')
+    root.title('Mint Toolbox v0.5.0')
     root.geometry('1100x740')
     root.minsize(900, 600)
     style = ttk.Style(root)
@@ -568,6 +569,13 @@ def launch_gui() -> int:
     selected: list[dict[str, Any] | None] = [None]
 
     def choose_action(tool: dict[str, Any], action: Action):
+        if tool['id'] == 'anki-time-travel.sh':
+            try:
+                command_for(tool, [])
+                anki_import.show_gui(parent=root)
+            except (OSError, ValueError, RuntimeError) as exc:
+                messagebox.showerror('Cannot open Anki importer', str(exc), parent=root)
+            return
         vals = _input_dialog(root, action)
         if vals is None: return
         try:
@@ -867,6 +875,8 @@ def launch_tui() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     raw = sys.argv[1:] if argv is None else list(argv)
+    if raw[:1] == ['--anki']:
+        return anki_import.main(raw[1:])
     # Exact CLI compatibility: --run TOOL receives ALL trailing flags unchanged,
     # including --help and --output (argparse would otherwise consume them).
     if raw[:1] == ['--run']:
@@ -893,6 +903,7 @@ def main(argv: list[str] | None = None) -> int:
     plugin_operation.add_argument('--plugin-build', metavar='ID', choices=[p['id'] for p in system_plugins.plugins()], help='build the pinned source as a regular user and install the generated deb')
     plugin_operation.add_argument('--plugin-enable', metavar='ID', choices=[p['id'] for p in system_plugins.plugins()])
     plugin_operation.add_argument('--plugin-disable', metavar='ID', choices=[p['id'] for p in system_plugins.plugins()])
+    p.add_argument('--anki', action='store_true', help='integrated Anki PDF importer; accepts PDF paths, --gui or --choose')
     p.add_argument('--gui', action='store_true', help='use graphical tool window')
     p.add_argument('--tui', action='store_true', help='use terminal mode')
     p.add_argument('--list', action='store_true', help='list available tools')

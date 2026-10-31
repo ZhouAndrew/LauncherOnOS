@@ -1,3 +1,11 @@
+# v0.5.0
+
+- Ships the whole Mint Toolbox as one installable system Debian package.
+- Opens the main toolbox from the desktop entry and source installer.
+- Integrates Anki PDF import into a child window of the main toolbox, with shared live logs.
+- Adds `mint-toolbox --anki` for CLI imports and desktop file selection.
+- The standalone compatibility entry delegates to the same canonical importer implementation.
+
 # v0.4.2
 
 - Query the canonical permalink for the exact imported Post ID.

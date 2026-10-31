@@ -1,9 +1,31 @@
-# Mint Toolbox v0.4.2
+# Mint Toolbox v0.5.0
 
 A GUI-first collection of Linux utilities with a Debian system extension manager.
 Inspired by the organization of Microsoft PowerToys; not affiliated with Microsoft.
 
-## Install and start
+## Install the complete system application
+
+```bash
+sudo apt install ./mint-toolbox_0.5.0_all.deb
+/usr/bin/mint-toolbox --gui
+```
+
+The complete toolbox installs under `/usr/share/mint-toolbox`, with the command
+`/usr/bin/mint-toolbox` and the desktop entry `/usr/share/applications/mint-toolbox.desktop`.
+The main window includes the Anki PDF importer directly, existing utilities and system extensions.
+The Anki importer implementation is owned by Mint Toolbox; no standalone Anki package is required.
+
+```bash
+mint-toolbox --anki --gui
+mint-toolbox --anki --choose
+mint-toolbox --anki /absolute/path/anki-stats-2026-10-27@22-58-46-1.pdf
+```
+
+If an earlier user installation shadows `/usr/bin/mint-toolbox`, redirect only the old managed
+`~/.local/bin/mint-toolbox` symlink to `/usr/bin/mint-toolbox`. The old user desktop entry will then also use the system application.
+User settings, registrations and logs are retained.
+
+## Install from the source archive
 
 Unpack the complete distribution and run:
 

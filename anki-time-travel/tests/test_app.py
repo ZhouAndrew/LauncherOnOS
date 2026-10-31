@@ -9,8 +9,9 @@ import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT.parent / 'mint-toolbox'))
 sys.path.insert(0, str(ROOT))
-spec = importlib.util.spec_from_file_location('anki_time_travel_app', ROOT / 'app.py')
+spec = importlib.util.spec_from_file_location('anki_time_travel_app', ROOT.parent / 'mint-toolbox/anki_import.py')
 app = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(app)
 

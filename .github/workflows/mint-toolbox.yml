@@ -14,6 +14,10 @@ jobs:
         run: python3 mint-toolbox/packaging/build.py
       - name: Verify reproducible package and catalog
         run: git diff --exit-code -- mint-toolbox/debs mint-toolbox/system-plugins.json
+      - name: Build complete Mint Toolbox system package
+        run: python3 mint-toolbox/packaging/build-toolbox.py
+      - name: Validate unified desktop entry
+        run: desktop-file-validate mint-toolbox/packaging/mint-toolbox.desktop
       - name: Test including GUI and real GIO trash
         run: xvfb-run -a python3 -m unittest discover -s mint-toolbox/tests -v
       - name: Build standalone Anki Time Travel
@@ -28,5 +32,9 @@ jobs:
           path: anki-time-travel/dist/*.deb
       - uses: actions/upload-artifact@v4
         with:
-          name: Mint-Toolbox-v0.4.2
+          name: Mint-Toolbox-system-deb
+          path: mint-toolbox/dist/*.deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mint-Toolbox-v0.5.0
           path: mint-toolbox/
