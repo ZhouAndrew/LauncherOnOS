@@ -35,6 +35,21 @@ class ZipTests(unittest.TestCase):
         self.assertTrue(target.is_file())
         self.assertEqual(self.trashed, [folder, other])
 
+    def test_read_access_time_change_does_not_block_snapshot(self):
+        from types import SimpleNamespace
+        path = self.root / 'file'
+        path.write_text('original')
+        real_lstat = Path.lstat
+        counter = [0]
+        def lstat(chosen):
+            info = real_lstat(chosen)
+            counter[0] += 1
+            values = {name: getattr(info, name) for name in dir(info) if name.startswith('st_')}
+            values['st_atime'] += counter[0]
+            return SimpleNamespace(**values)
+        with patch.object(Path, 'lstat', lstat):
+            self.assertEqual(zip_trash.snapshot([path]), {'file': hashlib.sha256(b'original').hexdigest()})
+
     def test_never_overwrites(self):
         path = self.root / 'file'
         path.write_text('original')

@@ -30,7 +30,9 @@ def snapshot(paths):
         elif stat.S_ISREG(before.st_mode):
             with path.open('rb') as stream:
                 value = digest(stream)
-            if path.lstat() != before:
+            after = path.lstat()
+            fields = ('st_dev', 'st_ino', 'st_mode', 'st_size', 'st_mtime_ns', 'st_ctime_ns')
+            if any(getattr(before, field) != getattr(after, field) for field in fields):
                 raise ValueError('文件正在变化：' + str(path))
             result[name] = value
         else:

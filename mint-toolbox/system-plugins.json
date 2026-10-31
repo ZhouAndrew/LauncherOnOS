@@ -5,7 +5,7 @@
     "package": "mint-toolbox-extension-zip-trash",
     "version": "0.3.0",
     "deb": "debs/mint-toolbox-extension-zip-trash_0.3.0_all.deb",
-    "sha256": "e228d125fa7fd7fd805f6ba18264addc32edd715efa6532e21b10f3f1baf13d8",
+    "sha256": "633df6b21f2494aa18fd3be18ca7a9af18fcc27dcd25fec2c302f3b55354d073",
     "description": "Nemo 原生右键菜单，支持同目录多选文件和文件夹。调用系统 zip / unzip，逐项校验内容并确认原文件未变化，再通过 GIO 移入回收站。不会覆盖已有 ZIP；失败不执行永久删除。暂不支持符号链接及特殊文件。安装后重新打开文件管理器窗口；如菜单未刷新，可注销后重新登录。"
   }
 ]
