@@ -4,7 +4,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import system_plugins as plugins
@@ -106,7 +106,7 @@ class ZipTests(unittest.TestCase):
             if args[0] == '/usr/bin/gio':
                 raise subprocess.CalledProcessError(1, args)
             return self.run_command(args, **kwargs)
-        with self.assertRaisesRegex(RuntimeError, 'ZIP 已保存'):
+        with self.assertRaisesRegex(RuntimeError, 'ZIP saved'):
             zip_trash.archive_and_trash([path], fail)
         self.assertTrue((self.root / 'file.zip').is_file())
         self.assertTrue(path.exists())
@@ -125,22 +125,22 @@ class ManagerTests(unittest.TestCase):
             (root / 'bad.deb').write_text('bad')
             item = dict(plugins.plugin('zip-trash'), deb='bad.deb', sha256='0' * 64)
             with patch.object(plugins, 'ROOT', root), patch.object(plugins, 'plugin', return_value=item):
-                with self.assertRaisesRegex(ValueError, '校验失败'):
+                with self.assertRaisesRegex(ValueError, 'checksum verification failed'):
                     plugins.command('zip-trash', True)
 
     def test_success_requires_readback(self):
-        with patch.object(plugins, 'command', return_value=['true']), \
+        with patch.object(plugins, 'command', return_value=['/usr/bin/apt-get', 'install', 'test']), \
              patch.object(plugins, 'package_status', return_value=('absent', None)), \
-             patch.object(plugins.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, '', '')):
-            with self.assertRaisesRegex(RuntimeError, '状态回读'):
+             patch.object(plugins.OperationLog, 'run', return_value=subprocess.CompletedProcess([], 0, '', '')):
+            with self.assertRaisesRegex(RuntimeError, 'readback'):
                 plugins.change('zip-trash', True)
             self.assertIsNone(plugins.change('zip-trash', False))
 
     def test_incomplete_install_is_not_disabled(self):
-        with patch.object(plugins, 'command', return_value=['true']), \
-             patch.object(plugins, 'package_status', return_value=('install ok unpacked', '0.3.0')), \
-             patch.object(plugins.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, '', '')):
-            self.assertIn('异常', plugins.state_text('test'))
+        with patch.object(plugins, 'command', return_value=['/usr/bin/apt-get', 'install', 'test']), \
+             patch.object(plugins, 'package_status', return_value=('install ok unpacked', '0.4.0')), \
+             patch.object(plugins.OperationLog, 'run', return_value=subprocess.CompletedProcess([], 0, '', '')):
+            self.assertIn('Incomplete', plugins.state_text('test'))
             with self.assertRaises(RuntimeError):
                 plugins.change('zip-trash', False)
 
@@ -162,9 +162,9 @@ class ManagerTests(unittest.TestCase):
             self.assertEqual(trashed[0].read_text(), 'recoverable')
 
     def test_cancelled_install_is_failure(self):
-        with patch.object(plugins, 'command', return_value=['false']), \
+        with patch.object(plugins, 'command', return_value=['/usr/bin/apt-get', 'install', 'test']), \
              patch.object(plugins, 'package_status', return_value=('absent', None)), \
-             patch.object(plugins.subprocess, 'run', return_value=subprocess.CompletedProcess([], 126, '', 'cancelled')):
+             patch.object(plugins.OperationLog, 'run', return_value=subprocess.CompletedProcess([], 126, '', 'cancelled')):
             with self.assertRaises(RuntimeError):
                 plugins.change('zip-trash', True)
 

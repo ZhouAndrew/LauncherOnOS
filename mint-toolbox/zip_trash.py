@@ -9,6 +9,10 @@ import sys
 import tempfile
 import zipfile
 
+if Path(__file__).parent == Path("/usr/bin"):
+    sys.path.insert(0, "/usr/lib/mint-toolbox")
+from execution import OperationLog, run_operation_window
+
 
 def digest(stream):
     h = hashlib.sha256()
@@ -22,7 +26,7 @@ def snapshot(paths):
     def visit(path, name):
         before = path.lstat()
         if stat.S_ISLNK(before.st_mode):
-            raise ValueError('暂不支持符号链接：' + str(path))
+            raise ValueError('Symbolic links are not supported: ' + str(path))
         if stat.S_ISDIR(before.st_mode):
             result[name + '/'] = None
             for child in sorted(path.iterdir()):
@@ -33,42 +37,47 @@ def snapshot(paths):
             after = path.lstat()
             fields = ('st_dev', 'st_ino', 'st_mode', 'st_size', 'st_mtime_ns', 'st_ctime_ns')
             if any(getattr(before, field) != getattr(after, field) for field in fields):
-                raise ValueError('文件正在变化：' + str(path))
+                raise ValueError('File changed while reading: ' + str(path))
             result[name] = value
         else:
-            raise ValueError('不支持设备、套接字或特殊文件：' + str(path))
+            raise ValueError('Device, socket, or special file is unsupported: ' + str(path))
     for path in paths:
         visit(path, path.name)
     return result
 
 
-def archive_and_trash(inputs, run=subprocess.run):
+def archive_and_trash(inputs, run=subprocess.run, report=lambda text: None):
     paths = [Path(os.path.abspath(p)) for p in inputs]
     if not paths or len(set(paths)) != len(paths):
-        raise ValueError('请选择不重复的文件或文件夹')
+        raise ValueError('Select nonduplicate files or folders')
     parent = paths[0].parent
     if any(p.parent != parent or p == parent for p in paths):
-        raise ValueError('请选择同一目录下的文件或文件夹')
+        raise ValueError('Select files or folders from the same directory')
+    report("Reading original file contents")
     original = snapshot(paths)
     base = paths[0].name if len(paths) == 1 else 'Archive'
     # A private directory on the same filesystem allows no-clobber publication.
     with tempfile.TemporaryDirectory(prefix='.mint-toolbox-zip-', dir=parent) as temporary:
         staged = Path(temporary) / 'archive.zip'
-        run(['/usr/bin/zip', '-q', '-r', str(staged), '--',
+        report('Compressing with system zip')
+        run(['/usr/bin/zip', '-r', str(staged), '--',
              *['./' + p.name for p in paths]], cwd=parent, check=True)
-        run(['/usr/bin/unzip', '-tqq', str(staged)], check=True)
+        report('Testing ZIP integrity with system unzip')
+        run(['/usr/bin/unzip', '-t', str(staged)], check=True)
+        report('Comparing ZIP contents with original files')
         with zipfile.ZipFile(staged) as archive:
             actual = {}
             for entry in archive.infolist():
                 name = entry.filename.removeprefix('./')
                 if name in actual:
-                    raise ValueError('ZIP 包含重复条目，保留原文件')
+                    raise ValueError('ZIP contains duplicate entries. Originals retained.')
                 with archive.open(entry) as stream:
                     actual[name] = None if entry.is_dir() else digest(stream)
         if actual != original or snapshot(paths) != original:
-            raise ValueError('ZIP 内容或原文件发生变化，保留原文件')
+            raise ValueError('ZIP content differs or originals changed. Originals retained.')
         with staged.open('rb') as stream:
             os.fsync(stream.fileno())
+        report('Publishing verified archive without overwriting existing files')
         number = 0
         while True:
             suffix = '' if number == 0 else f' ({number})'
@@ -86,48 +95,43 @@ def archive_and_trash(inputs, run=subprocess.run):
         # Never fall back to rm. Failed/partial trash keeps the verified ZIP.
         try:
             if snapshot(paths) != original:
-                raise ValueError('原文件在压缩后变化，保留原文件')
+                raise ValueError('Originals changed after compression. Originals retained.')
+            report('Moving originals to the system Trash')
             for path in paths:
                 run(['/usr/bin/gio', 'trash', '--', str(path)], check=True)
         except Exception as exc:
-            raise RuntimeError(f'ZIP 已保存到 {target}；移入回收站未全部完成：{exc}') from exc
+            raise RuntimeError(f'ZIP saved to {target}; moving originals to Trash did not fully complete: {exc}') from exc
         return target
 
 
 def main():
     import argparse
-    p = argparse.ArgumentParser(description='压缩为 ZIP 并将原文件移入回收站')
-    p.add_argument('--gui', action='store_true')
-    p.add_argument('paths', nargs='+')
-    args = p.parse_args()
-    try:
-        if args.gui:
-            answer = subprocess.run(['/usr/bin/zenity', '--question', '--title=压缩为 ZIP 并删除',
-                '--no-markup', '--text=压缩并验证成功后，将所选原文件移入回收站。是否继续？'], check=False)
-            if answer.returncode:
-                return 0
-        progress = None
-        if args.gui:
-            progress = subprocess.Popen(['/usr/bin/zenity', '--progress', '--pulsate',
-                '--no-cancel', '--title=Mint Toolbox', '--text=正在压缩和验证，请稍候…'],
-                stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        try:
-            target = archive_and_trash(args.paths)
-        finally:
-            if progress is not None:
-                progress.terminate()
-                progress.communicate()
-
-        message = '已生成 ZIP，原文件已移入回收站：\n' + str(target)
-        code = 0
-    except Exception as exc:
-        message, code = str(exc), 1
+    parser = argparse.ArgumentParser(description='Compress to ZIP and move originals to Trash')
+    parser.add_argument('--gui', action='store_true')
+    parser.add_argument('paths', nargs='+')
+    args = parser.parse_args()
     if args.gui:
-        subprocess.run(['/usr/bin/zenity', '--error' if code else '--info',
-                        '--title=Mint Toolbox', '--no-markup', '--text=' + message], check=False)
-    else:
-        print(message, file=sys.stderr if code else sys.stdout)
-    return code
+        import tkinter as tk
+        from tkinter import messagebox
+        confirm = tk.Tk()
+        confirm.withdraw()
+        accepted = messagebox.askyesno('Compress to ZIP and delete',
+            'Compress and verify the selection, then move originals to Trash?\n\nA window will show commands and live output.', parent=confirm)
+        confirm.destroy()
+        if not accepted:
+            return 0
+        return run_operation_window('Mint Toolbox - ZIP and Trash',
+            lambda log: archive_and_trash(args.paths, log.run, log.stage))
+    log = OperationLog('ZIP and Trash')
+    try:
+        target = archive_and_trash(args.paths, log.run, log.stage)
+        log.stage('ZIP created; originals moved to Trash: ' + str(target))
+        return 0
+    except Exception as exc:
+        log.stage('FAILED: ' + str(exc))
+        return 1
+    finally:
+        log.close()
 
 
 if __name__ == '__main__':

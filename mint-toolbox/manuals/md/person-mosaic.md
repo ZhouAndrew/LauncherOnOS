@@ -1,39 +1,32 @@
-# person-mosaic — 人物马赛克脚本入口
+# Person mosaic launcher
 
-> 分类：图像与多媒体 · 状态：外部程序入口 / 功能待核查 · 风险：未知 · 启动器：register
+Forward arguments to person_mosaic.py in an external virtual environment. The actual application is not bundled.
 
-## 功能
+## Availability
 
-调用单独虚拟环境中的 `person_mosaic.py`，原样转发 CLI 参数。本压缩包只包含入口，未包含功能本体。
+- Category: Images and media
+- Status: Requires an external runtime
+- Risk: unknown
 
-## 用法
+## Command line
 
 ```bash
-person-mosaic [由 person_mosaic.py 定义的参数]
+mint-toolbox --run person-mosaic --help
 ```
 
-## 参数与选项
+The original script arguments are passed through unchanged. Inspect the full command before confirming an operation. External launchers require their existing application or virtual environment; that runtime is not bundled.
 
-- 本包装器不解析任何参数；实际可用选项须查看外部 `person_mosaic.py`。
+## Graphical actions
 
-## 依赖与运行环境
+This reference entry has no graphical actions. Read the original CLI help before use. Archived and removed tools are not launched by default.
+## Requirements and effects
 
-- 固定依赖 `/home/andrew/.local/share/person-mosaic/venv/bin/python` 及同目录 `person_mosaic.py`。
+This entry uses the machine-specific executable or profile paths from the original script. Verify those paths and close conflicting applications before running it. Restoring a profile replaces live data; the script requires explicit confirmation.
 
-## 输出与副作用
+## Tool management
 
-- 启动外部程序；具体读写和隐私处理行为无法仅凭本入口验证。
+Disable preserves the script, settings and manual. Mark as removed hides the entry without deleting its files. User-tool registration is independent of system extension package installation.
 
-## 注意事项
+## Execution visibility
 
-- 不能把脚本名称理解为功能已经验收；LaunchOnOS 应采用 `register`，不要复制虚拟环境包装器为完整应用。
-
-## 来源与验证
-
-- 来源：用户提供的 `bin.zip` 中的 `bin/person-mosaic`。
-- 源文件 SHA-256：`d3a4b1136713f2a5e99736df1d2cb994a7e7a991c849d7ef798ee6349e9963d5`。
-- 验证状态：**已静态读取代码；未运行脚本、未验证目标服务/依赖。**
-
-## LauncherOnOS 集成建议
-
-建议使用 `launcheronos register` 注册现有入口，不复制依赖环境或目标程序。
+The interface shows the complete command. Legacy interactive scripts run in a terminal that keeps the output and exit code visible until Enter is pressed. System extensions use the separate execution log panel and save logs automatically.

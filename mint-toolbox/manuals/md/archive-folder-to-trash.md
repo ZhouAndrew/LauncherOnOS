@@ -1,45 +1,40 @@
-# archive-folder-to-trash — 文件夹打包后移入回收站
+# Archive folder and move to Trash
 
-> 分类：文件与归档 · 状态：可用逻辑 / 待实机验收 · 风险：高 · 启动器：install
+Create a timestamped tar.gz archive, verify readability, then move the original folder to desktop Trash.
 
-## 功能
+## Availability
 
-将指定文件夹压缩为带时间戳的 `.tar.gz`，测试归档可读取，然后将源文件夹放入桌面回收站。
+- Category: Files and archives
+- Status: Available; real-system acceptance pending
+- Risk: high
 
-## 用法
+## Command line
 
 ```bash
-archive-folder-to-trash "$HOME/Videos/OldFolder"
-archive-folder-to-trash "$HOME/Videos/OldFolder" "$HOME/Archives"
+mint-toolbox --run archive-folder-to-trash --help
 ```
 
-## 参数与选项
+The original script arguments are passed through unchanged. Inspect the full command before confirming an operation. External launchers require their existing application or virtual environment; that runtime is not bundled.
 
-- `FOLDER`（必需）：待归档的目录。
-- `OUTPUT_DIR`（可选）：输出目录，默认源文件夹父目录。
-- 没有 `--dry-run`、`--help`。
+## Graphical actions
 
-## 依赖与运行环境
+### Archive and move to Trash
 
-- Bash、tar、realpath、date；优先 `gio trash`，否则 `trash-put`。
+Create and verify the archive, then move the original folder to Trash.
 
-## 输出与副作用
+Confirmation level: high.
 
-- 输出 `${文件夹名}-${YYYYMMDD-HHMMSS}.tar.gz`。
-- 打包成功后调用 gio/trash-put 将整个源目录移入回收站。
+- Folder to archive: folder; required
+- Archive output folder (optional): folder; optional
 
-## 注意事项
+## Requirements and effects
 
-- 这是移动目录的修改型脚本，不是仅创建备份；不要对重要目录盲目运行。
-- 归档验证只调用 `tar -tzf` 验证可列出条目，不等同于与源目录逐字节比对。
-- 命令执行前检查磁盘剩余空间及回收站可用性。
+Requires tar and a desktop Trash utility. Verifies the tar.gz before moving the original folder to Trash. The output directory must exist and must not be inside the source folder.
 
-## 来源与验证
+## Tool management
 
-- 来源：用户提供的 `bin.zip` 中的 `bin/archive-folder-to-trash`。
-- 源文件 SHA-256：`5a45db7bebe43664fc67b6e976b3b43b3cabf274f09043a77911e600a1399e31`。
-- 验证状态：**已静态读取代码；未运行脚本、未验证目标服务/依赖。**
+Disable preserves the script, settings and manual. Mark as removed hides the entry without deleting its files. User-tool registration is independent of system extension package installation.
 
-## LauncherOnOS 集成建议
+## Execution visibility
 
-可作为 standalone 源码脚本由 `launcheronos install` 管理；执行前仍须确认系统依赖和硬编码路径。
+The interface shows the complete command. Legacy interactive scripts run in a terminal that keeps the output and exit code visible until Enter is pressed. System extensions use the separate execution log panel and save logs automatically.

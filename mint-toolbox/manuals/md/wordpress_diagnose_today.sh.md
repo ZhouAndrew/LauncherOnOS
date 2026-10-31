@@ -1,50 +1,39 @@
-# wordpress_diagnose_today.sh — WordPress 今日故障只读诊断
+# WordPress read-only diagnostics
 
-> 分类：WordPress · 状态：当前版本 · 风险：中 · 启动器：register
+Collect system logs, service status, recently modified file metadata and HTTP checks into a text diagnostic report.
 
-## 功能
+## Availability
 
-收集系统日志、WordPress/Apache/PHP/MySQL/Redis 状态、修改时间窗口内的文件信息以及 HTTP 测试结果，并保存到文本诊断报告。
+- Category: WordPress
+- Status: Available; real-system acceptance pending
+- Risk: medium
 
-## 用法
+## Command line
 
 ```bash
-bash wordpress_diagnose_today.sh --help
-bash wordpress_diagnose_today.sh
-bash wordpress_diagnose_today.sh --since "2026-10-24 06:00:00" --until "2026-10-24 10:30:00"
+mint-toolbox --run wordpress_diagnose_today.sh --help
 ```
 
-## 参数与选项
+The original script arguments are passed through unchanged. Inspect the full command before confirming an operation. External launchers require their existing application or virtual environment; that runtime is not bundled.
 
-- `--wp-path PATH`：WordPress 根目录，默认 `/var/www/html/wordpress`。
-- `--web-user USER`：默认 `www-data`。
-- `--since DATETIME`：默认今天 00:00。
-- `--until DATETIME`：默认今天 12:00。
-- `--output-dir DIR`：默认用户桌面，不可写时改用 `/tmp`。
-- `-h`、`--help`：帮助。
+## Graphical actions
 
-## 依赖与运行环境
+### Generate a WordPress diagnostic report
 
-- 需要 Linux、sudo、WP-CLI、systemd/journalctl 和多种诊断工具。
-- 有固定针对 Apache2、MySQL、PHP、Redis 的检查项。
+Runs the read-only diagnostic script and saves the report to the selected folder.
 
-## 输出与副作用
+Confirmation level: low.
 
-- 通常只读扫描和查询，不主动修复或更改 WordPress 内容。
-- 会写 `wordpress_diagnose_YYYYMMDD_HHMMSS.txt` 报告，并读取系统日志。
-- 部分 `wp check-update`/校验命令可能访问网络或触发缓存/状态读取，不能等同“完全零副作用”。
+- Report output folder: folder; optional
 
-## 注意事项
+## Requirements and effects
 
-- 诊断报告可能包含域名、内部路径、IP、请求日志与环境信息；发送给他人前先脱敏。
-- 需要 sudo 权限，注意报告的本地访问权限。
+Requires a local WordPress installation and WP-CLI. Uses sudo for read-only system diagnostics. Options include --wp-path, --web-user, --since, --until and --output-dir. Reports may contain private host and site metadata.
 
-## 来源与验证
+## Tool management
 
-- 来源：用户提供的 `bin.zip` 中的 `bin/wordpress_diagnose_today.sh`。
-- 源文件 SHA-256：`e822a137054abce10207abb159a2f981f230e3e775f1c63e136441855c4c7f0a`。
-- 验证状态：**已静态读取代码；未运行脚本、未验证目标服务/依赖。**
+Disable preserves the script, settings and manual. Mark as removed hides the entry without deleting its files. User-tool registration is independent of system extension package installation.
 
-## LauncherOnOS 集成建议
+## Execution visibility
 
-建议使用 `launcheronos register` 注册现有入口，不复制依赖环境或目标程序。
+The interface shows the complete command. Legacy interactive scripts run in a terminal that keeps the output and exit code visible until Enter is pressed. System extensions use the separate execution log panel and save logs automatically.

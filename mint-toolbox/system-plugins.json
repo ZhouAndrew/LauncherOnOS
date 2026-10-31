@@ -1,11 +1,32 @@
 [
   {
     "id": "zip-trash",
-    "name": "压缩为 ZIP 并删除",
+    "name": "Compress to ZIP and delete",
     "package": "mint-toolbox-extension-zip-trash",
-    "version": "0.3.0",
-    "deb": "debs/mint-toolbox-extension-zip-trash_0.3.0_all.deb",
-    "sha256": "633df6b21f2494aa18fd3be18ca7a9af18fcc27dcd25fec2c302f3b55354d073",
-    "description": "Nemo 原生右键菜单，支持同目录多选文件和文件夹。调用系统 zip / unzip，逐项校验内容并确认原文件未变化，再通过 GIO 移入回收站。不会覆盖已有 ZIP；失败不执行永久删除。暂不支持符号链接及特殊文件。安装后重新打开文件管理器窗口；如菜单未刷新，可注销后重新登录。"
+    "version": "0.4.0",
+    "deb": "debs/mint-toolbox-extension-zip-trash_0.4.0_all.deb",
+    "sha256": "65092ce7788ac0cfe043d8bd26c2e902afe71ca586035fca48e1d73cdf4ba054",
+    "description": "Native Nemo context-menu action for local files and folders. Uses system zip/unzip, verifies archive contents and original files, then moves originals to Trash through GIO. Supports multiple selections and collision-safe filenames. Symbolic links and special files are not supported. Commands and output remain visible in a log window.",
+    "source": {
+      "kind": "bundled",
+      "requires": [
+        "python3",
+        "dpkg-deb",
+        "xz"
+      ],
+      "files": {
+        "zip_trash.py": "05895baeb5b3f43560f26251b89e0ab90166e2abec966e77f1f1787ef30f2e35",
+        "execution.py": "7d3594290efb69a2d51d8df23e1f22a9a5e1ce59ad21d1c05fbfea8fe581ef09",
+        "packaging/build.py": "3f3d471c293488f9c3465236e27ad7368e0a40a8fefce396f854026487265324",
+        "packaging/zip-trash.nemo_action": "d08b84f4e80297f3baf33e22ce6f715a07eaf14b39ae43c4fa21423c8e452a99"
+      },
+      "argv": [
+        "python3",
+        "packaging/build.py",
+        "--package-only",
+        "--output-dir",
+        "{output}"
+      ]
+    }
   }
 ]

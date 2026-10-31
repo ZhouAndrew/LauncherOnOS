@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# 扫描指定用户的全部 CalDAV Calendar Collections，
-# 完成今天到期且标题包含 Anki 的未完成任务。
+# Scan all calendar collections for the specified CalDAV user.
+# Complete pending tasks due today whose titles include Anki.
 
 from __future__ import annotations
 
@@ -64,7 +64,7 @@ def managed_python_has_dependencies() -> bool:
 
 def ensure_runtime() -> None:
     """
-    始终使用脚本自己的 venv，避免误用系统中较旧或错误的 caldav。
+    Always use this script's venv to avoid incompatible system caldav versions.
     """
 
     if using_managed_venv():
@@ -77,7 +77,7 @@ def ensure_runtime() -> None:
 
     if not VENV_PYTHON.exists():
         print(
-            "首次运行：正在创建虚拟环境："
+            "First run: creating a virtual environment: "
             f"{VENV_DIR}"
         )
 
@@ -93,7 +93,7 @@ def ensure_runtime() -> None:
 
     if not managed_python_has_dependencies():
         print(
-            "正在安装或修复依赖："
+            "Installing or repairing dependencies: "
             "caldav 3.2.1、tzdata……"
         )
 
@@ -125,8 +125,8 @@ def ensure_runtime() -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "扫描当前用户名下的全部 CalDAV Collections，"
-            "完成今天到期且标题包含指定关键词的未完成任务。"
+            "Scan all collections belonging to the current CalDAV user and "
+            "complete pending tasks due today whose titles contain the specified keyword."
         )
     )
 
@@ -137,8 +137,8 @@ def parse_args() -> argparse.Namespace:
             DEFAULT_USERNAME,
         ),
         help=(
-            "CalDAV 用户名"
-            f"（默认：{DEFAULT_USERNAME}）"
+            "CalDAV username"
+            f"(default: {DEFAULT_USERNAME})"
         ),
     )
 
@@ -149,8 +149,8 @@ def parse_args() -> argparse.Namespace:
             DEFAULT_TIMEZONE,
         ),
         help=(
-            "判断“今天”所用的时区"
-            f"（默认：{DEFAULT_TIMEZONE}）"
+            "Timezone used to determine today"
+            f"(default: {DEFAULT_TIMEZONE})"
         ),
     )
 
@@ -158,8 +158,8 @@ def parse_args() -> argparse.Namespace:
         "--keyword",
         default=DEFAULT_KEYWORD,
         help=(
-            "任务标题必须包含的文字，区分大小写"
-            f"（默认：{DEFAULT_KEYWORD}）"
+            "Case-sensitive text required in task titles"
+            f"(default: {DEFAULT_KEYWORD})"
         ),
     )
 
@@ -167,15 +167,15 @@ def parse_args() -> argparse.Namespace:
         "--date",
         dest="target_date",
         help=(
-            "指定处理日期 YYYY-MM-DD；"
-            "省略时使用当前日期"
+            "Target date YYYY-MM-DD; "
+            "defaults to the current date"
         ),
     )
 
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="仅预览，不修改任何任务",
+        help="Preview only; do not modify any tasks",
     )
 
     return parser.parse_args()
@@ -250,7 +250,7 @@ def task_component(todo: Any) -> Any:
         return component
 
     raise RuntimeError(
-        "任务对象不包含可读取的 VTODO component"
+        "Task object has no readable VTODO component"
     )
 
 
@@ -319,7 +319,7 @@ def calendar_name(calendar: Any) -> str:
             )[-1]
         )
 
-    return "未命名 Collection"
+    return "Unnamed collection"
 
 
 def get_principal(client: Any) -> Any:
@@ -390,7 +390,7 @@ def main() -> int:
         )
     except ZoneInfoNotFoundError:
         print(
-            "错误：找不到时区 "
+            "Error: timezone not found: "
             f"{args.timezone!r}",
             file=sys.stderr,
         )
@@ -403,8 +403,8 @@ def main() -> int:
             )
         except ValueError:
             print(
-                "错误：--date 必须使用 "
-                "YYYY-MM-DD 格式。",
+                "Error: --date must use "
+                "YYYY-MM-DD format.",
                 file=sys.stderr,
             )
             return 2
@@ -419,13 +419,13 @@ def main() -> int:
 
     if password is None:
         password = getpass.getpass(
-            "请输入 CalDAV 用户 "
-            f"{args.username} 的密码："
+            "Enter the password for CalDAV user "
+            f"{args.username}: "
         )
 
     if not password:
         print(
-            "错误：密码不能为空。",
+            "Error: password must not be empty.",
             file=sys.stderr,
         )
         return 2
@@ -464,7 +464,7 @@ def main() -> int:
             )
 
             print(
-                f"发现 {len(calendars)} 个 "
+                f"Found {len(calendars)} "
                 "Calendar Collections："
             )
 
@@ -504,7 +504,7 @@ def main() -> int:
                     failed_collections += 1
 
                     print(
-                        "      跳过：读取任务失败："
+                        "      Skipping: could not read tasks: "
                         f"{exc}",
                         file=sys.stderr,
                     )
@@ -514,8 +514,8 @@ def main() -> int:
                 total_pending += len(todos)
 
                 print(
-                    "      未完成任务："
-                    f"{len(todos)} 个"
+                    "      Pending tasks: "
+                    f"{len(todos)}"
                 )
 
                 for todo in todos:
@@ -525,7 +525,7 @@ def main() -> int:
                         )
                     except Exception as exc:
                         print(
-                            "      跳过一个无法解析的任务："
+                            "      Skipping an unparseable task: "
                             f"{exc}",
                             file=sys.stderr,
                         )
@@ -558,7 +558,7 @@ def main() -> int:
                             getattr(
                                 todo,
                                 "id",
-                                "无 UID",
+                                "No UID",
                             ),
                         )
                     )
@@ -574,23 +574,23 @@ def main() -> int:
                     )
 
             print(
-                "\nCollection 扫描完成："
-                f"成功 {successful_collections} 个，"
-                f"失败 {failed_collections} 个，"
-                f"共读取 {total_pending} 个未完成任务。"
+                "\nCollection scan complete: "
+                f"Succeeded: {successful_collections}，"
+                f"Failed: {failed_collections}，"
+                f"Pending tasks read: {total_pending} pending tasks."
             )
 
             print(
-                f"日期：{target_date.isoformat()}"
-                f"（{args.timezone}）"
+                f"Date: {target_date.isoformat()}"
+                f"({args.timezone})"
             )
 
             print(
-                f"关键词：{args.keyword!r}"
+                f"Keyword: {args.keyword!r}"
             )
 
             print(
-                f"匹配到 {len(matched)} 个任务："
+                f"Matched {len(matched)} tasks:"
             )
 
             for index, item in enumerate(
@@ -614,8 +614,8 @@ def main() -> int:
 
             if args.dry_run:
                 print(
-                    "\n预览模式："
-                    "未修改任何任务。"
+                    "\nPreview mode: "
+                    "No tasks were modified."
                 )
                 return 0
 
@@ -647,7 +647,7 @@ def main() -> int:
                     completed += 1
 
                     print(
-                        f"已完成：{summary}  "
+                        f"Completed: {summary}  "
                         f"[Collection: {name}; "
                         f"UID: {uid}]"
                     )
@@ -656,7 +656,7 @@ def main() -> int:
                     failed += 1
 
                     print(
-                        f"完成失败：{summary} "
+                        f"Could not complete: {summary} "
                         f"[Collection: {name}; "
                         f"UID: {uid}]：{exc}",
                         file=sys.stderr,
@@ -664,15 +664,15 @@ def main() -> int:
 
     except Exception as exc:
         print(
-            f"CalDAV 操作失败：{exc}",
+            f"CalDAV operation failed: {exc}",
             file=sys.stderr,
         )
         return 1
 
     print(
-        "\n处理结束："
-        f"成功 {completed} 个，"
-        f"失败 {failed} 个。"
+        "\nProcessing complete: "
+        f"Succeeded: {completed}，"
+        f"Failed: {failed}。"
     )
 
     return 1 if failed else 0

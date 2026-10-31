@@ -1,42 +1,39 @@
-# unlock_wechat_export — 处理微信导出 HTML 的显示限制
+# Process WeChat export HTML restrictions
 
-> 分类：文件与归档 · 状态：敏感转换工具 · 风险：中 · 启动器：install
+Process conversations/*/messages.html and generate messages-unlocked.html by removing recognized integrity checks and hidden elements.
 
-## 功能
+## Availability
 
-批量处理 `conversations/*/messages.html`，移除脚本识别的完整性验证/隐藏元素，并生成同目录 `messages-unlocked.html`。
+- Category: Files and archives
+- Status: Available; real-system acceptance pending
+- Risk: medium
 
-## 用法
+## Command line
 
 ```bash
-unlock_wechat_export /absolute/path/to/export
-unlock_wechat_export /absolute/path/to/export --overwrite
+mint-toolbox --run unlock_wechat_export --help
 ```
 
-## 参数与选项
+The original script arguments are passed through unchanged. Inspect the full command before confirming an operation. External launchers require their existing application or virtual environment; that runtime is not bundled.
 
-- `[root]`：导出目录，默认当前目录。
-- `--overwrite`：覆盖已存在的 `messages-unlocked.html`。
+## Graphical actions
 
-## 依赖与运行环境
+### Generate readable chat HTML
 
-- Python3 标准库；输入目录须包含 `conversations/*/messages.html`。
+Generates messages-unlocked.html under conversations without overwriting existing files.
 
-## 输出与副作用
+Confirmation level: medium.
 
-- 向各会话目录写入 `messages-unlocked.html`；不删除原始 `messages.html`。
+- WeChat export root folder: folder; required
 
-## 注意事项
+## Requirements and effects
 
-- 这是 HTML 内容转换，不代表真实性验证通过；移除完整性检查后不能再据此证明数据完整或可信。
-- 仅处理有权访问的导出内容；原文件应保留作验证基准。
+Generates conversations/*/messages-unlocked.html from messages.html. Existing output is skipped unless --overwrite is supplied. Review generated content before publishing.
 
-## 来源与验证
+## Tool management
 
-- 来源：用户提供的 `bin.zip` 中的 `bin/unlock_wechat_export`。
-- 源文件 SHA-256：`9001a32bcae434dfedd5c67f7a5147af02b22e7231456dba5a37178e0ae1550b`。
-- 验证状态：**已静态读取代码；未运行脚本、未验证目标服务/依赖。**
+Disable preserves the script, settings and manual. Mark as removed hides the entry without deleting its files. User-tool registration is independent of system extension package installation.
 
-## LauncherOnOS 集成建议
+## Execution visibility
 
-可作为 standalone 源码脚本由 `launcheronos install` 管理；执行前仍须确认系统依赖和硬编码路径。
+The interface shows the complete command. Legacy interactive scripts run in a terminal that keeps the output and exit code visible until Enter is pressed. System extensions use the separate execution log panel and save logs automatically.

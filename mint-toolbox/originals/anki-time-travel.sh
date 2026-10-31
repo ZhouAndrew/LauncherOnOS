@@ -46,10 +46,10 @@ cleanup() {
     done
 }
 trap cleanup EXIT
-trap 'printf "\n✗ 脚本在第 %s 行失败。\n" "$LINENO" >&2' ERR
+trap 'printf "\n✗ Script failed at line %s.\n" "$LINENO" >&2' ERR
 
 need_cmd() {
-    command -v "$1" >/dev/null 2>&1 || die "找不到命令：$1"
+    command -v "$1" >/dev/null 2>&1 || die "Command not found: $1"
 }
 
 sql_escape() {
@@ -59,10 +59,10 @@ sql_escape() {
 
 if [ "$#" -lt 1 ]; then
     cat >&2 <<'EOF'
-用法：
+Usage:
   anki-time-travel.sh /path/to/anki-stats-YYYY-MM-DD@HH-MM-SS.pdf
 
-也可以一次传入多个 PDF：
+Multiple PDF files can be provided:
   anki-time-travel.sh file1.pdf file2.pdf
 EOF
     exit 2
@@ -76,14 +76,14 @@ need_cmd mktemp
 need_cmd cp
 need_cmd touch
 
-[ -d "$WP_PATH" ] || die "找不到 WordPress 目录：$WP_PATH"
-[ -f "$WP_PATH/wp-config.php" ] || die "这里不像 WordPress 根目录：$WP_PATH"
+[ -d "$WP_PATH" ] || die "WordPress directory not found: $WP_PATH"
+[ -f "$WP_PATH/wp-config.php" ] || die "Not a WordPress root directory: $WP_PATH"
 
 cd "$WP_PATH"
 
-wp core is-installed >/dev/null 2>&1 || die "WP-CLI 无法确认此站点已安装。"
+wp core is-installed >/dev/null 2>&1 || die "WP-CLI could not verify that the site is installed."
 PREFIX="$(wp db prefix)"
-[ -n "$PREFIX" ] || die "无法取得 WordPress 数据表前缀。"
+[ -n "$PREFIX" ] || die "Cannot read the WordPress database table prefix."
 
 ensure_term() {
     local taxonomy="$1"
@@ -102,14 +102,14 @@ ensure_term post_tag "Anki" "anki"
 
 process_one() {
     local PDF="$1"
-    [ -f "$PDF" ] || die "找不到 PDF：$PDF"
+    [ -f "$PDF" ] || die "PDF not found: $PDF"
 
     local BASE
     BASE="$(basename -- "$PDF")"
 
     if [[ ! "$BASE" =~ ^anki-stats-([0-9]{4})-([0-9]{2})-([0-9]{2})@([0-9]{2})-([0-9]{2})-([0-9]{2})\.pdf$ ]]; then
-        die "文件名格式不正确：$BASE
-要求：anki-stats-YYYY-MM-DD@HH-MM-SS.pdf"
+        die "Invalid filename format: $BASE
+Required: anki-stats-YYYY-MM-DD@HH-MM-SS.pdf"
     fi
 
     local Y="${BASH_REMATCH[1]}"
@@ -124,7 +124,7 @@ process_one() {
     # Strict validation: GNU date may normalize invalid dates, so compare round-trip.
     local ROUNDTRIP
     ROUNDTRIP="$(LC_ALL=C date -d "$POST_DATE" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || true)"
-    [ "$ROUNDTRIP" = "$POST_DATE" ] || die "文件名中的日期/时间无效：$POST_DATE"
+    [ "$ROUNDTRIP" = "$POST_DATE" ] || die "Invalid filename timestamp: $POST_DATE"
 
     local HUMAN
     HUMAN="$(LC_ALL=C date -d "$POST_DATE" '+%B %-d %Y %A')"
@@ -135,7 +135,7 @@ process_one() {
     # Let WordPress calculate GMT using the site's own timezone configuration.
     local POST_GMT
     POST_GMT="$(wp eval 'echo get_gmt_from_date($args[0]);' "$POST_DATE")"
-    [ -n "$POST_GMT" ] || die "无法让 WordPress 计算 GMT：$POST_DATE"
+    [ -n "$POST_GMT" ] || die "WordPress could not calculate GMT: $POST_DATE"
 
     local TITLE_SQL POST_DATE_SQL EXPECTED_MEDIA_SQL
     TITLE_SQL="$(sql_escape "$TITLE")"
@@ -143,16 +143,16 @@ process_one() {
     EXPECTED_MEDIA_SQL="$(sql_escape "$EXPECTED_MEDIA")"
 
     printf '\n============================================================\n'
-    printf ' Anki 历史统计补档\n'
+    printf ' Historical Anki statistics import\n'
     printf '============================================================\n'
     printf 'PDF:        %s\n' "$PDF"
-    printf '历史时间:   %s\n' "$POST_DATE"
+    printf 'Historical timestamp:   %s\n' "$POST_DATE"
     printf 'GMT:        %s\n' "$POST_GMT"
-    printf '文章标题:   %s\n' "$TITLE"
-    printf '目标路径:   %s\n' "$EXPECTED_MEDIA"
+    printf 'Post title:   %s\n' "$TITLE"
+    printf 'Target path:   %s\n' "$EXPECTED_MEDIA"
     printf '\n'
 
-    info "查找或创建历史文章"
+    info "Finding or creating a historical post"
 
     local POST_ID
     POST_ID="$(
@@ -168,7 +168,7 @@ process_one() {
     )"
 
     if [ -n "$POST_ID" ]; then
-        ok "复用已有文章 ID=$POST_ID"
+        ok "Reusing existing post ID=$POST_ID"
     else
         POST_ID="$(
             wp post create \
@@ -179,10 +179,10 @@ process_one() {
                 --post_date_gmt="$POST_GMT" \
                 --porcelain
         )"
-        ok "创建文章 ID=$POST_ID"
+        ok "Created post ID=$POST_ID"
     fi
 
-    info "查找或导入历史 PDF 附件"
+    info "Finding or importing a historical PDF attachment"
 
     local ATTACH_ID
     ATTACH_ID="$(
@@ -199,7 +199,7 @@ process_one() {
     )"
 
     if [ -n "$ATTACH_ID" ]; then
-        ok "复用已有附件 ID=$ATTACH_ID"
+        ok "Reusing attachment ID=$ATTACH_ID"
     else
         local TMPDIR
         TMPDIR="$(mktemp -d)"
@@ -216,10 +216,10 @@ process_one() {
                 --porcelain
         )"
 
-        ok "导入附件 ID=$ATTACH_ID"
+        ok "Imported attachment ID=$ATTACH_ID"
     fi
 
-    [ -n "$ATTACH_ID" ] || die "没有取得附件 ID。"
+    [ -n "$ATTACH_ID" ] || die "No attachment ID was returned."
 
     wp post update "$ATTACH_ID" --post_parent="$POST_ID" >/dev/null
 
@@ -227,15 +227,15 @@ process_one() {
     MEDIA_PATH="$(wp post meta get "$ATTACH_ID" _wp_attached_file)"
     PDF_URL="$(wp post get "$ATTACH_ID" --field=guid)"
 
-    [ -n "$PDF_URL" ] || die "无法取得附件 URL。"
+    [ -n "$PDF_URL" ] || die "Cannot read the attachment URL."
 
     if [ "$MEDIA_PATH" != "$EXPECTED_MEDIA" ]; then
-        die "附件路径不符合历史日期，停止：
-实际：$MEDIA_PATH
-预期：$EXPECTED_MEDIA"
+        die "Attachment path does not match the historical date; stopping:
+Actual: $MEDIA_PATH
+Expected: $EXPECTED_MEDIA"
     fi
 
-    info "写入 Gutenberg PDF File block"
+    info "Writing Gutenberg PDF File block"
 
     local CONTENT
     CONTENT="$(cat <<EOF
@@ -253,7 +253,7 @@ EOF
     wp post term set "$POST_ID" category anki --by=slug >/dev/null
     wp post term set "$POST_ID" post_tag anki --by=slug >/dev/null
 
-    info "锁定文章与附件的历史时间"
+    info "Setting historical timestamps on the post and attachment"
 
     wp db query "
         UPDATE ${PREFIX}posts
@@ -276,7 +276,7 @@ EOF
 
     wp cache flush >/dev/null 2>&1 || true
 
-    info "最终验收"
+    info "Final verification"
 
     local ACTUAL_PARENT ACTUAL_POST_DATE ACTUAL_ATTACH_DATE ACTUAL_PATH
     local CAT TAG STATUS
@@ -289,23 +289,23 @@ EOF
     CAT="$(wp post term list "$POST_ID" category --field=slug | tr '\n' ' ')"
     TAG="$(wp post term list "$POST_ID" post_tag --field=slug | tr '\n' ' ')"
 
-    [ "$STATUS" = "publish" ] || die "验收失败：文章不是 publish。"
-    [ "$ACTUAL_POST_DATE" = "$POST_DATE" ] || die "验收失败：文章历史时间不正确。"
-    [ "$ACTUAL_ATTACH_DATE" = "$POST_DATE" ] || die "验收失败：附件历史时间不正确。"
-    [ "$ACTUAL_PARENT" = "$POST_ID" ] || die "验收失败：attachment.post_parent 不正确。"
-    [ "$ACTUAL_PATH" = "$EXPECTED_MEDIA" ] || die "验收失败：附件历史路径不正确。"
-    [[ " $CAT " == *" anki "* ]] || die "验收失败：Category=Anki 不存在。"
-    [[ " $TAG " == *" anki "* ]] || die "验收失败：Tag=Anki 不存在。"
+    [ "$STATUS" = "publish" ] || die "Verification failed: post is not published."
+    [ "$ACTUAL_POST_DATE" = "$POST_DATE" ] || die "Verification failed: post timestamp mismatch."
+    [ "$ACTUAL_ATTACH_DATE" = "$POST_DATE" ] || die "Verification failed: attachment timestamp mismatch."
+    [ "$ACTUAL_PARENT" = "$POST_ID" ] || die "Verification failed: attachment.post_parent mismatch."
+    [ "$ACTUAL_PATH" = "$EXPECTED_MEDIA" ] || die "Verification failed: attachment historical path mismatch."
+    [[ " $CAT " == *" anki "* ]] || die "Verification failed: Category=Anki is missing."
+    [[ " $TAG " == *" anki "* ]] || die "Verification failed: Tag=Anki is missing."
 
-    ok "验收通过"
+    ok "Verification passed"
 
-    printf '\n文章 ID:     %s\n' "$POST_ID"
-    printf '附件 ID:     %s\n' "$ATTACH_ID"
-    printf '文章 URL:    %s\n' "$(wp post url "$POST_ID")"
-    printf '媒体路径:    %s\n' "$ACTUAL_PATH"
+    printf '\nPost ID:     %s\n' "$POST_ID"
+    printf 'Attachment ID:     %s\n' "$ATTACH_ID"
+    printf 'Post URL:    %s\n' "$(wp post url "$POST_ID")"
+    printf 'Media path:    %s\n' "$ACTUAL_PATH"
     printf 'Category:    Anki\n'
     printf 'Tag:         Anki\n'
-    printf '历史时间:    %s\n' "$POST_DATE"
+    printf 'Historical timestamp:    %s\n' "$POST_DATE"
     printf '============================================================\n'
 }
 

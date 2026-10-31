@@ -8,19 +8,19 @@ VERSION="153.1.0esr"
 
 echo
 echo "================================================"
-echo " Thunderbird 实验版 $VERSION"
-echo " 与正式版共享真实数据"
+echo " Thunderbird experimental build $VERSION"
+echo " Shares live data with the stable build"
 echo "================================================"
 echo
 
-# 同一个 Profile 不允许两个 Thunderbird 同时写
+# Never allow two Thunderbird processes to write the same profile.
 if pgrep -u "$UID" -x thunderbird >/dev/null 2>&1 ||
    pgrep -u "$UID" -x thunderbird-bin >/dev/null 2>&1; then
-    echo "✗ 已有 Thunderbird 正在运行。"
+    echo "✗ Thunderbird is already running."
     echo
-    echo "正式版和实验版共享同一个 Profile，不能同时运行。"
+    echo "Stable and experimental builds share one profile; never run them simultaneously."
     echo
-    read -r -p "按 Enter 关闭..."
+    read -r -p "Press Enter to close..."
     exit 1
 fi
 
@@ -29,7 +29,7 @@ mkdir -p "$BACKUP_ROOT"
 STAMP="$(date '+%Y%m%d-%H%M%S')"
 DEST="$BACKUP_ROOT/$STAMP-before-experiment"
 
-echo "实验启动前备份："
+echo "Pre-experiment backup: "
 echo "  $PROFILE"
 echo "        ↓"
 echo "  $DEST"
@@ -40,9 +40,9 @@ mkdir -p "$DEST"
 if ! cp -a --reflink=auto       "$PROFILE"       "$DEST/profile"
 then
     echo
-    echo "✗ 备份失败。"
-    echo "为了保护正式数据，实验 Thunderbird 不启动。"
-    read -r -p "按 Enter 关闭..."
+    echo "✗ Backup failed."
+    echo "The experimental build will not start, to protect the live profile."
+    read -r -p "Press Enter to close..."
     exit 1
 fi
 
@@ -52,9 +52,9 @@ printf '%s\n' "$PROFILE" >     "$DEST/original-profile-path.txt"
 
 printf '%s\n' "$VERSION" >     "$DEST/thunderbird-version.txt"
 
-echo "✓ Profile 快照完成"
+echo "✓ Profile snapshot complete"
 
-# 保留最近 7 份自动实验备份
+# Keep the latest seven automatic experimental backups.
 mapfile -t OLD_BACKUPS < <(
     find "$BACKUP_ROOT"         -mindepth 1         -maxdepth 1         -type d         -name '*-before-experiment'         -printf '%T@ %p\n' |
     sort -nr |
@@ -71,8 +71,8 @@ fi
 echo
 echo "==============================================="
 echo " EXPERIMENTAL THUNDERBIRD"
-echo " 程序：独立"
-echo " 数据：与正式版共享"
+echo " Application: isolated"
+echo " Data: shared with the stable build"
 echo "==============================================="
 echo
 
@@ -85,9 +85,9 @@ RC=$?
 set -e
 
 echo
-echo "Thunderbird 实验版已退出。"
+echo "Thunderbird experimental build has exited."
 echo
-echo "本次启动前数据快照："
+echo "Data snapshot taken before this launch: "
 echo "  $DEST"
 echo
 

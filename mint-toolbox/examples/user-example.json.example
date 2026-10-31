@@ -1,26 +1,49 @@
 {
   "schema_version": 1,
   "id": "user-example",
-  "name": "我自己的文件处理工具",
-  "category": "文件与归档",
-  "description": "处理选中的文件，并将结果保存到指定目录。",
+  "name": "My file-processing tool",
+  "category": "Files and archives",
+  "description": "Process a selected file and save the result to an output folder.",
   "executable": "/home/USERNAME/bin/my-tool.sh",
   "risk": "medium",
   "actions": [
     {
       "key": "process",
-      "label": "处理文件…",
+      "label": "Process file...",
       "severity": "medium",
-      "note": "处理前请确认文件和输出目录。",
+      "note": "Check the input file and output directory before processing.",
       "fields": [
-        {"key": "source", "label": "输入文件", "kind": "file"},
-        {"key": "output", "label": "输出目录", "kind": "folder", "required": false},
-        {"key": "verbose", "label": "显示详细输出", "kind": "boolean", "required": false}
+        {
+          "key": "source",
+          "label": "Input file",
+          "kind": "file"
+        },
+        {
+          "key": "output",
+          "label": "Output folder",
+          "kind": "folder",
+          "required": false
+        },
+        {
+          "key": "verbose",
+          "label": "Verbose output",
+          "kind": "boolean",
+          "required": false
+        }
       ],
       "argv": [
-        {"field": "source", "flag": "--input"},
-        {"field": "output", "flag": "--output"},
-        {"field": "verbose", "flag": "--verbose"}
+        {
+          "field": "source",
+          "flag": "--input"
+        },
+        {
+          "field": "output",
+          "flag": "--output"
+        },
+        {
+          "field": "verbose",
+          "flag": "--verbose"
+        }
       ]
     }
   ]

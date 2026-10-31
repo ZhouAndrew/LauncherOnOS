@@ -20,21 +20,21 @@ bad()  { printf '\033[1;31m[XX]\033[0m %s\n' "$*"; }
 
 usage() {
   cat <<'EOF'
-用法：
+Usage:
   ./andrew-lan-speed-test.sh
-      自动检测有线网卡；可交互输入另一台运行 iperf3 server 的设备 IP。
+      Detect a wired adapter and optionally enter the IP of an iperf3 server.
 
   ./andrew-lan-speed-test.sh 192.168.1.50
-      直接测试到指定设备。
+      Test connectivity to the specified device.
 
   ./andrew-lan-speed-test.sh --server
-      把本机作为 iperf3 server（前台运行，Ctrl+C 停止）。
+      Run a foreground iperf3 server (Ctrl+C to stop).
 
   ./andrew-lan-speed-test.sh --cable-test
-      运行 ethtool 网线诊断。
-      注意：这个测试可能暂时断开网络，不要在 SSH 会话中使用。
+      Run ethtool cable diagnostics.
+      Warning: this test may interrupt connectivity. Do not use over SSH.
 
-可选环境变量：
+Optional environment variables:
   PORT=5201 DURATION=15 PARALLEL=4 ./andrew-lan-speed-test.sh 192.168.1.50
 EOF
 }
@@ -67,12 +67,12 @@ command -v iperf3  >/dev/null 2>&1 || missing+=(iperf3)
 command -v ip      >/dev/null 2>&1 || missing+=(iproute2)
 
 if ((${#missing[@]})); then
-  say "缺少组件，自动安装：${missing[*]}"
+  say "Installing missing components: ${missing[*]}"
   sudo -v || exit 1
   sudo apt-get update || exit 1
   sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing[@]}" || exit 1
 else
-  good "所需组件已安装：ethtool / iperf3 / iproute2"
+  good "Required components installed: ethtool / iperf3 / iproute2"
 fi
 
 # ---- Detect wired interface -------------------------------------------------
@@ -103,11 +103,11 @@ detect_iface() {
 }
 
 IFACE="$(detect_iface)" || {
-  bad "没有找到可测试的有线网卡。"
+  bad "No supported wired adapter was found."
   exit 1
 }
 
-say "检测到有线网卡：$IFACE"
+say "Detected wired adapter: $IFACE"
 
 IP4="$(ip -4 -o addr show dev "$IFACE" scope global 2>/dev/null | awk '{print $4}' | head -n1 || true)"
 DRIVER="$(ethtool -i "$IFACE" 2>/dev/null | awk -F': ' '/^driver:/ {print $2}' || true)"
@@ -116,52 +116,52 @@ DUPLEX="$(ethtool "$IFACE" 2>/dev/null | awk -F': ' '/^[[:space:]]*Duplex:/ {pri
 AUTONEG="$(ethtool "$IFACE" 2>/dev/null | awk -F': ' '/^[[:space:]]*Auto-negotiation:/ {print $2}' || true)"
 LINK="$(ethtool "$IFACE" 2>/dev/null | awk -F': ' '/^[[:space:]]*Link detected:/ {print $2}' || true)"
 
-printf '  IPv4            : %s\n' "${IP4:-无}"
-printf '  Driver          : %s\n' "${DRIVER:-未知}"
-printf '  Speed           : %s\n' "${SPEED:-未知}"
-printf '  Duplex          : %s\n' "${DUPLEX:-未知}"
-printf '  Auto-negotiation: %s\n' "${AUTONEG:-未知}"
-printf '  Link detected   : %s\n' "${LINK:-未知}"
+printf '  IPv4            : %s\n' "${IP4:-none}"
+printf '  Driver          : %s\n' "${DRIVER:-unknown}"
+printf '  Speed           : %s\n' "${SPEED:-unknown}"
+printf '  Duplex          : %s\n' "${DUPLEX:-unknown}"
+printf '  Auto-negotiation: %s\n' "${AUTONEG:-unknown}"
+printf '  Link detected   : %s\n' "${LINK:-unknown}"
 
 if [[ "$LINK" != "yes" ]]; then
-  bad "没有检测到物理链路。检查网线、路由器/交换机端口和水晶头。"
+  bad "No physical link detected. Check the cable, connectors, and router/switch ports."
   exit 2
 fi
 
 case "$SPEED" in
   1000Mb/s|2500Mb/s|5000Mb/s|10000Mb/s)
-    good "链路已协商到 $SPEED"
+    good "Negotiated link speed: $SPEED"
     ;;
   100Mb/s)
-    warn "链路只有 100 Mb/s。若两端都是千兆设备，这通常值得重点检查网线/水晶头/端口。"
+    warn "The link is only 100 Mb/s. If both devices support gigabit, check cables, connectors, and ports."
     ;;
   10Mb/s)
-    warn "链路只有 10 Mb/s，明显异常。"
+    warn "The link is only 10 Mb/s, which is unexpectedly slow."
     ;;
   *)
-    warn "无法自动判断当前协商速率：${SPEED:-未知}"
+    warn "Cannot determine negotiated speed: ${SPEED:-unknown}"
     ;;
 esac
 
-[[ "$DUPLEX" == "Full" ]] || warn "当前不是 Full Duplex：${DUPLEX:-未知}"
+[[ "$DUPLEX" == "Full" ]] || warn "Current duplex mode is not Full: ${DUPLEX:-unknown}"
 
 # ---- Optional cable diagnostic ---------------------------------------------
 if [[ "$MODE" == "cable" ]]; then
-  say "准备运行网线物理诊断"
+  say "Preparing cable diagnostics"
   if [[ -n "${SSH_CONNECTION:-}" || -n "${SSH_TTY:-}" ]]; then
-    bad "检测到当前是 SSH 会话。网线诊断可能导致链路暂时中断，因此已取消。"
+    bad "SSH detected. Cable diagnostics may interrupt the link, so the operation was cancelled."
     exit 3
   fi
 
-  warn "ethtool --cable-test 可能让链路短暂掉线。"
-  read -r -p "确认在本机终端运行？输入 YES 继续: " ans
-  [[ "$ans" == "YES" ]] || { echo "已取消。"; exit 0; }
+  warn "ethtool --cable-test may briefly disconnect the link."
+  read -r -p "Running in a local terminal? Type YES to continue: " ans
+  [[ "$ans" == "YES" ]] || { echo "Cancelled."; exit 0; }
 
   if sudo ethtool --cable-test "$IFACE"; then
     echo
     sudo ethtool --cable-test-tdr "$IFACE" 2>/dev/null || true
   else
-    warn "该网卡/驱动可能不支持 ethtool cable-test。"
+    warn "The adapter or driver may not support ethtool cable-test."
   fi
   exit 0
 fi
@@ -179,13 +179,13 @@ TXD0="$(read_counter tx_dropped)"
 
 # ---- Server mode ------------------------------------------------------------
 if [[ "$MODE" == "server" ]]; then
-  say "启动 iperf3 server"
-  echo "本机地址：${IP4:-请用 ip addr 查看}"
-  echo "端口：$PORT"
+  say "Starting iperf3 server"
+  echo "Local address: ${IP4:-check with ip addr}"
+  echo "Port: $PORT"
   echo
-  echo "如果 UFW 阻止访问，可仅对局域网放行 TCP/$PORT。"
-  echo "保持这个窗口开启，在另一台设备运行："
-  echo "  iperf3 -c <andrew的IP> -P $PARALLEL -t $DURATION"
+  echo "If UFW blocks access, allow LAN-only TCP/$PORT。"
+  echo "Keep this window open and run on the other device:"
+  echo "  iperf3 -c <local-IP> -P $PARALLEL -t $DURATION"
   echo
   exec iperf3 -s -p "$PORT"
 fi
@@ -193,40 +193,40 @@ fi
 # ---- Client mode ------------------------------------------------------------
 if [[ -z "$PEER" ]]; then
   echo
-  read -r -p "另一台运行 iperf3 server 的设备 IP（留空则只检查链路）: " PEER
+  read -r -p "Peer iperf3 server IP (blank: link inspection only): " PEER
 fi
 
 if [[ -z "$PEER" ]]; then
-  say "完成链路检查"
-  echo "要测真实吞吐，需要另一台设备运行："
+  say "Link inspection complete"
+  echo "To test throughput, run on another device:"
   echo "  iperf3 -s"
   echo
-  echo "然后重新运行："
-  echo "  $0 <对方IP>"
+  echo "Then run again:"
+  echo "  $0 <peer-IP>"
   exit 0
 fi
 
-say "检查对端：$PEER"
+say "Checking peer: $PEER"
 if ping -c 3 -W 1 "$PEER"; then
-  good "对端可达"
+  good "Peer is reachable"
 else
-  warn "Ping 没有响应；可能是防火墙禁 Ping。继续尝试 iperf3。"
+  warn "No ping response; a firewall may block ICMP. Trying iperf3 anyway."
 fi
 
-say "TCP 正向吞吐：andrew -> $PEER"
+say "Forward TCP throughput: andrew -> $PEER"
 if ! iperf3 -c "$PEER" -p "$PORT" -P "$PARALLEL" -t "$DURATION" -O 2; then
-  bad "无法连接 iperf3 server。"
+  bad "Cannot connect to the iperf3 server."
   echo
-  echo "请先在对方设备运行："
+  echo "First run on the peer:"
   echo "  iperf3 -s -p $PORT"
   echo
-  echo "Windows 若被防火墙询问，请允许“专用网络”。"
+  echo "On Windows, allow the Private network profile if prompted by the firewall."
   exit 4
 fi
 
-say "TCP 反向吞吐：$PEER -> andrew"
+say "Reverse TCP throughput: $PEER -> andrew"
 iperf3 -c "$PEER" -p "$PORT" -P "$PARALLEL" -t "$DURATION" -O 2 -R || \
-  warn "反向测试失败，但正向结果仍有效。"
+  warn "Reverse test failed. The forward result is still valid."
 
 # ---- Error counters after test ---------------------------------------------
 RXE1="$(read_counter rx_errors)"
@@ -234,22 +234,22 @@ TXE1="$(read_counter tx_errors)"
 RXD1="$(read_counter rx_dropped)"
 TXD1="$(read_counter tx_dropped)"
 
-say "测试期间接口错误计数变化"
-printf '  RX errors : %d -> %d  (增加 %d)\n' "$RXE0" "$RXE1" "$((RXE1-RXE0))"
-printf '  TX errors : %d -> %d  (增加 %d)\n' "$TXE0" "$TXE1" "$((TXE1-TXE0))"
-printf '  RX dropped: %d -> %d  (增加 %d)\n' "$RXD0" "$RXD1" "$((RXD1-RXD0))"
-printf '  TX dropped: %d -> %d  (增加 %d)\n' "$TXD0" "$TXD1" "$((TXD1-TXD0))"
+say "Interface error-counter changes during testing"
+printf '  RX errors : %d -> %d  (increase %d)\n' "$RXE0" "$RXE1" "$((RXE1-RXE0))"
+printf '  TX errors : %d -> %d  (increase %d)\n' "$TXE0" "$TXE1" "$((TXE1-TXE0))"
+printf '  RX dropped: %d -> %d  (increase %d)\n' "$RXD0" "$RXD1" "$((RXD1-RXD0))"
+printf '  TX dropped: %d -> %d  (increase %d)\n' "$TXD0" "$TXD1" "$((TXD1-TXD0))"
 
-say "如何判断"
+say "Interpreting results"
 cat <<'EOF'
-如果链路是 1000 Mb/s：
-  • TCP 实测约 900–950 Mb/s：通常非常正常。
-  • 只有约 90–95 Mb/s，同时 Speed=100Mb/s：链路只协商到百兆。
-  • Speed=1000Mb/s，但吞吐明显偏低：还要排查对端、交换机/路由器、CPU、驱动等，
-    不能只根据 iperf3 断定是网线问题。
-  • RX/TX errors 在测试过程中持续增加：值得检查网线、水晶头和网口。
+For a 1000 Mb/s link:
+  • Measured TCP throughput of about 900-950 Mb/s is normally healthy.
+  • About 90-95 Mb/s with Speed=100Mb/s means the negotiated link is 100 Mb/s.
+  • If Speed=1000Mb/s but throughput is low, also inspect the peer, switch/router, CPU, and driver.
+    iperf3 alone cannot prove a cable fault.
+  • If RX/TX errors keep increasing, inspect the cable, connectors, and ports.
 
-注意：
-  iperf3 测的是 andrew 到对端之间的整条路径。
-  若要尽量单独验证“这根新网线”，应让中间路径尽可能简单，并确保对端也是千兆或更快的有线设备。
+Note:
+  iperf3 measures the entire path from the local system to the peer.
+  To isolate a cable, simplify the path and use a gigabit-or-faster wired peer.
 EOF

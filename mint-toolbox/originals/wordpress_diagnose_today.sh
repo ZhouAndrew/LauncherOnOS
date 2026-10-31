@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# WordPress 故障只读排查脚本
+# WordPress read-only diagnostics
 # Version: 1.0.0
 
 set -u
@@ -18,18 +18,18 @@ OUTPUT_DIR="${REAL_HOME}/Desktop"
 
 usage() {
     cat <<'EOF'
-用法：
-  bash wordpress_diagnose_today.sh [选项]
+Usage:
+  bash wordpress_diagnose_today.sh [options]
 
-选项：
-  --wp-path PATH       WordPress 路径，默认 /var/www/html/wordpress
-  --web-user USER      Web/PHP 运行用户，默认 www-data
-  --since DATETIME     排查开始时间，默认今天 00:00:00
-  --until DATETIME     排查结束时间，默认今天 12:00:00
-  --output-dir DIR     报告保存目录，默认当前用户的 Desktop
-  -h, --help           显示帮助
+Options:
+  --wp-path PATH       WordPress path; default: /var/www/html/wordpress
+  --web-user USER      Web/PHP account; default: www-data
+  --since DATETIME     Start time; default: today at 00:00:00
+  --until DATETIME     End time; default: today at 12:00:00
+  --output-dir DIR     Output directory; defaults to the current user's Desktop
+  -h, --help           Show help
 
-示例：
+Examples:
   bash wordpress_diagnose_today.sh
   bash wordpress_diagnose_today.sh \
     --since '2026-08-01 06:00:00' \
@@ -40,23 +40,23 @@ EOF
 while (($#)); do
     case "$1" in
         --wp-path)
-            WP_PATH="${2:?--wp-path 缺少参数}"
+            WP_PATH="${2:?--wp-path requires an argument}"
             shift 2
             ;;
         --web-user)
-            WEB_USER="${2:?--web-user 缺少参数}"
+            WEB_USER="${2:?--web-user requires an argument}"
             shift 2
             ;;
         --since)
-            SINCE="${2:?--since 缺少参数}"
+            SINCE="${2:?--since requires an argument}"
             shift 2
             ;;
         --until)
-            UNTIL="${2:?--until 缺少参数}"
+            UNTIL="${2:?--until requires an argument}"
             shift 2
             ;;
         --output-dir)
-            OUTPUT_DIR="${2:?--output-dir 缺少参数}"
+            OUTPUT_DIR="${2:?--output-dir requires an argument}"
             shift 2
             ;;
         -h|--help)
@@ -64,7 +64,7 @@ while (($#)); do
             exit 0
             ;;
         *)
-            echo "错误：未知参数：$1" >&2
+            echo "Error: unknown argument: $1" >&2
             usage >&2
             exit 2
             ;;
@@ -72,32 +72,32 @@ while (($#)); do
 done
 
 if ! date -d "$SINCE" >/dev/null 2>&1; then
-    echo "错误：无法识别开始时间：$SINCE" >&2
+    echo "Error: invalid start time: $SINCE" >&2
     exit 2
 fi
 
 if ! date -d "$UNTIL" >/dev/null 2>&1; then
-    echo "错误：无法识别结束时间：$UNTIL" >&2
+    echo "Error: invalid end time: $UNTIL" >&2
     exit 2
 fi
 
 if [[ "$(date -d "$UNTIL" +%s)" -le "$(date -d "$SINCE" +%s)" ]]; then
-    echo "错误：结束时间必须晚于开始时间。" >&2
+    echo "Error: end time must be after start time." >&2
     exit 2
 fi
 
 if [[ ! -d "$WP_PATH" || ! -f "$WP_PATH/wp-config.php" ]]; then
-    echo "错误：未找到有效 WordPress：$WP_PATH" >&2
+    echo "Error: valid WordPress installation not found: $WP_PATH" >&2
     exit 2
 fi
 
 if ! command -v wp >/dev/null 2>&1; then
-    echo "错误：未找到 WP-CLI（wp 命令）。" >&2
+    echo "Error: WP-CLI (wp command) not found." >&2
     exit 2
 fi
 
 if ! id "$WEB_USER" >/dev/null 2>&1; then
-    echo "错误：系统中不存在用户：$WEB_USER" >&2
+    echo "Error: system account not found: $WEB_USER" >&2
     exit 2
 fi
 
@@ -112,11 +112,11 @@ REPORT="${OUTPUT_DIR}/wordpress_diagnose_${STAMP}.txt"
 
 if command -v sudo >/dev/null 2>&1; then
     if ! sudo -v; then
-        echo "错误：无法取得 sudo 权限。" >&2
+        echo "Error: sudo authorization failed." >&2
         exit 1
     fi
 else
-    echo "错误：脚本需要 sudo。" >&2
+    echo "Error: this script requires sudo." >&2
     exit 1
 fi
 
@@ -137,7 +137,7 @@ run() {
     local rc=$?
 
     if ((rc != 0)); then
-        echo "[命令退出码：$rc]"
+        echo "[Command exit code: $rc]"
     fi
 
     return 0
@@ -150,7 +150,7 @@ wp_run() {
 service_log() {
     local service="$1"
 
-    section "服务日志：$service（$SINCE 至 $UNTIL）"
+    section "Service log: $service($SINCE to $UNTIL)"
 
     if systemctl list-unit-files --type=service 2>/dev/null |
         awk '{print $1}' |
@@ -162,7 +162,7 @@ service_log() {
             --until "$UNTIL" \
             --no-pager
     else
-        echo "未找到 ${service}.service，跳过。"
+        echo "${service}.service not found; skipping."
     fi
 }
 
@@ -171,17 +171,17 @@ END_DATE="$(date -d "$UNTIL" +%F)"
 APACHE_ACCESS_DATE="$(LC_ALL=C date -d "$SINCE" '+%d/%b/%Y')"
 APACHE_ERROR_DAY="$(LC_ALL=C date -d "$SINCE" '+%b %d')"
 
-section "报告信息"
+section "Report details"
 
-echo "脚本版本：$VERSION"
-echo "生成时间：$(date --iso-8601=seconds)"
-echo "排查窗口：$SINCE  至  $UNTIL"
+echo "Script version: $VERSION"
+echo "Generated at: $(date --iso-8601=seconds)"
+echo "Diagnostic time window: $SINCE  to  $UNTIL"
 echo "WordPress：$WP_PATH"
-echo "Web 用户：$WEB_USER"
-echo "执行用户：$REAL_USER"
-echo "报告文件：$REPORT"
+echo "Web account: $WEB_USER"
+echo "Executing account: $REAL_USER"
+echo "Report file: $REPORT"
 
-section "系统概况"
+section "System overview"
 
 run hostnamectl
 run uname -a
@@ -193,18 +193,18 @@ run df -ih "$WP_PATH" /tmp
 run systemctl --failed --no-pager
 
 echo
-echo "内存占用最高的进程："
+echo "Processes using the most memory:"
 ps aux --sort=-%mem | head -20
 
 echo
-echo "CPU 占用最高的进程："
+echo "Processes using the most CPU:"
 ps aux --sort=-%cpu | head -20
 
-section "今天的启动、关机与服务失败记录"
+section "Today's startup, shutdown, and service failures"
 
 sudo last -x --time-format iso | head -40
 
-section "内核异常：OOM、崩溃、磁盘与文件系统"
+section "Kernel issues: OOM, crashes, disks, and filesystems"
 
 sudo journalctl \
     -k \
@@ -213,9 +213,9 @@ sudo journalctl \
     --no-pager |
 grep -Ei \
     'out of memory|oom-kill|killed process|segfault|general protection|I/O error|buffer I/O|btrfs.*(error|corrupt)|ext4.*error|xfs.*error|nvme.*error|ata[0-9].*error|read-only file system' ||
-echo "未发现匹配的内核严重异常。"
+echo "No matching critical kernel issues were found."
 
-section "WordPress 基本状态"
+section "WordPress status"
 
 run wp_run core version
 run wp_run core verify-checksums
@@ -226,7 +226,7 @@ run wp_run config get WP_CACHE
 run wp_run config get WP_DEBUG
 run wp_run config get WP_DEBUG_LOG
 
-section "插件、主题和 Drop-in"
+section "Plugins, themes, and drop-ins"
 
 run wp_run plugin list \
     --fields=name,status,update,version,update_version \
@@ -254,7 +254,7 @@ do
     fi
 done
 
-section "数据库检查"
+section "Database checks"
 
 run wp_run db check
 
@@ -269,7 +269,7 @@ run wp_run cron event list \
     --format=table
 
 echo
-echo "与备份、缓存、链接检查相关的 Cron："
+echo "Cron entries related to backup, cache, and link checking:"
 
 wp_run cron event list \
     --fields=hook,next_run_gmt,next_run_relative,recurrence \
@@ -278,9 +278,9 @@ grep -Ei \
     'cache|redis|backup|updraft|wpvivid|blc|link|media|clean|delete' ||
 true
 
-section "排查时间窗口内修改的 WordPress 文件"
+section "WordPress files changed within the diagnostic window"
 
-echo "核心文件："
+echo "Core files:"
 
 sudo find \
     "$WP_PATH/wp-admin" \
@@ -294,7 +294,7 @@ sort |
 head -300
 
 echo
-echo "插件、MU 插件和主题："
+echo "Plugins, MU plugins, and themes:"
 
 sudo find \
     "$WP_PATH/wp-content/plugins" \
@@ -309,7 +309,7 @@ sort -u |
 head -500
 
 echo
-echo "wp-content 顶层 Drop-in："
+echo "Top-level wp-content drop-ins:"
 
 sudo find \
     "$WP_PATH/wp-content" \
@@ -321,7 +321,7 @@ sudo find \
     2>/dev/null |
 sort -u
 
-section "最近 14 天修改时间最晚的 WordPress 文件"
+section "Most recently modified WordPress files within 14 days"
 
 sudo find \
     "$WP_PATH/wp-admin" \
@@ -334,7 +334,7 @@ sudo find \
 sort -r |
 head -300
 
-section "上传、缓存和升级目录权限"
+section "Upload, cache, and upgrade directory permissions"
 
 for dir in \
     "$WP_PATH/wp-content/uploads" \
@@ -346,7 +346,7 @@ do
         echo
         sudo stat -c '%A %U:%G %n' "$dir"
 
-        echo "其中 $WEB_USER 无法写入的目录（最多 100 条）："
+        echo "Directories not writable by $WEB_USER (up to 100):"
 
         sudo -u "$WEB_USER" -- find \
             "$dir" \
@@ -356,7 +356,7 @@ do
             2>/dev/null |
         head -100
 
-        echo "其中 root 所有的文件或目录（最多 100 条）："
+        echo "Root-owned files or directories (up to 100):"
 
         sudo find \
             "$dir" \
@@ -367,7 +367,7 @@ do
     fi
 done
 
-section "WordPress Debug 日志"
+section "WordPress debug log"
 
 DEBUG_LOG="$WP_PATH/wp-content/debug.log"
 
@@ -378,10 +378,10 @@ if [[ -f "$DEBUG_LOG" ]]; then
 
     sudo tail -n 300 "$DEBUG_LOG"
 else
-    echo "未找到：$DEBUG_LOG"
+    echo "Not found: $DEBUG_LOG"
 fi
 
-section "Apache 配置与 PHP"
+section "Apache configuration and PHP"
 
 run sudo apache2ctl configtest
 run sudo apache2ctl -M
@@ -389,7 +389,7 @@ run php -v
 run php --ini
 
 echo
-echo "关键 PHP 模块："
+echo "Key PHP modules:"
 
 php -m |
 grep -Ei \
@@ -397,7 +397,7 @@ grep -Ei \
 true
 
 echo
-echo "关键 PHP 配置："
+echo "Key PHP configuration:"
 
 php -i |
 grep -Ei \
@@ -409,7 +409,7 @@ service_log mysql
 service_log redis-server
 service_log caddy
 
-section "Apache error.log：排查窗口内的错误"
+section "Apache error.log: errors within the diagnostic window"
 
 if compgen -G '/var/log/apache2/error.log*' >/dev/null; then
     sudo zgrep \
@@ -419,7 +419,7 @@ if compgen -G '/var/log/apache2/error.log*' >/dev/null; then
     tail -1000
 
     echo
-    echo "PHP/Apache 关键错误："
+    echo "Key PHP/Apache errors:"
 
     sudo zgrep \
         -hEi \
@@ -428,10 +428,10 @@ if compgen -G '/var/log/apache2/error.log*' >/dev/null; then
         2>/dev/null |
     tail -1000
 else
-    echo "没有找到 /var/log/apache2/error.log*"
+    echo "No /var/log/apache2/error.log* files found"
 fi
 
-section "Apache access.log：异常 HTTP 状态"
+section "Apache access.log: abnormal HTTP status codes"
 
 if compgen -G '/var/log/apache2/access.log*' >/dev/null; then
     sudo zcat \
@@ -446,7 +446,7 @@ if compgen -G '/var/log/apache2/access.log*' >/dev/null; then
     tail -1000
 
     echo
-    echo "异常状态码计数："
+    echo "Abnormal status-code counts:"
 
     sudo zcat \
         -f /var/log/apache2/access.log* \
@@ -465,7 +465,7 @@ if compgen -G '/var/log/apache2/access.log*' >/dev/null; then
     sort -n
 
     echo
-    echo "5xx 请求最多的路径："
+    echo "Paths with the most 5xx requests:"
 
     sudo zcat \
         -f /var/log/apache2/access.log* \
@@ -483,10 +483,10 @@ if compgen -G '/var/log/apache2/access.log*' >/dev/null; then
     sort -nr |
     head -30
 else
-    echo "没有找到 /var/log/apache2/access.log*"
+    echo "No /var/log/apache2/access.log* files found"
 fi
 
-section "系统软件包更新记录"
+section "System package update history"
 
 if compgen -G '/var/log/dpkg.log*' >/dev/null; then
     sudo zgrep \
@@ -497,7 +497,7 @@ if compgen -G '/var/log/dpkg.log*' >/dev/null; then
 fi
 
 echo
-echo "自动升级服务日志："
+echo "Automatic upgrade service logs:"
 
 if systemctl list-unit-files --type=service 2>/dev/null |
     awk '{print $1}' |
@@ -509,10 +509,10 @@ if systemctl list-unit-files --type=service 2>/dev/null |
         --until "$UNTIL" \
         --no-pager
 else
-    echo "未找到 unattended-upgrades.service。"
+    echo "unattended-upgrades.service not found."
 fi
 
-section "HTTP 实际访问测试"
+section "Live HTTP requests"
 
 HOME_URL="$(wp_run option get home 2>/dev/null || true)"
 SITE_URL="$(wp_run option get siteurl 2>/dev/null || true)"
@@ -529,7 +529,7 @@ if command -v curl >/dev/null 2>&1 && [[ -n "$HOME_URL" ]]; then
         --max-time 30 \
         -o /dev/null \
         -sS \
-        -w '正式网址：HTTP=%{http_code} DNS=%{time_namelookup}s connect=%{time_connect}s start=%{time_starttransfer}s total=%{time_total}s final=%{url_effective}\n' \
+        -w 'Site URL: HTTP=%{http_code} DNS=%{time_namelookup}s connect=%{time_connect}s start=%{time_starttransfer}s total=%{time_total}s final=%{url_effective}\n' \
         "$HOME_URL" ||
     true
 
@@ -543,10 +543,10 @@ if command -v curl >/dev/null 2>&1 && [[ -n "$HOME_URL" ]]; then
         2>&1 |
     head -80
 else
-    echo "无法执行正式网址测试。"
+    echo "Cannot run the site URL test."
 fi
 
-section "自动线索摘要"
+section "Automated diagnostic findings"
 
 OOM_COUNT="$(
     sudo journalctl \
@@ -637,38 +637,38 @@ if compgen -G '/var/log/apache2/access.log*' >/dev/null; then
     )"
 fi
 
-printf 'OOM 相关记录：%s\n' "$OOM_COUNT"
-printf '内核崩溃记录：%s\n' "$SEGFAULT_COUNT"
-printf '当前 failed systemd units：%s\n' "$FAILED_COUNT"
-printf '窗口内修改的核心文件：%s\n' "$CORE_CHANGED"
-printf '窗口内修改的插件/MU/主题文件：%s\n' "$CONTENT_CHANGED"
-printf '当天 Apache 4xx 数量：%s\n' "$HTTP_4XX"
-printf '当天 Apache 5xx 数量：%s\n' "$HTTP_5XX"
+printf 'OOM-related entries: %s\n' "$OOM_COUNT"
+printf 'Kernel crash entries: %s\n' "$SEGFAULT_COUNT"
+printf 'Current failed systemd units: %s\n' "$FAILED_COUNT"
+printf 'Core files changed within the window: %s\n' "$CORE_CHANGED"
+printf 'Plugin, MU plugin, or theme files changed within the window: %s\n' "$CONTENT_CHANGED"
+printf 'Apache 4xx responses today: %s\n' "$HTTP_4XX"
+printf 'Apache 5xx responses today: %s\n' "$HTTP_5XX"
 
 echo
 
 if (( OOM_COUNT > 0 )); then
-    echo "[高优先级] 检测到 OOM/进程被杀记录，应优先检查内存和 swap。"
+    echo "[HIGH PRIORITY] OOM or killed-process entries found. Check memory and swap first."
 fi
 
 if (( SEGFAULT_COUNT > 0 )); then
-    echo "[高优先级] 检测到进程崩溃记录，应结合内核日志定位进程。"
+    echo "[HIGH PRIORITY] Process crashes found. Use kernel logs to identify the process."
 fi
 
 if (( HTTP_5XX > 0 )); then
-    echo "[高优先级] Apache 访问日志中存在 5xx，请查看对应路径和 error.log。"
+    echo "[HIGH PRIORITY] Apache 5xx responses found. Inspect the paths and error.log."
 fi
 
 if (( CORE_CHANGED > 0 )); then
-    echo "[线索] 排查窗口内有核心文件变化，可能发生核心更新或覆盖。"
+    echo "[FINDING] Core files changed during the window; an update or overwrite may have occurred."
 else
-    echo "[排除项] 排查窗口内未发现核心文件变化。"
+    echo "[NEGATIVE FINDING] No core-file changes found during the window."
 fi
 
 if (( CONTENT_CHANGED > 0 )); then
-    echo "[线索] 排查窗口内有插件、MU 插件或主题文件变化。"
+    echo "[FINDING] Plugins, MU plugins, or themes changed during the window."
 else
-    echo "[排除项] 排查窗口内未发现插件、MU 插件或主题文件变化。"
+    echo "[NEGATIVE FINDING] No plugin, MU plugin, or theme changes found during the window."
 fi
 
 if ((
@@ -678,13 +678,13 @@ if ((
     CORE_CHANGED == 0 &&
     CONTENT_CHANGED == 0
 )); then
-    echo "[提示] 未发现明显的更新、OOM、崩溃或 5xx；重点查看缓存、4xx、服务重启及特定请求。"
+    echo "[NOTE] No obvious update, OOM, crash, or 5xx findings. Inspect caching, 4xx responses, service restarts, and individual requests."
 fi
 
-section "完成"
+section "Done"
 
-echo "报告已保存：$REPORT"
-echo "脚本没有修改 WordPress、数据库、缓存或服务配置。"
+echo "Report saved: $REPORT"
+echo "The script did not modify WordPress, the database, caches, or service configuration."
 
 sudo chown \
     "$REAL_USER":"$(id -gn "$REAL_USER")" \

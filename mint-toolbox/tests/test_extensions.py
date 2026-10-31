@@ -58,7 +58,7 @@ class UserExtensionsTests(unittest.TestCase):
         self.assertNotIn(item['id'], [x['id'] for x in toolbox.entries()])
         removed = toolbox.resolve_tool(item['id'])
         self.assertEqual(removed['lifecycle'], 'removed')
-        with self.assertRaisesRegex(ValueError,'已标记为移除'):
+        with self.assertRaisesRegex(ValueError,'Marked as removed'):
             toolbox.command_for(removed,[])
         extensions.mark_removed(item['id'],False)
         self.assertEqual(toolbox.resolve_tool(item['id'])['lifecycle'],'available')
@@ -75,26 +75,26 @@ class UserExtensionsTests(unittest.TestCase):
         disabled = toolbox.resolve_tool(key)
         self.assertFalse(disabled['enabled'])
         self.assertEqual(disabled['lifecycle'], 'available')
-        self.assertEqual(toolbox.display_status(disabled), '已禁用')
+        self.assertEqual(toolbox.display_status(disabled), 'Disabled')
         self.assertNotIn(key, [entry['id'] for entry in toolbox.entries()])
         self.assertEqual(toolbox.manual_path(disabled, gui=True).suffix, '.html')
-        with self.assertRaisesRegex(ValueError, '已禁用'):
+        with self.assertRaisesRegex(ValueError, 'Disabled'):
             toolbox.command_for(disabled, [])
 
         extensions.mark_removed(key, True)
         both = toolbox.resolve_tool(key)
         self.assertEqual(both['lifecycle'], 'removed')
         self.assertFalse(both['enabled'])
-        self.assertEqual(toolbox.display_status(both), '已移除')
-        self.assertEqual(toolbox.detailed_status(both), '已移除 · 已禁用')
-        with self.assertRaisesRegex(ValueError, '已标记为移除'):
+        self.assertEqual(toolbox.display_status(both), 'Removed')
+        self.assertEqual(toolbox.detailed_status(both), 'Removed · Disabled')
+        with self.assertRaisesRegex(ValueError, 'Marked as removed'):
             toolbox.command_for(both, [])
 
         extensions.mark_removed(key, False)
         restored = toolbox.resolve_tool(key)
         self.assertEqual(restored['lifecycle'], 'available')
-        self.assertFalse(restored['enabled'], '恢复已移除状态不能偷偷重新启用')
-        with self.assertRaisesRegex(ValueError, '已禁用'):
+        self.assertFalse(restored['enabled'], 'Restoring a removed tool must not enable it')
+        with self.assertRaisesRegex(ValueError, 'Disabled'):
             toolbox.command_for(restored, [])
         extensions.set_disabled(key, False)
         ready = toolbox.resolve_tool(key)
@@ -112,7 +112,7 @@ class UserExtensionsTests(unittest.TestCase):
         same = toolbox.resolve_tool(key)
         self.assertTrue(same['enabled'])
         self.assertEqual(same['lifecycle'], 'removed')
-        with self.assertRaisesRegex(ValueError, '已标记为移除'):
+        with self.assertRaisesRegex(ValueError, 'Marked as removed'):
             toolbox.command_for(same, [])
 
     def test_cli_respects_both_states_and_preserves_files(self):
@@ -124,9 +124,9 @@ class UserExtensionsTests(unittest.TestCase):
                                   env=env, text=True, capture_output=True, timeout=10)
         self.assertEqual(cli('--disable', key).returncode, 0)
         self.assertNotEqual(cli('--run', key).returncode, 0)
-        self.assertIn('已禁用', cli('--info', key).stdout)
+        self.assertIn('Disabled', cli('--info', key).stdout)
         self.assertEqual(cli('--mark-removed', key).returncode, 0)
-        self.assertIn('已移除 · 已禁用', cli('--info', key).stdout)
+        self.assertIn('Removed · Disabled', cli('--info', key).stdout)
         self.assertNotEqual(cli('--run', key).returncode, 0)
         self.assertEqual(cli('--restore', key).returncode, 0)
         self.assertNotEqual(cli('--run', key).returncode, 0)
@@ -146,13 +146,13 @@ class UserExtensionsTests(unittest.TestCase):
         sample = {'schema_version':1,'id':'user-example','name':'Example',
                   'description':'Test','category':'Test','executable':'/tmp/example',
                   'actions':[{'key':'run','label':'Start','argv':['{unsafe}']}]}
-        with self.assertRaisesRegex(ValueError,'普通字面量'):
+        with self.assertRaisesRegex(ValueError,'must be literals'):
             extensions.validate_manifest(sample)
         sample['actions'][0]['argv']=[{'field':'missing','flag':'--output'}]
-        with self.assertRaisesRegex(ValueError,'必须引用'):
+        with self.assertRaisesRegex(ValueError,'must reference'):
             extensions.validate_manifest(sample)
         sample['executable']='../relative-path'
-        with self.assertRaisesRegex(ValueError,'绝对路径'):
+        with self.assertRaisesRegex(ValueError,'absolute'):
             extensions.validate_manifest(sample)
 
     def test_declarative_action_builds_safe_argv(self):
@@ -160,7 +160,7 @@ class UserExtensionsTests(unittest.TestCase):
         file = extensions.extension_dir() / (item['id']+'.json')
         obj = json.loads(file.read_text())
         obj['actions']=[{'key':'convert','label':'转换',
-                         'fields':[{'key':'source','label':'源文件','kind':'file'},
+                         'fields':[{'key':'source','label':'源file','kind':'file'},
                                    {'key':'folder','label':'输出目录','kind':'folder','required':False},
                                    {'key':'verbose','label':'详细模式','kind':'boolean','required':False}],
                          'argv':['convert', {'field':'source','flag':'--input'},
@@ -202,7 +202,7 @@ class UserExtensionsTests(unittest.TestCase):
                                   env=env,text=True,capture_output=True,timeout=10)
         add=cli('--extension-add',str(self.script),'--name','我的脚本','--category','示例')
         self.assertEqual(add.returncode,0,add.stderr)
-        key=add.stdout.strip().split('：',1)[1].strip()
+        key=add.stdout.strip().split(':',1)[1].strip()
         self.assertIn(key,cli('--list').stdout)
         self.assertEqual(cli('--mark-removed',key).returncode,0)
         self.assertNotIn(key,cli('--list').stdout)

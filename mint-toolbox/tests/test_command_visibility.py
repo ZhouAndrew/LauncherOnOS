@@ -30,20 +30,20 @@ class CommandVisibilityTests(unittest.TestCase):
 
     def test_filter_catalog_is_pure_and_independent_of_status_mutation(self):
         all_items = toolbox.catalog()
-        before = toolbox.filter_catalog(all_items, category_filter='全部',
-                                        status_filter='可用', query='pdf')
+        before = toolbox.filter_catalog(all_items, category_filter='All',
+                                        status_filter='Available', query='pdf')
         self.assertTrue(before)
         original = [(row['id'], row['lifecycle'], row['enabled']) for row in all_items]
         target = toolbox.resolve_tool('extract_pdf_images.py')
         self.assertIn(target['id'], [row['id'] for row in before])
         extensions.set_disabled(target['id'], True)
-        after = toolbox.filter_catalog(toolbox.catalog(), category_filter='全部',
-                                       status_filter='可用', query='pdf')
+        after = toolbox.filter_catalog(toolbox.catalog(), category_filter='All',
+                                       status_filter='Available', query='pdf')
         self.assertNotIn(target['id'], [row['id'] for row in after])
         self.assertEqual([(row['id'], row['lifecycle'], row['enabled']) for row in all_items],
                          original, 'Filtering must not mutate a previously obtained catalog')
         self.assertIn(target['id'], [row['id'] for row in toolbox.filter_catalog(
-            toolbox.catalog(), category_filter='全部', status_filter='已禁用', query='pdf')])
+            toolbox.catalog(), category_filter='All', status_filter='Disabled', query='pdf')])
 
     def test_display_command_is_full_and_shell_quotable_while_disabled(self):
         script = self.home / 'example tool.sh'
@@ -52,7 +52,7 @@ class CommandVisibilityTests(unittest.TestCase):
         tool = extensions.add_extension(str(script), name='Example')
         extensions.set_disabled(tool['id'], True)
         actual = toolbox.resolve_tool(tool['id'])
-        with self.assertRaisesRegex(ValueError, '已禁用'):
+        with self.assertRaisesRegex(ValueError, 'Disabled'):
             toolbox.command_for(actual, ['--name', 'two words'])
         preview = toolbox.command_text(toolbox.invocation_for(actual, ['--name', 'two words']))
         self.assertEqual(shlex.split(preview), ['/bin/bash', str(script), '--name', 'two words'])
@@ -66,7 +66,7 @@ class CommandVisibilityTests(unittest.TestCase):
         process = subprocess.run([sys.executable, str(ROOT / 'toolbox.py'), '--info', row['id']],
                                  capture_output=True, text=True, timeout=10)
         self.assertEqual(process.returncode, 0, process.stderr)
-        self.assertIn('原程序命令：', process.stdout)
+        self.assertIn('Original command: ', process.stdout)
         self.assertIn(shlex.quote(str(script)), process.stdout)
         self.assertIn('mint-toolbox --run', process.stdout)
         blocked = subprocess.run([sys.executable, str(ROOT / 'toolbox.py'), '--run', row['id']],
@@ -82,7 +82,7 @@ class CommandVisibilityTests(unittest.TestCase):
                                   row['id'], '--keyword', 'two words'],
                                  capture_output=True, text=True, timeout=10)
         self.assertEqual(process.returncode, 0, process.stderr)
-        self.assertIn('执行命令：', process.stderr)
+        self.assertIn('Command: ', process.stderr)
         self.assertIn(shlex.quote(str(script)), process.stderr)
         self.assertIn("'two words'", process.stderr)
         self.assertIn('arg: two words', process.stdout)
@@ -93,7 +93,7 @@ class CommandVisibilityTests(unittest.TestCase):
             toolbox.run_terminal(['/tmp/tool', '--name', 'two words'])
         argv = popen.call_args.args[0]
         self.assertEqual(argv[:3], ['/bin/xterm', '-e', 'bash'])
-        self.assertIn('执行命令：', argv[-1])
+        self.assertIn('Command: ', argv[-1])
         self.assertIn("'two words'", argv[-1])
         self.assertEqual(popen.call_args.kwargs['start_new_session'], True)
 
@@ -101,12 +101,12 @@ class CommandVisibilityTests(unittest.TestCase):
         tool = toolbox.resolve_tool('categorize-posts-by-keyword')
         action = next(a for a in toolbox.actions_for(tool['id']) if a.key == 'apply')
         output = io.StringIO()
-        with patch('builtins.input', side_effect=['my words', 'School', '取消']), \
+        with patch('builtins.input', side_effect=['my words', 'School', 'Cancel']), \
              patch.object(toolbox.subprocess, 'run') as run, contextlib.redirect_stdout(output):
             result = toolbox.cli_action(tool, action)
         self.assertEqual(result, 0)
         self.assertFalse(run.called)
-        self.assertIn('实际命令：', output.getvalue())
+        self.assertIn('Command: ', output.getvalue())
         self.assertIn("'my words'", output.getvalue())
 
 
@@ -145,31 +145,31 @@ class GuiFilterTests(unittest.TestCase):
                     listbox = next(w for w in descend(root) if isinstance(w, tk.Listbox))
                     search.delete(0, 'end')
                     search.insert(0, 'PDF')
-                    category.set('全部')
-                    status.set('可用')
+                    category.set('All')
+                    status.set('Available')
                     root.update()
-                    index = next(i for i in range(listbox.size()) if '提取' in listbox.get(i))
+                    index = next(i for i in range(listbox.size()) if 'Extract' in listbox.get(i))
                     listbox.selection_set(index)
                     listbox.event_generate('<<ListboxSelect>>')
                     root.update()
                     initial = (search.get(), category.get(), status.get())
-                    self.assertEqual(initial, ('PDF', '全部', '可用'))
-                    self.assertIsNotNone(find_button('禁用工具'))
-                    find_button('禁用工具').invoke()
+                    self.assertEqual(initial, ('PDF', 'All', 'Available'))
+                    self.assertIsNotNone(find_button('Disable tool'))
+                    find_button('Disable tool').invoke()
                     root.update()
                     self.assertEqual((search.get(), category.get(), status.get()), initial)
-                    self.assertTrue(find_button('启用工具'))
-                    self.assertTrue(any('已禁用' in w.cget('text') for w in descend(root)
+                    self.assertTrue(find_button('Enable tool'))
+                    self.assertTrue(any('Disabled' in w.cget('text') for w in descend(root)
                                         if isinstance(w, ttk.Label)))
-                    find_button('启用工具').invoke()
+                    find_button('Enable tool').invoke()
                     root.update()
                     self.assertEqual((search.get(), category.get(), status.get()), initial)
                     with patch('tkinter.messagebox.askyesno', return_value=True):
-                        find_button('标记已移除').invoke()
+                        find_button('Mark as removed').invoke()
                     root.update()
                     self.assertEqual((search.get(), category.get(), status.get()), initial)
-                    self.assertTrue(find_button('恢复'))
-                    find_button('恢复').invoke()
+                    self.assertTrue(find_button('Restore'))
+                    find_button('Restore').invoke()
                     root.update()
                     self.assertEqual((search.get(), category.get(), status.get()), initial)
                     # GUI must display the *fully populated* command, not just a
@@ -179,7 +179,7 @@ class GuiFilterTests(unittest.TestCase):
                     with patch.object(toolbox, '_input_dialog', return_value={
                              'source': str(source_pdf), 'output': str(Path(temp.name)),
                              'duplicates': True}), patch.object(toolbox, 'run_terminal') as run:
-                        find_button('提取图片').invoke()
+                        find_button('Extract images').invoke()
                     run.assert_called_once()
                     shown = [w.get('1.0', 'end').strip() for w in descend(root)
                              if isinstance(w, tk.Text)]

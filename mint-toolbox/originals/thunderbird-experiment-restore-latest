@@ -6,14 +6,14 @@ BACKUP_ROOT="/home/andrew/Thunderbird-Experiment-Backups"
 
 echo
 echo "============================================================"
-echo " Thunderbird 实验数据恢复"
+echo " Thunderbird experimental data recovery"
 echo "============================================================"
 echo
 
 if pgrep -u "$UID" -x thunderbird >/dev/null 2>&1 ||
    pgrep -u "$UID" -x thunderbird-bin >/dev/null 2>&1; then
-    echo "✗ Thunderbird 正在运行。"
-    echo "关闭 Thunderbird 后才能恢复。"
+    echo "✗ Thunderbird is running."
+    echo "Close Thunderbird before restoring."
     exit 1
 fi
 
@@ -25,21 +25,21 @@ LATEST="$(
 )"
 
 if [ -z "$LATEST" ] || [ ! -d "$LATEST/profile" ]; then
-    echo "✗ 没有找到实验启动前备份。"
+    echo "✗ No pre-experiment backup was found."
     exit 1
 fi
 
-echo "准备恢复："
+echo "Preparing to restore: "
 echo
 echo "  $LATEST/profile"
 echo "       ↓"
 echo "  $PROFILE"
 echo
 
-read -r -p "确认恢复？输入 YES: " ANSWER
+read -r -p "Restore this backup? Type YES: " ANSWER
 
 if [ "$ANSWER" != "YES" ]; then
-    echo "已取消。"
+    echo "Cancelled."
     exit 0
 fi
 
@@ -48,13 +48,13 @@ EMERGENCY="$BACKUP_ROOT/$(date '+%Y%m%d-%H%M%S')-before-restore-current"
 mkdir -p "$EMERGENCY"
 
 echo
-echo "先保存当前损坏/实验状态："
+echo "Saving current state before restoring: "
 echo "  $EMERGENCY/profile"
 
 cp -a --reflink=auto     "$PROFILE"     "$EMERGENCY/profile"
 
 echo
-echo "恢复最近实验前数据..."
+echo "Restoring the latest pre-experiment data..."
 
 rm -rf "$PROFILE.restore-new"
 
@@ -68,10 +68,10 @@ mv "$PROFILE.restore-new" "$PROFILE"
 rm -f     "$PROFILE/.parentlock"     "$PROFILE/lock"     2>/dev/null || true
 
 echo
-echo "✓ 恢复完成"
+echo "✓ Restore complete"
 echo
-echo "恢复来源："
+echo "Restored from: "
 echo "  $LATEST"
 echo
-echo "恢复前状态仍保存在："
+echo "Previous state retained at: "
 echo "  $OLD"

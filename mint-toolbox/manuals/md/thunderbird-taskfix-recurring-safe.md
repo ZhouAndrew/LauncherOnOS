@@ -1,41 +1,38 @@
-# thunderbird-taskfix-recurring-safe — Thunderbird TaskFix Recurring Safe 启动器
+# Thunderbird TaskFix Recurring Safe launcher
 
-> 分类：CalDAV 与 Thunderbird · 状态：独立测试入口 · 风险：中 · 启动器：register
+Launch Recurring Safe TaskFix with its isolated profile, or explicitly choose the system profile.
 
-## 功能
+## Availability
 
-用 Recurring Safe TaskFix 程序与独立 Profile 启动 Thunderbird，也可显式选择系统 Profile。
+- Category: CalDAV and Thunderbird
+- Status: Available; real-system acceptance pending
+- Risk: medium
 
-## 用法
+## Command line
 
 ```bash
-thunderbird-taskfix-recurring-safe
-thunderbird-taskfix-recurring-safe --system-profile
+mint-toolbox --run thunderbird-taskfix-recurring-safe --help
 ```
 
-## 参数与选项
+The original script arguments are passed through unchanged. Inspect the full command before confirming an operation. External launchers require their existing application or virtual environment; that runtime is not bundled.
 
-- `--system-profile`：不指定独立 Profile；其余参数原样传递 Thunderbird。
+## Graphical actions
 
-## 依赖与运行环境
+### Launch Recurring Safe
 
-- 固定程序 `/home/andrew/.local/opt/thunderbird-taskfix-recurring-safe-153.1.0/thunderbird`。
-- 固定数据 `/home/andrew/.local/share/thunderbird-taskfix-recurring-safe/profile`。
+Launch Recurring Safe TaskFix with its isolated profile, or explicitly choose the system profile.
 
-## 输出与副作用
+Confirmation level: low.
 
-- 启动 Thunderbird；数据修改依赖使用的 Profile。
 
-## 注意事项
+## Requirements and effects
 
-- 尽量保持独立 Profile；使用系统 Profile 时先关闭其他 Thunderbird 实例。
+This entry uses the machine-specific executable or profile paths from the original script. Verify those paths and close conflicting applications before running it. Restoring a profile replaces live data; the script requires explicit confirmation.
 
-## 来源与验证
+## Tool management
 
-- 来源：用户提供的 `bin.zip` 中的 `bin/thunderbird-taskfix-recurring-safe`。
-- 源文件 SHA-256：`2fd0d0880895d24bf146d03395e195c1fd0e4651ba38d932fd3960487cc7591e`。
-- 验证状态：**已静态读取代码；未运行脚本、未验证目标服务/依赖。**
+Disable preserves the script, settings and manual. Mark as removed hides the entry without deleting its files. User-tool registration is independent of system extension package installation.
 
-## LauncherOnOS 集成建议
+## Execution visibility
 
-建议使用 `launcheronos register` 注册现有入口，不复制依赖环境或目标程序。
+The interface shows the complete command. Legacy interactive scripts run in a terminal that keeps the output and exit code visible until Enter is pressed. System extensions use the separate execution log panel and save logs automatically.

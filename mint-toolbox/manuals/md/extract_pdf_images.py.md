@@ -1,46 +1,41 @@
-# extract_pdf_images.py — 批量提取 PDF 内嵌图片
+# Extract embedded PDF images
 
-> 分类：文件与归档 · 状态：当前版本 · 风险：低 · 启动器：register
+Extract bitmap images from a PDF or a directory of PDFs. Duplicate images are removed by default.
 
-## 功能
+## Availability
 
-从单个 PDF 或目录中的所有 PDF 提取内嵌位图；默认去除页面之间的重复图片。
+- Category: Files and archives
+- Status: Available; real-system acceptance pending
+- Risk: low
 
-## 用法
+## Command line
 
 ```bash
-python3 extract_pdf_images.py document.pdf
-python3 extract_pdf_images.py ./pdfs --output ./images
-python3 extract_pdf_images.py document.pdf --include-duplicates
+mint-toolbox --run extract_pdf_images.py --help
 ```
 
-## 参数与选项
+The original script arguments are passed through unchanged. Inspect the full command before confirming an operation. External launchers require their existing application or virtual environment; that runtime is not bundled.
 
-- `input`：PDF 文件或包含 PDF 的目录（只扫描该目录直系文件）。
-- `-o`、`--output DIR`：默认 `extracted_images`。
-- `--include-duplicates`：重复出现的图片也重新导出。
+## Graphical actions
 
-## 依赖与运行环境
+### Extract images
 
-- Python3（含 `venv`/`pip`）；依赖 PyMuPDF。
-- 脚本会在**自身所在目录**建立 `.extract_pdf_images_venv` 并首次通过 pip 安装 PyMuPDF。
+Extract bitmap images from a PDF or a directory of PDFs. Duplicate images are removed by default.
 
-## 输出与副作用
+Confirmation level: low.
 
-- 在目标目录写入导出的图片文件；输入 PDF 不改动。
-- 会创建/修改脚本旁的 venv，首次使用需要网络和写权限。
+- PDF file or folder: file_or_folder; required
+- Output folder: folder; optional
+- Keep duplicate images: boolean; optional
 
-## 注意事项
+## Requirements and effects
 
-- 上传压缩包内的 `.extract_pdf_images_venv` 是环境文件而非待编写手册的自有脚本。
-- 推荐使用 LauncherOnOS `register`，避免把脚本复制到不适合创建 venv 的安装目录。
+Requires the original Python image/PDF dependencies (PyMuPDF). Accepts a PDF or folder, --output DIR and --include-duplicates. Duplicate bitmap images are removed by default.
 
-## 来源与验证
+## Tool management
 
-- 来源：用户提供的 `bin.zip` 中的 `bin/extract_pdf_images.py`。
-- 源文件 SHA-256：`581f5e0d98867091696679ce434d1c0b94abe2c8531561686d5718030b1da691`。
-- 验证状态：**已静态读取代码；未运行脚本、未验证目标服务/依赖。**
+Disable preserves the script, settings and manual. Mark as removed hides the entry without deleting its files. User-tool registration is independent of system extension package installation.
 
-## LauncherOnOS 集成建议
+## Execution visibility
 
-建议使用 `launcheronos register` 注册现有入口，不复制依赖环境或目标程序。
+The interface shows the complete command. Legacy interactive scripts run in a terminal that keeps the output and exit code visible until Enter is pressed. System extensions use the separate execution log panel and save logs automatically.

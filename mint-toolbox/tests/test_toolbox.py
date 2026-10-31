@@ -87,7 +87,7 @@ class ToolboxTests(unittest.TestCase):
         tool, act = self.spec('import_wechat_export', 'preview')
         self.assertEqual(toolbox.build_command(tool, act, {'source':str(self.source)}),
                          [str(self.source), '--dry-run'])
-        self.assertIn('可能', act.note)
+        self.assertIn('may generate', act.note)
 
     def test_caldav_action_must_be_confirmed(self):
         tool, action = self.spec('complete_anki_tasks_today.py', 'complete')

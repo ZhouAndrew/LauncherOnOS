@@ -1,39 +1,32 @@
-# categorize-posts-by-keyword.before-verification-fix — 按关键词设置 WordPress 分类：验证修复前快照
+# WordPress category script: pre-verification snapshot
 
-> 分类：WordPress · 状态：历史快照 / 禁止默认启动 · 风险：高 · 启动器：skip
+Historical code snapshot from before the verification fix. Not a preferred executable.
 
-## 功能
+## Availability
 
-当前分类脚本在验证修复前的代码快照，供差异追溯，不是首选可执行版本。
+- Category: WordPress
+- Status: Archived; not launched by default
+- Risk: high
 
-## 用法
+## Command line
 
 ```bash
-（存档，不建议运行；使用 categorize-posts-by-keyword）
+mint-toolbox --run categorize-posts-by-keyword.before-verification-fix --help
 ```
 
-## 参数与选项
+The original script arguments are passed through unchanged. Inspect the full command before confirming an operation. External launchers require their existing application or virtual environment; that runtime is not bundled.
 
-- 沿用相近的关键词/分类参数和 --dry-run / --yes 等开关。
+## Graphical actions
 
-## 依赖与运行环境
+This reference entry has no graphical actions. Read the original CLI help before use. Archived and removed tools are not launched by default.
+## Requirements and effects
 
-- WP-CLI、Python3、WordPress。
+This entry uses the machine-specific executable or profile paths from the original script. Verify those paths and close conflicting applications before running it. Restoring a profile replaces live data; the script requires explicit confirmation.
 
-## 输出与副作用
+## Tool management
 
-- 执行可能批量修改 WordPress 分类。
+Disable preserves the script, settings and manual. Mark as removed hides the entry without deleting its files. User-tool registration is independent of system extension package installation.
 
-## 注意事项
+## Execution visibility
 
-- 名字表示“验证修复前”，不应被扫描器误识别为推荐工具。
-
-## 来源与验证
-
-- 来源：用户提供的 `bin.zip` 中的 `bin/categorize-posts-by-keyword.before-verification-fix`。
-- 源文件 SHA-256：`afc18e2c290d1d7ca8d9d016c99333d5d6e0a466e7764f2ec130005938569149`。
-- 验证状态：**已静态读取代码；未运行脚本、未验证目标服务/依赖。**
-
-## LauncherOnOS 集成建议
-
-不建议安装、运行或默认在交互菜单中展示；仅保留手册供追溯。
+The interface shows the complete command. Legacy interactive scripts run in a terminal that keeps the output and exit code visible until Enter is pressed. System extensions use the separate execution log panel and save logs automatically.

@@ -1,46 +1,39 @@
-# anki-time-travel.sh — Anki 历史 PDF 回填 WordPress
+# Historical Anki PDF to WordPress
 
-> 分类：Anki 与学习 · 状态：实用工具 / 待实机验收 · 风险：高 · 启动器：register
+Use the timestamp in an anki-stats-YYYY-MM-DD@HH-MM-SS.pdf filename to create or reuse WordPress posts and attachments, with timestamp readback.
 
-## 功能
+## Availability
 
-根据 `anki-stats-YYYY-MM-DD@HH-MM-SS.pdf` 文件名中的历史时间创建/复用 WordPress 文章和附件，设置 Anki 分类/标签、PDF 预览并校验时间戳。
+- Category: Anki and study
+- Status: Available; real-system acceptance pending
+- Risk: high
 
-## 用法
+## Command line
 
 ```bash
-anki-time-travel.sh /absolute/path/anki-stats-2026-09-27@15-20-32.pdf
-WP_PATH=/var/www/html/wordpress anki-time-travel.sh /absolute/path/file1.pdf /absolute/path/file2.pdf
+mint-toolbox --run anki-time-travel.sh --help
 ```
 
-## 参数与选项
+The original script arguments are passed through unchanged. Inspect the full command before confirming an operation. External launchers require their existing application or virtual environment; that runtime is not bundled.
 
-- 一个或多个符合 `anki-stats-YYYY-MM-DD@HH-MM-SS.pdf` 的 PDF 路径；建议使用绝对路径。
-- 没有实现 `--dry-run` 或 `--help`。
+## Graphical actions
 
-## 依赖与运行环境
+### Import historical Anki PDF into WordPress
 
-- WordPress 根目录默认为 `/var/www/html/wordpress`（可由 `WP_PATH` 覆盖）。
-- 需要 WP-CLI `wp`、GNU `date`、数据库访问权限，以及 `sed`、`mktemp`、`cp`、`touch` 等。
+Creates or reuses WordPress posts and attachments. The filename must include a timestamp.
 
-## 输出与副作用
+Confirmation level: high.
 
-- 创建或更新文章/媒体记录；设置 Anki 分类和标签。
-- 直接执行 `wp db query` 更新文章及附件创建/修改时间；刷新缓存。
-- 重复执行尽可能复用同标题/时间的文章与相同媒体路径的附件。
+- Historical statistics PDF: file; required
 
-## 注意事项
+## Requirements and effects
 
-- 会直接修改 WordPress 数据库，先备份数据库与上传目录。
-- 脚本先进入 WordPress 目录，使用相对 PDF 路径可能找不到源文件；优先绝对路径。
-- 不是对 WordPress 进行普通“日期排序”，而是实际回填历史记录。
+Requires WP-CLI and the configured local WordPress installation. PDF filenames must follow anki-stats-YYYY-MM-DD@HH-MM-SS.pdf. Writes posts and attachments, sets historical timestamps, then verifies dates, media paths, parent linkage, category and tag.
 
-## 来源与验证
+## Tool management
 
-- 来源：用户提供的 `bin.zip` 中的 `bin/anki-time-travel.sh`。
-- 源文件 SHA-256：`08cafaed6a8f48114e08950e0ffbfe3482749d8b0d7d8a7997425fc56a3b2085`。
-- 验证状态：**已静态读取代码；未运行脚本、未验证目标服务/依赖。**
+Disable preserves the script, settings and manual. Mark as removed hides the entry without deleting its files. User-tool registration is independent of system extension package installation.
 
-## LauncherOnOS 集成建议
+## Execution visibility
 
-建议使用 `launcheronos register` 注册现有入口，不复制依赖环境或目标程序。
+The interface shows the complete command. Legacy interactive scripts run in a terminal that keeps the output and exit code visible until Enter is pressed. System extensions use the separate execution log panel and save logs automatically.

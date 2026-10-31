@@ -1,42 +1,38 @@
-# thunderbird-experiment-restore-latest — 恢复最近的 Thunderbird 实验前备份
+# Restore latest Thunderbird experiment backup
 
-> 分类：CalDAV 与 Thunderbird · 状态：维护 / 恢复工具 · 风险：极高 · 启动器：register
+Restore a TaskFix profile from the latest before-experiment backup after backing up the current profile. Requires YES confirmation.
 
-## 功能
+## Availability
 
-从最近一次 `-before-experiment` 备份恢复 Thunderbird TaskFix Profile，恢复前先将当前 Profile 再备份，并要求用户键入 YES。
+- Category: CalDAV and Thunderbird
+- Status: Available; real-system acceptance pending
+- Risk: critical
 
-## 用法
+## Command line
 
 ```bash
-thunderbird-experiment-restore-latest
+mint-toolbox --run thunderbird-experiment-restore-latest --help
 ```
 
-## 参数与选项
+The original script arguments are passed through unchanged. Inspect the full command before confirming an operation. External launchers require their existing application or virtual environment; that runtime is not bundled.
 
-- 无命令行参数；交互确认必须键入 `YES`。
+## Graphical actions
 
-## 依赖与运行环境
+### Restore the latest experimental backup
 
-- 使用 `/home/andrew/.local/share/thunderbird-taskfix/profile`。
-- 读取 `/home/andrew/Thunderbird-Experiment-Backups` 中最近的实验前快照。
+Replaces a Thunderbird profile. Close Thunderbird first. The script also requires YES confirmation.
 
-## 输出与副作用
+Confirmation level: critical.
 
-- 关闭 Thunderbird 后运行；将当前 Profile 移至带时间戳的旧目录，再将备份副本替换为工作 Profile。
-- 创建恢复前应急备份。
 
-## 注意事项
+## Requirements and effects
 
-- 会整体切换 Thunderbird Profile；重要邮件、日历或任务状态可能回退。
-- 恢复完成后检查数据一致性，不要在 Thunderbird 仍运行时恢复。
+This entry uses the machine-specific executable or profile paths from the original script. Verify those paths and close conflicting applications before running it. Restoring a profile replaces live data; the script requires explicit confirmation.
 
-## 来源与验证
+## Tool management
 
-- 来源：用户提供的 `bin.zip` 中的 `bin/thunderbird-experiment-restore-latest`。
-- 源文件 SHA-256：`e0f927f84ecdb3ef7fcb37c8522280904cda538d219a66db369c3b910bc6be08`。
-- 验证状态：**已静态读取代码；未运行脚本、未验证目标服务/依赖。**
+Disable preserves the script, settings and manual. Mark as removed hides the entry without deleting its files. User-tool registration is independent of system extension package installation.
 
-## LauncherOnOS 集成建议
+## Execution visibility
 
-建议使用 `launcheronos register` 注册现有入口，不复制依赖环境或目标程序。
+The interface shows the complete command. Legacy interactive scripts run in a terminal that keeps the output and exit code visible until Enter is pressed. System extensions use the separate execution log panel and save logs automatically.

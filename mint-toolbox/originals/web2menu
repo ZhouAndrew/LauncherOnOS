@@ -118,7 +118,7 @@ def normalize_url(value):
     value = value.strip()
 
     if not value:
-        raise ValueError("URL 不能为空")
+        raise ValueError("URL must not be empty")
 
     if "://" not in value:
         value = "https://" + value
@@ -126,10 +126,10 @@ def normalize_url(value):
     parsed = urlparse(value)
 
     if parsed.scheme not in {"http", "https"}:
-        raise ValueError("只支持 HTTP 或 HTTPS 地址")
+        raise ValueError("Only HTTP and HTTPS URLs are supported")
 
     if not parsed.netloc:
-        raise ValueError("URL 格式不正确")
+        raise ValueError("Invalid URL format")
 
     return value
 
@@ -148,7 +148,7 @@ def fetch(url, max_size, accept):
         data = response.read(max_size + 1)
 
         if len(data) > max_size:
-            raise ValueError("下载内容超过允许大小")
+            raise ValueError("Download exceeds the allowed size")
 
         content_type = (
             response.headers.get_content_type()
@@ -511,7 +511,7 @@ def desktop_value(value):
 
 
 def exec_quote(value):
-    # .desktop 的 Exec 字段把 % 作为特殊字段代码。
+    # The desktop Exec field treats percent signs as field codes.
     value = value.replace("%", "%%")
 
     for character in (
@@ -555,7 +555,7 @@ def create_desktop(name, url, icon, stem):
             "Version=1.0",
             "Type=Application",
             f"Name={desktop_value(name)}",
-            f"Comment={desktop_value('打开 ' + url)}",
+            f"Comment={desktop_value('Open ' + url)}",
             f"Exec=xdg-open {exec_quote(url)}",
             f"Icon={desktop_value(icon_value)}",
             "Terminal=false",
@@ -578,25 +578,25 @@ def create_desktop(name, url, icon, stem):
 
 def main():
     parser_arguments = argparse.ArgumentParser(
-        description="把网页添加到 Linux Mint/Cinnamon 主菜单"
+        description="Add a website to the Linux Mint/Cinnamon application menu"
     )
 
     parser_arguments.add_argument(
         "url",
         nargs="?",
-        help="要添加的网页 URL",
+        help="Website URL to add",
     )
 
     parser_arguments.add_argument(
         "--name",
-        help="自定义菜单名称；默认读取网页标题",
+        help="Custom menu name; defaults to the website title",
     )
 
     arguments = parser_arguments.parse_args()
 
     entered_url = (
         arguments.url
-        or input("请输入网页 URL：").strip()
+        or input("Enter website URL: ").strip()
     )
 
     try:
@@ -604,7 +604,7 @@ def main():
 
     except ValueError as error:
         print(
-            f"错误：{error}",
+            f"Error: {error}",
             file=sys.stderr,
         )
         return 2
@@ -612,7 +612,7 @@ def main():
     page_parser = PageParser()
     final_url = url
 
-    print("正在读取网页标题和图标信息……")
+    print("Reading website title and icon metadata...")
 
     try:
         data, final_url, content_type, charset = fetch(
@@ -636,7 +636,7 @@ def main():
         OSError,
     ) as error:
         print(
-            f"警告：读取网页失败：{error}",
+            f"Warning: could not read website: {error}",
             file=sys.stderr,
         )
 
@@ -663,7 +663,7 @@ def main():
         / ".local/share/icons/web-apps"
     )
 
-    print("正在查找并下载网页图标……")
+    print("Finding and downloading website icon...")
 
     icon = download_icon(
         final_url,
@@ -674,8 +674,8 @@ def main():
 
     if icon is None:
         print(
-            "警告：没有找到可用图标，"
-            "将使用系统默认浏览器图标。",
+            "Warning: no usable icon was found. "
+            "Using the default browser icon.",
             file=sys.stderr,
         )
 
@@ -702,16 +702,16 @@ def main():
         )
 
     print()
-    print("添加完成：")
-    print(f"  名称：{name}")
+    print("Added: ")
+    print(f"  Name: {name}")
     print(f"  URL：{final_url}")
-    print(f"  启动项：{desktop_path}")
+    print(f"  Desktop entry: {desktop_path}")
     print(
-        f"  图标："
+        f"  Icon: "
         f"{icon if icon else 'web-browser'}"
     )
     print()
-    print("现在可以打开 Cinnamon 主菜单并搜索该名称。")
+    print("Open the Cinnamon application menu and search for this name.")
 
     return 0
 

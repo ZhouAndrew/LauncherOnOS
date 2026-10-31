@@ -1,41 +1,32 @@
-# podman-compose — Podman Compose pipx 入口
+# Podman Compose pipx launcher
 
-> 分类：容器与开发 · 状态：外部程序入口 · 风险：取决于参数 · 启动器：register
+Forward CLI arguments to podman_compose.main in its external pipx environment.
 
-## 功能
+## Availability
 
-将 CLI 参数交给 pipx 虚拟环境中的 `podman_compose.main`，用于 Podman Compose 项目操作。
+- Category: Containers and development
+- Status: Requires an external runtime
+- Risk: argument-dependent
 
-## 用法
+## Command line
 
 ```bash
-podman-compose --help
-podman-compose [podman-compose 的子命令及参数]
+mint-toolbox --run podman-compose --help
 ```
 
-## 参数与选项
+The original script arguments are passed through unchanged. Inspect the full command before confirming an operation. External launchers require their existing application or virtual environment; that runtime is not bundled.
 
-- 无自定义选项；所有参数由已安装的第三方 podman-compose 解释。
+## Graphical actions
 
-## 依赖与运行环境
+This reference entry has no graphical actions. Read the original CLI help before use. Archived and removed tools are not launched by default.
+## Requirements and effects
 
-- shebang 固定为 `/home/andrew/.local/share/pipx/venvs/podman-compose/bin/python`，必须在对应系统上有效。
-- 需要 pipx 安装的 podman-compose 及其容器运行环境。
+This entry uses the machine-specific executable or profile paths from the original script. Verify those paths and close conflicting applications before running it. Restoring a profile replaces live data; the script requires explicit confirmation.
 
-## 输出与副作用
+## Tool management
 
-- 取决于传入的第三方子命令，可能创建、启动、停止或删除容器。
+Disable preserves the script, settings and manual. Mark as removed hides the entry without deleting its files. User-tool registration is independent of system extension package installation.
 
-## 注意事项
+## Execution visibility
 
-- 这是 pipx 自动生成的第三方 entry point，不能视为可单独复制安装的脚本；使用 `register`。
-
-## 来源与验证
-
-- 来源：用户提供的 `bin.zip` 中的 `bin/podman-compose`。
-- 源文件 SHA-256：`f6b91f50ef2c54264d3a68588f3e76abe37024f67ec144da6a293e98c09f8dd4`。
-- 验证状态：**已静态读取代码；未运行脚本、未验证目标服务/依赖。**
-
-## LauncherOnOS 集成建议
-
-建议使用 `launcheronos register` 注册现有入口，不复制依赖环境或目标程序。
+The interface shows the complete command. Legacy interactive scripts run in a terminal that keeps the output and exit code visible until Enter is pressed. System extensions use the separate execution log panel and save logs automatically.

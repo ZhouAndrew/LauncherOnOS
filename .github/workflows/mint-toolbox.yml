@@ -1,7 +1,7 @@
 name: Mint Toolbox
 on:
   push:
-    branches: [main, feat/mint-toolbox-system-plugins]
+    branches: [main, feat/mint-toolbox-v0.4]
   pull_request:
 jobs:
   test:
@@ -18,5 +18,5 @@ jobs:
         run: xvfb-run -a python3 -m unittest discover -s mint-toolbox/tests -v
       - uses: actions/upload-artifact@v4
         with:
-          name: Mint-Toolbox-v0.3.0
+          name: Mint-Toolbox-v0.4.0
           path: mint-toolbox/

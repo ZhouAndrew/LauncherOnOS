@@ -1,14 +1,11 @@
 [Nemo Action]
 Active=true
 Name=Compress to ZIP and delete
-Name[zh_CN]=压缩为 ZIP 并删除
-Name[zh_TW]=壓縮為 ZIP 並刪除
 Comment=Verify ZIP contents, then move originals to Trash
-Comment[zh_CN]=验证 ZIP 内容后，将原文件移入回收站
 Exec=/usr/bin/mint-toolbox-zip-trash --gui %F
 Icon-Name=package-x-generic
 Selection=notnone
 Extensions=any;
-Dependencies=zip;unzip;gio;zenity;/usr/bin/mint-toolbox-zip-trash;
+Dependencies=zip;unzip;gio;/usr/bin/mint-toolbox-zip-trash;
 Quote=double
 UriScheme=file

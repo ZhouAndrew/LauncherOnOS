@@ -1,46 +1,47 @@
-# import_wechat_export — 将微信聊天导出内容导入 WordPress
+# Import WeChat exports into WordPress
 
-> 分类：WordPress · 状态：实用工具 / 高风险 · 风险：高 · 启动器：register
+Synchronize exported assets to WordPress uploads and create or update posts embedding messages-unlocked.html. Contains private chat data.
 
-## 功能
+## Availability
 
-将 WeChatDataAnalysis 的会话导出目录同步到 WordPress uploads，并为每个 `messages-unlocked.html` 创建或更新一篇文章，内嵌 HTML 聊天记录。
+- Category: WordPress
+- Status: Available; real-system acceptance pending
+- Risk: high
 
-## 用法
+## Command line
 
 ```bash
-import_wechat_export /absolute/path/to/export --dry-run
-import_wechat_export /absolute/path/to/export
+mint-toolbox --run import_wechat_export --help
 ```
 
-## 参数与选项
+The original script arguments are passed through unchanged. Inspect the full command before confirming an operation. External launchers require their existing application or virtual environment; that runtime is not bundled.
 
-- `[export_dir]`：导出根目录，默认当前目录，要求包含 `conversations/`。
-- `--dry-run`：不执行 rsync 复制与 WordPress 修改。
+## Graphical actions
 
-## 依赖与运行环境
+### Preview import
 
-- WordPress 根目录在源码中固定为 `/var/www/html/wordpress`。
-- 需要 `wp`、`sudo`/`runuser`、`rsync`，WordPress 用户 `www-data`；可能依赖 `unlock_wechat_export` 命令。
+The script may generate unlocked HTML before its dry-run checks. Preview can write files.
 
-## 输出与副作用
+Confirmation level: medium.
 
-- 正常模式通过 `rsync -a --delete` 同步数据到 `wp-content/uploads/wechat-archive/<导出目录名>`：目标中多余文件可能被删除。
-- 创建或更新 WordPress `post`（不创建 `page`），更新元数据并刷新缓存。
-- **重要：即使 `--dry-run`，如果缺少解锁后的 HTML，脚本仍可能先自动调用 `unlock_wechat_export`，从而生成 `messages-unlocked.html`。
+- WeChat export root folder: folder; required
 
-## 注意事项
+### Import WeChat records into WordPress
 
-- 涉及聊天隐私与公开网页权限，使用前确认站点访问控制。
-- 删除同步目标的风险来自 `rsync --delete`，务必备份上传目录。
-- `--dry-run` 不是全程零写入保证，应先在副本导出目录中试验。
+Copies exported assets and creates or updates WordPress posts containing private chats.
 
-## 来源与验证
+Confirmation level: high.
 
-- 来源：用户提供的 `bin.zip` 中的 `bin/import_wechat_export`。
-- 源文件 SHA-256：`99c2e4cb2afd3aefdc05ab6358f482eaef3a6be706e44272fec0c74554474dd2`。
-- 验证状态：**已静态读取代码；未运行脚本、未验证目标服务/依赖。**
+- WeChat export root folder: folder; required
 
-## LauncherOnOS 集成建议
+## Requirements and effects
 
-建议使用 `launcheronos register` 注册现有入口，不复制依赖环境或目标程序。
+Contains private chat information. Requires WP-CLI and the configured WordPress upload directory. Preview may generate unlocked HTML before checking planned imports. Existing WordPress post-title prefixes are retained for compatibility; this does not rename existing posts.
+
+## Tool management
+
+Disable preserves the script, settings and manual. Mark as removed hides the entry without deleting its files. User-tool registration is independent of system extension package installation.
+
+## Execution visibility
+
+The interface shows the complete command. Legacy interactive scripts run in a terminal that keeps the output and exit code visible until Enter is pressed. System extensions use the separate execution log panel and save logs automatically.

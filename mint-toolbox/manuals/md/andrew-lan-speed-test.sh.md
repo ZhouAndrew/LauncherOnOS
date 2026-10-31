@@ -1,52 +1,60 @@
-# andrew-lan-speed-test.sh — 局域网网速与网线测试
+# LAN speed and cable diagnostics
 
-> 分类：网络与系统 · 状态：使用中 / 待实机验收 · 风险：中 · 启动器：register
+Inspect link speed, duplex mode and error counters; run bidirectional iperf3 tests and optional cable diagnostics.
 
-## 功能
+## Availability
 
-检查有线网卡的链路速率、双工模式、错误计数；通过 iperf3 测试双向 LAN 吞吐，并可运行网线物理诊断。
+- Category: Network and system
+- Status: Available; real-system acceptance pending
+- Risk: medium
 
-## 用法
+## Command line
 
 ```bash
-andrew-lan-speed-test.sh --help
-andrew-lan-speed-test.sh
-andrew-lan-speed-test.sh 192.168.1.50
-andrew-lan-speed-test.sh --server
-andrew-lan-speed-test.sh --cable-test
+mint-toolbox --run andrew-lan-speed-test.sh --help
 ```
 
-## 参数与选项
+The original script arguments are passed through unchanged. Inspect the full command before confirming an operation. External launchers require their existing application or virtual environment; that runtime is not bundled.
 
-- 不带参数：读取链路信息，并可交互输入对端 IP。
-- `<IP>`：对指定 iperf3 服务端测试。
-- `--server`：本机前台启动 iperf3 服务。
-- `--cable-test`：ethtool 网线诊断（可能临时断网）。
-- `-h`、`--help`：帮助。
+## Graphical actions
 
-## 依赖与运行环境
+### Inspect network adapter and link
 
-- Linux Mint/Ubuntu/Debian；`ip`、`ethtool`、`iperf3`、`ping`。
-- 缺少 iproute2 / ethtool / iperf3 时脚本会通过 sudo apt 自动安装。
-- 环境变量：`PORT=5201`、`DURATION=15`、`PARALLEL=4`。
+The script may install missing packages and ask for a test IP address.
 
-## 输出与副作用
+Confirmation level: medium.
 
-- 普通客户端模式主要读取网络状态并产生测试流量。
-- `--server` 持续监听指定 TCP 端口，直到终止。
-- `--cable-test` 可临时影响网络链路。
 
-## 注意事项
+### Test connection to another device
 
-- 不要在远程 SSH 会话执行网线诊断（脚本对此有保护）。
-- 对端必须运行 iperf3 服务才能测吞吐；网速结果测的是整条路径。
+Run an iperf3 server on the peer. Dependencies may need installation.
 
-## 来源与验证
+Confirmation level: medium.
 
-- 来源：用户提供的 `bin.zip` 中的 `bin/andrew-lan-speed-test.sh`。
-- 源文件 SHA-256：`259824d6c957e3a30be5f32e8d21ae15a719391d2a53d2571233f4700ff0b3ad`。
-- 验证状态：**已静态读取代码；未运行脚本、未验证目标服务/依赖。**
+- Peer IP address or hostname: text; required
 
-## LauncherOnOS 集成建议
+### Start a speed-test server
 
-建议使用 `launcheronos register` 注册现有入口，不复制依赖环境或目标程序。
+Starts a local iperf3 listener. Close the terminal to stop it.
+
+Confirmation level: medium.
+
+
+### Test network cable
+
+Cable diagnostics may interrupt connectivity. Do not run over SSH.
+
+Confirmation level: high.
+
+
+## Requirements and effects
+
+Requires ethtool, iperf3 and iproute2. The script can install missing packages. Cable tests can disconnect the adapter and are refused over SSH. For throughput tests, run iperf3 -s on the peer.
+
+## Tool management
+
+Disable preserves the script, settings and manual. Mark as removed hides the entry without deleting its files. User-tool registration is independent of system extension package installation.
+
+## Execution visibility
+
+The interface shows the complete command. Legacy interactive scripts run in a terminal that keeps the output and exit code visible until Enter is pressed. System extensions use the separate execution log panel and save logs automatically.

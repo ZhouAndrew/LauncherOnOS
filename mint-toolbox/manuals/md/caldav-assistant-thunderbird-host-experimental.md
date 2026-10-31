@@ -1,40 +1,32 @@
-# caldav-assistant-thunderbird-host-experimental — CalDAV Assistant Thunderbird 原生消息主机入口
+# CalDAV Assistant native messaging host
 
-> 分类：CalDAV 与 Thunderbird · 状态：实验入口 · 风险：中 · 启动器：register
+Launch the isolated Python native_host.py used by the Thunderbird Native Messaging integration.
 
-## 功能
+## Availability
 
-直接启动独立虚拟环境里的 Python `host/native_host.py`，供 Thunderbird 扩展的 Native Messaging 通信使用。
+- Category: CalDAV and Thunderbird
+- Status: Archived; not launched by default
+- Risk: medium
 
-## 用法
+## Command line
 
 ```bash
-（由 Thunderbird 的 Native Messaging 机制调用；不建议在普通终端中直接操作）
+mint-toolbox --run caldav-assistant-thunderbird-host-experimental --help
 ```
 
-## 参数与选项
+The original script arguments are passed through unchanged. Inspect the full command before confirming an operation. External launchers require their existing application or virtual environment; that runtime is not bundled.
 
-- 脚本不解析或转发参数。
+## Graphical actions
 
-## 依赖与运行环境
+This reference entry has no graphical actions. Read the original CLI help before use. Archived and removed tools are not launched by default.
+## Requirements and effects
 
-- 依赖固定路径 `/home/andrew/.local/share/caldav-assistant-thunderbird-experimental/venv/bin/python` 及 `host/native_host.py`。
+This entry uses the machine-specific executable or profile paths from the original script. Verify those paths and close conflicting applications before running it. Restoring a profile replaces live data; the script requires explicit confirmation.
 
-## 输出与副作用
+## Tool management
 
-- 启动原生消息主机进程；具体数据行为取决于未随本文件提供的外部 `native_host.py`。
+Disable preserves the script, settings and manual. Mark as removed hides the entry without deleting its files. User-tool registration is independent of system extension package installation.
 
-## 注意事项
+## Execution visibility
 
-- 这里只包含 2 行包装器，不能据此推断服务端能力或保证可独立运行。
-- 此入口不应与普通命令行工具一样在菜单中直接启动。
-
-## 来源与验证
-
-- 来源：用户提供的 `bin.zip` 中的 `bin/caldav-assistant-thunderbird-host-experimental`。
-- 源文件 SHA-256：`72b51f24241eeca67cdf3e731e8e4bc6095a31591b75199a8a44f76ceed85d1b`。
-- 验证状态：**已静态读取代码；未运行脚本、未验证目标服务/依赖。**
-
-## LauncherOnOS 集成建议
-
-建议使用 `launcheronos register` 注册现有入口，不复制依赖环境或目标程序。
+The interface shows the complete command. Legacy interactive scripts run in a terminal that keeps the output and exit code visible until Enter is pressed. System extensions use the separate execution log panel and save logs automatically.

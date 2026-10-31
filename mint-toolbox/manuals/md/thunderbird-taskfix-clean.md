@@ -1,40 +1,38 @@
-# thunderbird-taskfix-clean — Thunderbird TaskFix Clean 启动器
+# Thunderbird TaskFix Clean launcher
 
-> 分类：CalDAV 与 Thunderbird · 状态：独立测试入口 · 风险：中 · 启动器：register
+Launch TaskFix Clean with its isolated application and profile.
 
-## 功能
+## Availability
 
-用 TaskFix Clean 版的独立程序和独立 Profile 启动 Thunderbird。
+- Category: CalDAV and Thunderbird
+- Status: Available; real-system acceptance pending
+- Risk: medium
 
-## 用法
+## Command line
 
 ```bash
-thunderbird-taskfix-clean [Thunderbird 参数]
+mint-toolbox --run thunderbird-taskfix-clean --help
 ```
 
-## 参数与选项
+The original script arguments are passed through unchanged. Inspect the full command before confirming an operation. External launchers require their existing application or virtual environment; that runtime is not bundled.
 
-- 全部参数透传 Thunderbird；没有脚本级选项。
+## Graphical actions
 
-## 依赖与运行环境
+### Launch TaskFix Clean
 
-- 固定程序 `/home/andrew/.local/opt/thunderbird-taskfix-clean-153.1.0/thunderbird`。
-- 固定数据 `/home/andrew/.local/share/thunderbird-taskfix-clean/profile`。
+Launch TaskFix Clean with its isolated application and profile.
 
-## 输出与副作用
+Confirmation level: low.
 
-- 启动 Thunderbird；实际数据修改由外部程序完成。
 
-## 注意事项
+## Requirements and effects
 
-- 不同 Profile 之间的数据不会自动共享；不要误以为它能恢复旧数据。
+This entry uses the machine-specific executable or profile paths from the original script. Verify those paths and close conflicting applications before running it. Restoring a profile replaces live data; the script requires explicit confirmation.
 
-## 来源与验证
+## Tool management
 
-- 来源：用户提供的 `bin.zip` 中的 `bin/thunderbird-taskfix-clean`。
-- 源文件 SHA-256：`26279a4cc4adf4624669d4a49313fe83f1f3f209550733fc833cb490eb0b1f0f`。
-- 验证状态：**已静态读取代码；未运行脚本、未验证目标服务/依赖。**
+Disable preserves the script, settings and manual. Mark as removed hides the entry without deleting its files. User-tool registration is independent of system extension package installation.
 
-## LauncherOnOS 集成建议
+## Execution visibility
 
-建议使用 `launcheronos register` 注册现有入口，不复制依赖环境或目标程序。
+The interface shows the complete command. Legacy interactive scripts run in a terminal that keeps the output and exit code visible until Enter is pressed. System extensions use the separate execution log panel and save logs automatically.

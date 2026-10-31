@@ -28,23 +28,23 @@ html, body {
 
 def unlock_html(src: Path, overwrite: bool = False) -> tuple[bool, str]:
     """
-    处理单个 messages.html，
-    在同目录生成 messages-unlocked.html。
+    Process one messages.html file and
+    create messages-unlocked.html in the same directory.
     """
 
     dst = src.with_name("messages-unlocked.html")
 
     if dst.exists() and not overwrite:
-        return False, f"跳过，目标已存在：{dst}"
+        return False, f"Skipped; destination already exists: {dst}"
 
     try:
         html = src.read_text(encoding="utf-8")
     except Exception as exc:
-        return False, f"读取失败：{src}\n  原因：{exc}"
+        return False, f"Read failed: {src}\n  Reason: {exc}"
 
     original_size = len(html.encode("utf-8"))
 
-    # 1. 删除隐藏聊天主体的完整性 Gate CSS
+    # 1. Remove integrity-gate CSS that hides chat content.
     html = re.sub(
         r'<style\b[^>]*\bid=["\']wceGateStyle["\'][^>]*>.*?</style>',
         '',
@@ -52,7 +52,7 @@ def unlock_html(src: Path, overwrite: bool = False) -> tuple[bool, str]:
         flags=re.I | re.S,
     )
 
-    # 2. 删除完整性验证脚本
+    # 2. Remove integrity-check scripts.
     html = re.sub(
         r'<script\b[^>]*\bdata-wce-integrity-bundle=["\']1["\'][^>]*>'
         r'.*?</script>',
@@ -61,8 +61,8 @@ def unlock_html(src: Path, overwrite: bool = False) -> tuple[bool, str]:
         flags=re.I | re.S,
     )
 
-    # 3. 删除 WCE 运行时脚本 r-*.js
-    # 避免它再次执行校验并显示失败页面
+    # 3. Remove WCE runtime scripts r-*.js.
+    # Prevent another validation attempt from displaying a failure page.
     html = re.sub(
         r'<script\b[^>]*\bsrc=["\'][^"\']*/assets/_wce/r-[^"\']+\.js["\']'
         r'[^>]*>.*?</script>',
@@ -71,7 +71,7 @@ def unlock_html(src: Path, overwrite: bool = False) -> tuple[bool, str]:
         flags=re.I | re.S,
     )
 
-    # 兼容 ../../assets/_wce/r-xxx.js 这种写法
+    # Also match paths such as ../../assets/_wce/r-xxx.js.
     html = re.sub(
         r'<script\b[^>]*\bsrc=["\'][^"\']*assets/_wce/r-[^"\']+\.js["\']'
         r'[^>]*>.*?</script>',
@@ -80,7 +80,7 @@ def unlock_html(src: Path, overwrite: bool = False) -> tuple[bool, str]:
         flags=re.I | re.S,
     )
 
-    # 4. 删除“需要 JavaScript”的顶部提示
+    # 4. Remove the JavaScript-required banner.
     html = re.sub(
         r'<div\b[^>]*\bid=["\']wceJsMissing["\'][^>]*>.*?</div>',
         '',
@@ -88,7 +88,7 @@ def unlock_html(src: Path, overwrite: bool = False) -> tuple[bool, str]:
         flags=re.I | re.S,
     )
 
-    # 5. 给 <html> 强制添加校验通过状态
+    # 5. Set the verified state on the html element.
     html_tag_match = re.search(r'<html\b([^>]*)>', html, flags=re.I)
 
     if html_tag_match:
@@ -112,7 +112,7 @@ def unlock_html(src: Path, overwrite: bool = False) -> tuple[bool, str]:
 
         html = html.replace(old_tag, new_tag, 1)
 
-    # 6. 强制显示聊天主体
+    # 6. Make the chat body visible.
     if 'id="wceForceShow"' not in html and "id='wceForceShow'" not in html:
         if re.search(r'</head\s*>', html, flags=re.I):
             html = re.sub(
@@ -128,22 +128,22 @@ def unlock_html(src: Path, overwrite: bool = False) -> tuple[bool, str]:
     try:
         dst.write_text(html, encoding="utf-8")
     except Exception as exc:
-        return False, f"写入失败：{dst}\n  原因：{exc}"
+        return False, f"Write failed: {dst}\n  Reason: {exc}"
 
     new_size = dst.stat().st_size
 
     return True, (
-        f"成功：{src.parent.name}\n"
-        f"  原始：{src.name} ({original_size} bytes)\n"
-        f"  输出：{dst.name} ({new_size} bytes)"
+        f"Success: {src.parent.name}\n"
+        f"  Original: {src.name} ({original_size} bytes)\n"
+        f"  Output: {dst.name} ({new_size} bytes)"
     )
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "批量移除 WeChatDataAnalysis 导出 HTML 的完整性验证，"
-            "并生成 messages-unlocked.html。"
+            "Remove integrity gates from exported WeChatDataAnalysis HTML and "
+            "generate messages-unlocked.html files."
         )
     )
 
@@ -151,13 +151,13 @@ def main() -> int:
         "root",
         nargs="?",
         default=".",
-        help="微信导出目录，默认是当前目录",
+        help="WeChat export directory; defaults to the current directory",
     )
 
     parser.add_argument(
         "--overwrite",
         action="store_true",
-        help="覆盖已经存在的 messages-unlocked.html",
+        help="Overwrite existing messages-unlocked.html files",
     )
 
     args = parser.parse_args()
@@ -165,14 +165,14 @@ def main() -> int:
     root = Path(args.root).expanduser().resolve()
 
     if not root.exists():
-        print(f"错误：目录不存在：{root}", file=sys.stderr)
+        print(f"Error: directory does not exist: {root}", file=sys.stderr)
         return 1
 
     conversations_dir = root / "conversations"
 
     if not conversations_dir.is_dir():
         print(
-            f"错误：未找到 conversations 目录：{conversations_dir}",
+            f"Error: conversations directory not found: {conversations_dir}",
             file=sys.stderr,
         )
         return 1
@@ -181,13 +181,13 @@ def main() -> int:
 
     if not files:
         print(
-            f"错误：没有找到 conversations/*/messages.html",
+            f"Error: no conversations/*/messages.html files were found",
             file=sys.stderr,
         )
         return 1
 
-    print(f"导出目录：{root}")
-    print(f"发现对话：{len(files)} 个")
+    print(f"Export directory: {root}")
+    print(f"Conversations found: {len(files)}")
     print()
 
     success_count = 0
@@ -208,9 +208,9 @@ def main() -> int:
             skipped_count += 1
 
     print("=" * 60)
-    print(f"处理完成")
-    print(f"成功：{success_count}")
-    print(f"跳过或失败：{skipped_count}")
+    print(f"Processing complete")
+    print(f"Success: {success_count}")
+    print(f"Skipped or failed: {skipped_count}")
 
     return 0
 

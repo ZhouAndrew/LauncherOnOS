@@ -1,57 +1,74 @@
-# Mint Toolbox 系统扩展（v0.3.0）
+# System extensions
 
-打开主窗口的「系统扩展…」，或运行 `mint-toolbox --plugins`。
-启用会通过系统授权安装随附 deb，禁用会卸载对应包。取消授权不改变开关状态。
-界面读取 dpkg 状态，不使用独立的布尔开关伪装已安装。未配置完成的包会显示异常状态。
-现有「用户工具」登记及禁用功能保持独立。
+## Multiple tools
 
-```bash
-mint-toolbox --plugin-list
-mint-toolbox --plugin-enable zip-trash
-mint-toolbox --plugin-disable zip-trash
-```
+The table shows tool name, bundled version, installed package status and source-build availability.
+Search and status filters narrow the list without changing enabled states.
+Select a tool to use **Enable / Install**, **Disable / Uninstall**, or **Build from source...**.
+There is currently one bundled extension. The table and lifecycle are shared by every catalog entry;
+there are no placeholder tools presented as working extensions.
 
-管理员授权使用 pkexec；需要 apt-get、dpkg-query 和 dpkg-deb。
-安装依赖时可能需要联网。随附 deb 的 SHA-256、包名、版本和架构会在安装前核对。
-卸载只指定扩展包，不执行 autoremove；系统安装的依赖会保留。
-扩展属于系统级功能，安装/卸载影响所有用户。
+## Live commands and logs
 
-## 第一个扩展：压缩为 ZIP 并删除
+Operations display complete shell-quoted commands before starting them, followed by live combined stdout/stderr,
+current stage, command exit code and package status readback. Commands run with argument arrays, without a shell.
+Output is English where controlled by Mint Toolbox; filenames and external content are preserved.
 
-适用：Linux Mint Cinnamon 的 Nemo。通过 Nemo 原生 action 接口提供右键菜单，
-文件和文件夹可同目录多选，仅支持本地文件。
-Nemo 官方格式参考：https://github.com/linuxmint/nemo/blob/master/files/usr/share/nemo/actions/sample.nemo_action
+The log panel is separate from the description. It remains available after success or failure.
+Use **Copy log** or **Save log...**. Logs are automatically saved with mode 0600 under
+`$XDG_STATE_HOME/mint-toolbox/logs`, defaulting to `~/.local/state/mint-toolbox/logs`.
+Log files can include selected paths and package output; inspect them before sharing.
+There is no automatic log expiration; users can remove old log files themselves.
 
-1. 右键选择「压缩为 ZIP 并删除」，确认后开始压缩。
-2. 调用系统 zip 在原目录生成临时 ZIP，调用 unzip 检验。
-3. 逐项比较 ZIP 内容的 SHA-256 与原文件，检查原文件是否变化。
-4. 同目录发布 ZIP，不覆盖已有名称；重名自动追加编号。
-5. 通过 `gio trash` 将原文件移入系统回收站，可由文件管理器恢复。
+## Installation and compatibility
 
-单选输出 `<原名称>.zip`；多选输出 `Archive.zip`。
-不调用永久删除命令。压缩或校验失败时保留原文件；回收站不支持或部分失败时保留 ZIP，报告错误。
-符号链接、设备、套接字等特殊文件暂不支持，遇到时整体拒绝。
-ZIP 不保留全部 Linux ACL/扩展属性；不要用它替代系统备份。
-检测能发现常见的处理中修改，但不能锁住其他程序；压缩时请暂停编辑选中文件。
+1. Verify the bundled deb SHA-256, package name, version and architecture.
+2. Use apt simulation to check dependency resolution without modifying the system.
+3. Request administrator authorization through pkexec for the real apt operation.
+4. Read the dpkg database back. Incomplete states are reported rather than shown as disabled.
 
-扩展依赖由 deb 声明：Python 3.10+、zip、unzip、GIO、Zenity、Nemo。
-通常新开 Nemo 窗口即可看到菜单；未刷新时注销再登录。
-不要以 root 身份启动整个工具箱；仅安装/卸载时需要系统授权。
+Disable removes the extension package without autoremove. Dependencies remain installed.
+Installation and removal are system-wide. Cancelling authorization reports a failure without inventing an enabled state.
 
-## 构建与验证
+## Building from source
 
-```bash
-python3 packaging/build.py
-python3 -m unittest discover -s tests -v
-```
+Use **Build from source...** or `mint-toolbox --plugin-build zip-trash`.
+This is an explicit alternative when a bundled binary is incompatible or missing; it is not a fallback for every apt error.
 
-构建脚本更新 `debs/` 与 `system-plugins.json`，扩展包没有维护脚本。
-新增扩展：在 packaging 中添加打包内容，生成独立 deb，在清单加入唯一 ID、
-包名、版本、deb 相对路径及 SHA-256。管理器共享安装、卸载和状态回读机制。
-只随附经审核的扩展包，不将用户工具清单视为系统安装指令。
+Only reviewed source files bundled with the application are supported in this version.
+The catalog pins every source file by SHA-256 and declares the build command and required tools.
+The manager verifies those files, copies them into a fresh private cache directory, and runs the recipe as the current regular user.
+Root source builds are refused. Missing build tools are reported; this version does not install build dependencies automatically.
+For this extension, the tools are `python3`, `dpkg-deb`, and `xz` (Debian packages: python3, dpkg, xz-utils).
 
-本次容器验证：48 项测试，46 通过、2 跳过（图形环境、真实 GIO 缺失）；
-真实 zip/unzip 内容验证通过，隔离 dpkg 根目录安装/状态读取/卸载通过。
-隔离根目录没有依赖数据库，包生命周期检查使用 --force-depends，仅用于测试包文件落盘与移除；
-正式管理器使用 apt 安装依赖，不使用该参数。
-尚未完成 Linux Mint 桌面中的 pkexec 授权和 Nemo 菜单实机验收。
+The recipe must produce exactly one deb. Its package name, version and architecture are verified;
+apt then checks dependencies and installs it with administrator authorization.
+Sources and outputs remain under `$XDG_CACHE_HOME/mint-toolbox/builds` (default `~/.cache/mint-toolbox/builds`) for diagnosis.
+A changed source file fails verification. Deliberate source changes require updating the reviewed recipe hashes.
+This version does not fetch arbitrary repositories or promise automatic source porting.
+
+## ZIP and Trash extension
+
+Nemo's native context menu provides **Compress to ZIP and delete** for local files and folders.
+Select one or multiple entries from the same directory. Confirm the action to open a live execution window.
+
+The operation calls system zip and unzip, compares each archived file with its original SHA-256,
+checks for source changes, publishes the ZIP without overwriting existing names, then uses GIO to move originals to Trash.
+Single selections use the original name plus .zip. Multiple selections use Archive.zip.
+Existing ZIP names receive numbered suffixes.
+
+There is no permanent-deletion fallback. Compression or verification failure preserves originals.
+Trash failure preserves the verified ZIP and reports partial completion. Symbolic links and special files are rejected.
+ZIP does not preserve every Linux ACL or extended attribute; this is not a replacement for a full system backup.
+Files are checked for changes but are not locked against other applications. Pause edits while compressing.
+
+The package declares Python 3.10+, Tk, zip, unzip, GIO and Nemo dependencies.
+Open a new Nemo window after installation/removal; sign out and back in if its menu cache does not refresh.
+Nemo interface reference: https://github.com/linuxmint/nemo/blob/master/files/usr/share/nemo/actions/sample.nemo_action
+
+## Adding an extension
+
+Add a reviewed catalog entry with a unique ID and Debian package name, version, relative deb path, SHA-256 and description.
+Optionally add a source object with kind `bundled`, `requires`, a `files` mapping of relative paths to SHA-256 values,
+and an `argv` array. The standalone `{output}` argument is replaced with a fresh output directory.
+Recipes run without a shell. Never place install commands in source recipes.

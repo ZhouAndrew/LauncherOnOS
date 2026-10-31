@@ -1,42 +1,38 @@
-# thunderbird-taskfix — Thunderbird TaskFix 独立启动器
+# Thunderbird TaskFix launcher
 
-> 分类：CalDAV 与 Thunderbird · 状态：安装环境专用入口 · 风险：中 · 启动器：register
+Launch the fixed TaskFix build with its isolated profile, or explicitly choose the system profile.
 
-## 功能
+## Availability
 
-通过固定的 Thunderbird TaskFix 程序副本，默认使用独立 Profile 启动；支持切换到系统默认 Profile。
+- Category: CalDAV and Thunderbird
+- Status: Available; real-system acceptance pending
+- Risk: medium
 
-## 用法
+## Command line
 
 ```bash
-thunderbird-taskfix
-thunderbird-taskfix --system-profile
+mint-toolbox --run thunderbird-taskfix --help
 ```
 
-## 参数与选项
+The original script arguments are passed through unchanged. Inspect the full command before confirming an operation. External launchers require their existing application or virtual environment; that runtime is not bundled.
 
-- `--system-profile`：不指定独立 Profile，使用 Thunderbird 正常 Profile。
-- 其他参数透传 Thunderbird。
+## Graphical actions
 
-## 依赖与运行环境
+### Launch TaskFix
 
-- 固定程序 `/home/andrew/.local/opt/thunderbird-taskfix-153.1.0/thunderbird`。
-- 独立数据 `/home/andrew/.local/share/thunderbird-taskfix/profile`。
+Launch the fixed TaskFix build with its isolated profile, or explicitly choose the system profile.
 
-## 输出与副作用
+Confirmation level: low.
 
-- 可以创建独立 Profile 目录、启动 Thunderbird；Thunderbird 本体可写入其 Profile。
 
-## 注意事项
+## Requirements and effects
 
-- 使用 `--system-profile` 前务必关闭正常 Thunderbird 实例，避免意外路由到其他进程。
+This entry uses the machine-specific executable or profile paths from the original script. Verify those paths and close conflicting applications before running it. Restoring a profile replaces live data; the script requires explicit confirmation.
 
-## 来源与验证
+## Tool management
 
-- 来源：用户提供的 `bin.zip` 中的 `bin/thunderbird-taskfix`。
-- 源文件 SHA-256：`1936f1b748d0c72b674396a0a2dcbe445518e4b2e878c5f023d275199e8fefeb`。
-- 验证状态：**已静态读取代码；未运行脚本、未验证目标服务/依赖。**
+Disable preserves the script, settings and manual. Mark as removed hides the entry without deleting its files. User-tool registration is independent of system extension package installation.
 
-## LauncherOnOS 集成建议
+## Execution visibility
 
-建议使用 `launcheronos register` 注册现有入口，不复制依赖环境或目标程序。
+The interface shows the complete command. Legacy interactive scripts run in a terminal that keeps the output and exit code visible until Enter is pressed. System extensions use the separate execution log panel and save logs automatically.

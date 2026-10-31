@@ -1,41 +1,32 @@
-# vdirsyncer — vdirsyncer pipx 入口
+# vdirsyncer pipx launcher
 
-> 分类：CalDAV 与 Thunderbird · 状态：外部程序入口 · 风险：取决于参数 · 启动器：register
+Launch the third-party vdirsyncer CLI in its external pipx environment for calendar and contact synchronization.
 
-## 功能
+## Availability
 
-调用 pipx 环境中的第三方 `vdirsyncer.cli.app`，用于日历/联系人等同步流程。
+- Category: CalDAV and Thunderbird
+- Status: Requires an external runtime
+- Risk: argument-dependent
 
-## 用法
+## Command line
 
 ```bash
-vdirsyncer --help
-vdirsyncer [第三方子命令及参数]
+mint-toolbox --run vdirsyncer --help
 ```
 
-## 参数与选项
+The original script arguments are passed through unchanged. Inspect the full command before confirming an operation. External launchers require their existing application or virtual environment; that runtime is not bundled.
 
-- 本脚本不解析选项；详情取决于已安装的 vdirsyncer 版本。
+## Graphical actions
 
-## 依赖与运行环境
+This reference entry has no graphical actions. Read the original CLI help before use. Archived and removed tools are not launched by default.
+## Requirements and effects
 
-- 固定解释器 `/home/andrew/.local/share/pipx/venvs/vdirsyncer/bin/python`。
-- 需 pipx 安装的 vdirsyncer 及其独立配置。
+This entry uses the machine-specific executable or profile paths from the original script. Verify those paths and close conflicting applications before running it. Restoring a profile replaces live data; the script requires explicit confirmation.
 
-## 输出与副作用
+## Tool management
 
-- 具体同步命令可能修改本地或远端数据，单靠此入口不能确认。
+Disable preserves the script, settings and manual. Mark as removed hides the entry without deleting its files. User-tool registration is independent of system extension package installation.
 
-## 注意事项
+## Execution visibility
 
-- pipx 入口，不可独立复制安装，适合 `register`。
-
-## 来源与验证
-
-- 来源：用户提供的 `bin.zip` 中的 `bin/vdirsyncer`。
-- 源文件 SHA-256：`d6e2387c1f1373c6ba26426207c9fa0a9b3e6cdae38bc94c1b7e9748c1f3afae`。
-- 验证状态：**已静态读取代码；未运行脚本、未验证目标服务/依赖。**
-
-## LauncherOnOS 集成建议
-
-建议使用 `launcheronos register` 注册现有入口，不复制依赖环境或目标程序。
+The interface shows the complete command. Legacy interactive scripts run in a terminal that keeps the output and exit code visible until Enter is pressed. System extensions use the separate execution log panel and save logs automatically.

@@ -29,7 +29,6 @@ cat > "$desktop_dir/mint-toolbox.desktop" <<EOF
 Type=Application
 Version=1.0
 Name=Mint Toolbox
-Name[zh_CN]=Mint 实用工具集
 Comment=Integrated personal utilities
 Exec=$bin_dir/mint-toolbox --gui
 Icon=applications-utilities

@@ -1,39 +1,32 @@
-# thunderbird-experiment.before-profile-fix-20260930-200101 — Thunderbird 实验启动器：旧 Profile 修复前快照
+# Thunderbird experiment: legacy profile snapshot
 
-> 分类：CalDAV 与 Thunderbird · 状态：历史快照 / 禁止默认启动 · 风险：极高 · 启动器：skip
+Historical launcher using the old profile path. Retained only for reference.
 
-## 功能
+## Availability
 
-2026-09-30 的旧实验启动脚本，仍指向当时的 `~/.thunderbird/4vs0bf41.default-esr-1` Profile。
+- Category: CalDAV and Thunderbird
+- Status: Archived; not launched by default
+- Risk: critical
 
-## 用法
+## Command line
 
 ```bash
-（历史参考，禁止默认运行）
+mint-toolbox --run thunderbird-experiment.before-profile-fix-20260930-200101 --help
 ```
 
-## 参数与选项
+The original script arguments are passed through unchanged. Inspect the full command before confirming an operation. External launchers require their existing application or virtual environment; that runtime is not bundled.
 
-- 任何参数原样透传给当时的 Thunderbird 实验程序。
+## Graphical actions
 
-## 依赖与运行环境
+This reference entry has no graphical actions. Read the original CLI help before use. Archived and removed tools are not launched by default.
+## Requirements and effects
 
-- 固定旧版程序和旧 Profile 路径。
+This entry uses the machine-specific executable or profile paths from the original script. Verify those paths and close conflicting applications before running it. Restoring a profile replaces live data; the script requires explicit confirmation.
 
-## 输出与副作用
+## Tool management
 
-- 启动前备份旧 Profile，自动删除最早的多余实验备份以只保留最近 7 份，然后启动 Thunderbird。
+Disable preserves the script, settings and manual. Mark as removed hides the entry without deleting its files. User-tool registration is independent of system extension package installation.
 
-## 注意事项
+## Execution visibility
 
-- 包含备份清理的 `rm -rf`；与现行实验版路径不同，不能作为当前恢复流程使用。
-
-## 来源与验证
-
-- 来源：用户提供的 `bin.zip` 中的 `bin/thunderbird-experiment.before-profile-fix-20260930-200101`。
-- 源文件 SHA-256：`8f4e95f8d65732ec261c0ea917f6b9d12d2aa8e69dc73d1a6322104705809cc9`。
-- 验证状态：**已静态读取代码；未运行脚本、未验证目标服务/依赖。**
-
-## LauncherOnOS 集成建议
-
-不建议安装、运行或默认在交互菜单中展示；仅保留手册供追溯。
+The interface shows the complete command. Legacy interactive scripts run in a terminal that keeps the output and exit code visible until Enter is pressed. System extensions use the separate execution log panel and save logs automatically.

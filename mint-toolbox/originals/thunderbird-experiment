@@ -7,25 +7,25 @@ BACKUP_ROOT="/home/andrew/Thunderbird-Experiment-Backups"
 
 echo
 echo "============================================================"
-echo " Thunderbird 实验版"
+echo " Thunderbird experimental build"
 echo " PROGRAM : independent copy"
 echo " DATA    : shared with working TaskFix profile"
 echo "============================================================"
 echo
-echo "程序："
+echo "Application: "
 echo "  $BIN"
 echo
-echo "数据："
+echo "Data: "
 echo "  $PROFILE"
 echo
 
 if pgrep -u "$UID" -x thunderbird >/dev/null 2>&1 ||
    pgrep -u "$UID" -x thunderbird-bin >/dev/null 2>&1
 then
-    echo "✗ 已有 Thunderbird 正在运行。"
+    echo "✗ Thunderbird is already running."
     echo
-    echo "正式版和实验版共享数据，禁止同时运行。"
-    read -r -p "按 Enter 退出..."
+    echo "The stable and experimental builds share data; do not run them simultaneously."
+    read -r -p "Press Enter to exit..."
     exit 1
 fi
 
@@ -34,20 +34,20 @@ DEST="$BACKUP_ROOT/$STAMP-before-experiment"
 
 mkdir -p "$DEST"
 
-echo "启动前备份："
+echo "Pre-launch backup: "
 echo "  $DEST/profile"
 
 if ! cp -a --reflink=auto       "$PROFILE"       "$DEST/profile"
 then
-    echo "✗ 备份失败，停止启动。"
-    read -r -p "按 Enter 退出..."
+    echo "✗ Backup failed; launch cancelled."
+    read -r -p "Press Enter to exit..."
     exit 1
 fi
 
 rm -f     "$DEST/profile/lock"     "$DEST/profile/.parentlock"     "$DEST/profile/parent.lock"     2>/dev/null || true
 
-echo "✓ 备份成功"
+echo "✓ Backup successful"
 echo
 
-# 这是以前已经成功实际使用过的启动方式
+# This launch method was previously used successfully on the target system.
 "$BIN" -profile "$PROFILE" "$@"

@@ -1,45 +1,40 @@
-# web2menu — 把网站添加到 Cinnamon 应用菜单
+# Website application-menu entry
 
-> 分类：桌面与启动器 · 状态：当前版本 · 风险：中 · 启动器：install
+Fetch a website title and favicon and create a Linux Mint/Cinnamon desktop menu entry for the URL.
 
-## 功能
+## Availability
 
-获取网页标题与 favicon，为指定 URL 生成 Linux Mint / Cinnamon `.desktop` 菜单项。
+- Category: Desktop and launchers
+- Status: Available; real-system acceptance pending
+- Risk: medium
 
-## 用法
+## Command line
 
 ```bash
-web2menu https://example.org
-web2menu https://example.org --name "Example Site"
-web2menu
+mint-toolbox --run web2menu --help
 ```
 
-## 参数与选项
+The original script arguments are passed through unchanged. Inspect the full command before confirming an operation. External launchers require their existing application or virtual environment; that runtime is not bundled.
 
-- `[url]`：网页地址，未提供时交互输入。
-- `--name NAME`：自定义启动项名称。
+## Graphical actions
 
-## 依赖与运行环境
+### Add a website to the application menu
 
-- Python3 标准库，`xdg-open`；需要网络才能获得站点元数据和图标（失败时会降级）。
-- 生成用户级 `.desktop` 文件与网页图标；可选调用 `update-desktop-database`。
+Creates a Linux Mint/Cinnamon desktop application entry.
 
-## 输出与副作用
+Confirmation level: medium.
 
-- 写入用户的 `~/.local/share/applications` 及 `~/.local/share/icons/web-apps` 等路径。
-- 菜单项通过 `xdg-open` 使用默认浏览器打开网址。
+- Website URL: text; required
+- Display name (optional): text; optional
 
-## 注意事项
+## Requirements and effects
 
-- 会对输入地址发起网络请求；只使用可信的 URL。
-- 它不是安装网站软件，只是创建应用菜单快捷入口。
+Accepts HTTP/HTTPS URLs. Writes a desktop entry and downloaded icon to the current user application directories. The displayed website title is external content.
 
-## 来源与验证
+## Tool management
 
-- 来源：用户提供的 `bin.zip` 中的 `bin/web2menu`。
-- 源文件 SHA-256：`67d1da82ee503c610cd473c0f71653ae57aafe07d7a8a0d085fc32f2a7f6e708`。
-- 验证状态：**已静态读取代码；未运行脚本、未验证目标服务/依赖。**
+Disable preserves the script, settings and manual. Mark as removed hides the entry without deleting its files. User-tool registration is independent of system extension package installation.
 
-## LauncherOnOS 集成建议
+## Execution visibility
 
-可作为 standalone 源码脚本由 `launcheronos install` 管理；执行前仍须确认系统依赖和硬编码路径。
+The interface shows the complete command. Legacy interactive scripts run in a terminal that keeps the output and exit code visible until Enter is pressed. System extensions use the separate execution log panel and save logs automatically.
