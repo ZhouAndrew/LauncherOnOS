@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Anki Time Travel
+Comment=Import historical Anki PDF statistics into WordPress
+Exec=anki-time-travel --gui %F
+TryExec=anki-time-travel
+Icon=application-pdf
+Terminal=false
+Categories=Office;
+MimeType=application/pdf;
+StartupNotify=true
