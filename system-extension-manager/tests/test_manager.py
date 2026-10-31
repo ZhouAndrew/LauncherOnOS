@@ -62,6 +62,10 @@ class CatalogTests(unittest.TestCase):
              patch.object(Path, 'is_file', return_value=True), patch.object(lifecycle.os, 'access', return_value=True):
             self.assertEqual(lifecycle.launch_command('anki-time-travel'), ['/usr/bin/anki-time-travel', '--gui'])
 
+    def test_cli_install_failure_returns_an_error_without_a_traceback(self):
+        with patch.object(lifecycle, 'change', side_effect=subprocess.CalledProcessError(100, ['apt-get'])):
+            self.assertEqual(manager.main(['--enable', 'anki-time-travel']), 1)
+
     def test_cli_lists_both_extensions(self):
         result = subprocess.run([sys.executable, str(ROOT / 'manager.py'), '--list'],
                                 text=True, capture_output=True, timeout=10)

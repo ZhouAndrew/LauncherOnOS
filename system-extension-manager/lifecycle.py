@@ -215,6 +215,9 @@ def open_extension(key, log=None):
         log.stage('Opening ' + plugin(key)['name'])
         log.run(args)
         log.stage('Extension window closed')
+    except Exception as exc:
+        log.stage('FAILED: ' + str(exc))
+        raise
     finally:
         if owned:
             log.close()

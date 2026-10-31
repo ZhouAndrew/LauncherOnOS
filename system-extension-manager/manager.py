@@ -2,6 +2,7 @@
 """Manage independent system extensions using their bundled Debian packages."""
 import argparse
 import sys
+import subprocess
 import lifecycle
 
 
@@ -31,7 +32,7 @@ def main(argv=None):
         else:
             lifecycle.show_gui()
         return 0
-    except (OSError, ValueError, RuntimeError) as exc:
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
         print('Error:', exc, file=sys.stderr)
         return 1
 
