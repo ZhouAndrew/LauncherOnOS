@@ -5,7 +5,7 @@ A system-installable CLI and desktop tool for importing historical Anki statisti
 ## Install
 
 ```bash
-sudo apt install ./anki-time-travel_0.1.1_all.deb
+sudo apt install ./anki-time-travel_0.1.2_all.deb
 ```
 
 The package installs the `anki-time-travel` command and an **Anki Time Travel** application-menu entry.
@@ -60,3 +60,5 @@ python3 anki-time-travel/build.py
 ```
 
 The package uses the repository's tested Bash importer and shared log UI. No network download occurs during the build.
+
+Version 0.1.2 queries and validates a single canonical permalink for the imported Post ID before reporting success.

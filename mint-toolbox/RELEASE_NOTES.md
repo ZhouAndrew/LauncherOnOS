@@ -1,3 +1,9 @@
+# v0.4.2
+
+- Query the canonical permalink for the exact imported Post ID.
+- Reject multiple URLs or failed permalink queries before reporting success.
+- Includes the standalone Anki Time Travel 0.1.2 importer fix.
+
 # v0.4.1
 
 - Preserve file, directory, dangling and circular symbolic links in ZIP using system zip -y.

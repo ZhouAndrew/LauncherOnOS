@@ -322,11 +322,21 @@ EOF
     [[ " $CAT " == *" anki "* ]] || die "Verification failed: Category=Anki is missing."
     [[ " $TAG " == *" anki "* ]] || die "Verification failed: Tag=Anki is missing."
 
+    # Query the canonical permalink for this exact post, not a list of posts.
+    local POST_URL
+    [[ "$POST_ID" =~ ^[1-9][0-9]*$ ]] || die "Invalid post ID: $POST_ID"
+    if POST_URL="$(wp eval "echo get_permalink($POST_ID);")"; then
+        :
+    else
+        die "Could not read the permalink for post $POST_ID"
+    fi
+    [[ "$POST_URL" =~ ^https?://[^[:space:]]+$ ]] || die "Expected one HTTP(S) permalink for post $POST_ID; received: $POST_URL"
+
     ok "Verification passed"
 
     printf '\nPost ID:     %s\n' "$POST_ID"
     printf 'Attachment ID:     %s\n' "$ATTACH_ID"
-    printf 'Post URL:    %s\n' "$(wp post url "$POST_ID")"
+    printf 'Post URL:    %s\n' "$POST_URL"
     printf 'Media path:    %s\n' "$ACTUAL_PATH"
     printf 'Category:    Anki\n'
     printf 'Tag:         Anki\n'

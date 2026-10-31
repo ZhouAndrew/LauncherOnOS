@@ -488,7 +488,7 @@ def launch_gui() -> int:
     import tkinter as tk
     from tkinter import ttk, messagebox
     root = tk.Tk()
-    root.title('Mint Toolbox v0.4.1')
+    root.title('Mint Toolbox v0.4.2')
     root.geometry('1100x740')
     root.minsize(900, 600)
     style = ttk.Style(root)

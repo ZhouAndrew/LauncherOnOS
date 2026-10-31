@@ -1,4 +1,4 @@
-# Mint Toolbox v0.4.1 desktop acceptance
+# Mint Toolbox v0.4.2 desktop acceptance
 
 1. Run `bash install-and-open.sh` as a normal user. The System extensions window should use English.
 2. Inspect the tool table, search field, status filter, separate description and execution log.

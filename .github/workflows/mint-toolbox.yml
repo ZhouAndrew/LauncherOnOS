@@ -28,5 +28,5 @@ jobs:
           path: anki-time-travel/dist/*.deb
       - uses: actions/upload-artifact@v4
         with:
-          name: Mint-Toolbox-v0.4.1
+          name: Mint-Toolbox-v0.4.2
           path: mint-toolbox/
