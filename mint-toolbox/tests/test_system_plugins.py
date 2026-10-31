@@ -92,12 +92,83 @@ class ZipTests(unittest.TestCase):
             zip_trash.archive_and_trash([path], mutate)
         self.assertEqual(self.trashed, [])
 
-    def test_links_rejected(self):
-        path = self.root / 'link'
-        path.symlink_to('/etc/passwd')
+    def test_symbolic_link_is_stored_without_reading_target(self):
+        import os
+        import stat
+        import zipfile
+        target = self.root / 'target'
+        target.write_text('target must stay intact')
+        link = self.root / 'link'
+        link.symlink_to('target')
+        archive = zip_trash.archive_and_trash([link], self.run_command)
+        with zipfile.ZipFile(archive) as zipped:
+            entry = zipped.infolist()[0]
+            self.assertTrue(stat.S_ISLNK(entry.external_attr >> 16))
+            self.assertEqual(zipped.read(entry), b'target')
+            self.assertEqual(len(zipped.infolist()), 1)
+        restored = self.root / 'restored'
+        restored.mkdir()
+        subprocess.run(['/usr/bin/unzip', '-qq', str(archive), '-d', str(restored)], check=True)
+        self.assertTrue((restored / 'link').is_symlink())
+        self.assertEqual(os.readlink(restored / 'link'), 'target')
+        self.assertEqual(self.trashed, [link])
+        self.assertEqual(target.read_text(), 'target must stay intact')
+
+    def test_dangling_link_is_supported(self):
+        import zipfile
+        link = self.root / 'missing-link'
+        link.symlink_to('missing-target')
+        archive = zip_trash.archive_and_trash([link], self.run_command)
+        with zipfile.ZipFile(archive) as zipped:
+            self.assertEqual(zipped.read(zipped.infolist()[0]), b'missing-target')
+        self.assertEqual(self.trashed, [link])
+
+    def test_directory_and_circular_links_are_not_traversed(self):
+        import zipfile
+        folder = self.root / 'folder'
+        folder.mkdir()
+        (folder / 'cycle').symlink_to('.')
+        (folder / 'external').symlink_to('/etc')
+        archive = zip_trash.archive_and_trash([folder], self.run_command)
+        with zipfile.ZipFile(archive) as zipped:
+            self.assertEqual(len(zipped.infolist()), 3)
+            links = {entry.filename.removeprefix('./'): zipped.read(entry)
+                     for entry in zipped.infolist() if not entry.is_dir()}
+            self.assertEqual(links, {'folder/cycle': b'.', 'folder/external': b'/etc'})
+
+    def test_changed_link_is_not_trashed(self):
+        link = self.root / 'link'
+        link.symlink_to('first')
+        def mutate(args, **kwargs):
+            result = self.run_command(args, **kwargs)
+            if args[0] == '/usr/bin/unzip':
+                link.unlink()
+                link.symlink_to('second')
+            return result
         with self.assertRaises(ValueError):
-            zip_trash.archive_and_trash([path], self.run_command)
+            zip_trash.archive_and_trash([link], mutate)
         self.assertEqual(self.trashed, [])
+        self.assertEqual(str(link.readlink()), 'second')
+
+    @unittest.skipUnless(Path('/usr/bin/gio').exists(), 'GIO is unavailable')
+    def test_real_trash_moves_only_symbolic_link(self):
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp) / 'data'
+            data.mkdir()
+            target = self.root / 'target'
+            target.write_text('preserved')
+            link = self.root / 'link'
+            link.symlink_to('target')
+            with patch.dict(os.environ, {'XDG_DATA_HOME': str(data)}):
+                archive = zip_trash.archive_and_trash([link])
+            self.assertFalse(link.is_symlink())
+            self.assertEqual(target.read_text(), 'preserved')
+            self.assertTrue(archive.is_file())
+            trashed = list((data / 'Trash/files').iterdir())
+            self.assertEqual(len(trashed), 1)
+            self.assertTrue(trashed[0].is_symlink())
+            self.assertEqual(os.readlink(trashed[0]), 'target')
 
     def test_trash_failure_keeps_verified_zip(self):
         path = self.root / 'file'

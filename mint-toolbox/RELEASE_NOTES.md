@@ -1,3 +1,10 @@
+# v0.4.1
+
+- Preserve file, directory, dangling and circular symbolic links in ZIP using system zip -y.
+- Verify both Unix link type and exact target bytes before moving originals to Trash.
+- Link targets outside the selection are never followed or moved to Trash.
+- Includes repaired Anki PDF path handling, numeric download suffixes, and WP-CLI GMT evaluation.
+
 # v0.4.0
 
 - English toolbox UI, prompts, diagnostics, comments and manuals.

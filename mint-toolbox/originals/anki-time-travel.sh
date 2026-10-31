@@ -153,7 +153,13 @@ Required: anki-stats-YYYY-MM-DD@HH-MM-SS.pdf (optional numeric suffix, e.g. -1)"
 
     # Let WordPress calculate GMT using the site's own timezone configuration.
     local POST_GMT
-    POST_GMT="$(wp eval 'echo get_gmt_from_date($args[0]);' "$POST_DATE")"
+    # wp eval accepts PHP code, not additional positional arguments.
+    # POST_DATE contains only the validated numeric timestamp format above.
+    if POST_GMT="$(wp eval "echo get_gmt_from_date('$(sql_escape "$POST_DATE")');")"; then
+        :
+    else
+        die "WP-CLI could not calculate GMT for: $POST_DATE"
+    fi
     [ -n "$POST_GMT" ] || die "WordPress could not calculate GMT: $POST_DATE"
 
     local TITLE_SQL POST_DATE_SQL EXPECTED_MEDIA_SQL

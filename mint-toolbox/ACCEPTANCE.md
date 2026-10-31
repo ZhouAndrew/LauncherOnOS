@@ -1,4 +1,4 @@
-# Mint Toolbox v0.4.0 desktop acceptance
+# Mint Toolbox v0.4.1 desktop acceptance
 
 1. Run `bash install-and-open.sh` as a normal user. The System extensions window should use English.
 2. Inspect the tool table, search field, status filter, separate description and execution log.
@@ -8,6 +8,7 @@
 4. In Nemo, select disposable test files/folders containing spaces and Unicode filenames.
    Choose **Compress to ZIP and delete**. Its execution window must show zip, unzip, verification and GIO stages.
    Check the ZIP and Trash, restore test files, and repeat to check collision-safe archive names.
+   Also test relative links, a dangling link and a directory link: the ZIP should preserve links, not copy their targets.
 5. Disable the extension and check its status and menu removal. Re-enable it using **Build from source...**.
    The log must show source verification, a regular-user build, the generated deb path, apt commands and state readback.
 6. Use **Copy log** and **Save log...**. The completed log must remain visible and automatically saved on disk.

@@ -3,10 +3,10 @@
     "id": "zip-trash",
     "name": "Compress to ZIP and delete",
     "package": "mint-toolbox-extension-zip-trash",
-    "version": "0.4.0",
-    "deb": "debs/mint-toolbox-extension-zip-trash_0.4.0_all.deb",
-    "sha256": "65092ce7788ac0cfe043d8bd26c2e902afe71ca586035fca48e1d73cdf4ba054",
-    "description": "Native Nemo context-menu action for local files and folders. Uses system zip/unzip, verifies archive contents and original files, then moves originals to Trash through GIO. Supports multiple selections and collision-safe filenames. Symbolic links and special files are not supported. Commands and output remain visible in a log window.",
+    "version": "0.4.1",
+    "deb": "debs/mint-toolbox-extension-zip-trash_0.4.1_all.deb",
+    "sha256": "55f938497e1e6625ba52bd3b5e7928ba8c0ad8d8df83518eefbec3cf84f6ea37",
+    "description": "Native Nemo context-menu action for local files and folders. Uses system zip/unzip, verifies archive contents and original files, then moves originals to Trash through GIO. Supports multiple selections and collision-safe filenames. Symbolic links are preserved as links without following their targets, including dangling links. Special files are not supported. Commands and output remain visible in a log window.",
     "source": {
       "kind": "bundled",
       "requires": [
@@ -15,9 +15,9 @@
         "xz"
       ],
       "files": {
-        "zip_trash.py": "05895baeb5b3f43560f26251b89e0ab90166e2abec966e77f1f1787ef30f2e35",
+        "zip_trash.py": "a4245e02ed17321bbd6abe744d087282dfba66e87d357c95bc8e55327771b716",
         "execution.py": "7d3594290efb69a2d51d8df23e1f22a9a5e1ce59ad21d1c05fbfea8fe581ef09",
-        "packaging/build.py": "3f3d471c293488f9c3465236e27ad7368e0a40a8fefce396f854026487265324",
+        "packaging/build.py": "eb0472070a0540a5c5c622fc4e950aacb1332a4bddd500ebf5ec3abb50486bee",
         "packaging/zip-trash.nemo_action": "d08b84f4e80297f3baf33e22ce6f715a07eaf14b39ae43c4fa21423c8e452a99"
       },
       "argv": [

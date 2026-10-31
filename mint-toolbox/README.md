@@ -1,4 +1,4 @@
-# Mint Toolbox v0.4.0
+# Mint Toolbox v0.4.1
 
 A GUI-first collection of Linux utilities with a Debian system extension manager.
 Inspired by the organization of Microsoft PowerToys; not affiliated with Microsoft.

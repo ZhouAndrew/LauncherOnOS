@@ -52,7 +52,9 @@ raise SystemExit('Unexpected WordPress command: ' + repr(args))
         return [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
 
     def assert_reaches_gmt_lookup(self, result):
-        self.assertEqual(result.returncode, 19, result.stdout + result.stderr)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertEqual(result.stderr.count('WP-CLI could not calculate GMT'), 1)
+        self.assertNotIn('Script failed at line', result.stderr)
         self.assertNotIn('PDF not found', result.stderr)
         self.assertNotIn('Invalid filename', result.stderr)
         calls = self.calls()
@@ -69,7 +71,9 @@ raise SystemExit('Unexpected WordPress command: ' + repr(args))
         filename = 'anki-stats-2026-10-27@22-58-46-1.pdf'
         (self.desktop / filename).write_bytes(b'%PDF fixture')
         self.assert_reaches_gmt_lookup(self.run_script(filename))
-        self.assertIn('2026-10-27 22:58:46', self.calls()[-1]['args'])
+        args = self.calls()[-1]['args']
+        self.assertEqual(len(args), 2, 'wp eval must receive exactly one PHP-code argument')
+        self.assertEqual(args[1], "echo get_gmt_from_date('2026-10-27 22:58:46');")
 
     def test_absolute_pdf_path_is_accepted(self):
         path = self.desktop / 'anki-stats-2026-10-27@22-58-46-12.pdf'

@@ -10,7 +10,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = 'mint-toolbox-extension-zip-trash'
-VERSION = '0.4.0'
+VERSION = '0.4.1'
 SOURCES = ['zip_trash.py', 'execution.py', 'packaging/build.py', 'packaging/zip-trash.nemo_action']
 
 
@@ -62,7 +62,7 @@ def main():
             'id': 'zip-trash', 'name': 'Compress to ZIP and delete', 'package': PACKAGE, 'version': VERSION,
             'deb': str(output.relative_to(ROOT)),
             'sha256': hashlib.sha256(output.read_bytes()).hexdigest(),
-            'description': 'Native Nemo context-menu action for local files and folders. Uses system zip/unzip, verifies archive contents and original files, then moves originals to Trash through GIO. Supports multiple selections and collision-safe filenames. Symbolic links and special files are not supported. Commands and output remain visible in a log window.',
+            'description': 'Native Nemo context-menu action for local files and folders. Uses system zip/unzip, verifies archive contents and original files, then moves originals to Trash through GIO. Supports multiple selections and collision-safe filenames. Symbolic links are preserved as links without following their targets, including dangling links. Special files are not supported. Commands and output remain visible in a log window.',
             'source': {
                 'kind': 'bundled',
                 'requires': ['python3', 'dpkg-deb', 'xz'],

@@ -58,7 +58,10 @@ Single selections use the original name plus .zip. Multiple selections use Archi
 Existing ZIP names receive numbered suffixes.
 
 There is no permanent-deletion fallback. Compression or verification failure preserves originals.
-Trash failure preserves the verified ZIP and reports partial completion. Symbolic links and special files are rejected.
+Trash failure preserves the verified ZIP and reports partial completion. Special files are rejected.
+Symbolic links are stored with their Unix link type and exact link-target text (zip -y), never followed.
+This includes links to directories, dangling links and circular links. Only the selected link or selected containing directory
+is moved to Trash; a target outside the selection is untouched. Extraction must use a tool that restores Unix symbolic links.
 ZIP does not preserve every Linux ACL or extended attribute; this is not a replacement for a full system backup.
 Files are checked for changes but are not locked against other applications. Pause edits while compressing.
 

@@ -26,8 +26,14 @@ def snapshot(paths):
     def visit(path, name):
         before = path.lstat()
         if stat.S_ISLNK(before.st_mode):
-            raise ValueError('Symbolic links are not supported: ' + str(path))
-        if stat.S_ISDIR(before.st_mode):
+            # Preserve the link text, including dangling targets; never traverse it.
+            target = os.fsencode(os.readlink(path))
+            after = path.lstat()
+            fields = ('st_dev', 'st_ino', 'st_mode', 'st_size', 'st_mtime_ns', 'st_ctime_ns')
+            if any(getattr(before, field) != getattr(after, field) for field in fields):
+                raise ValueError('Symbolic link changed while reading: ' + str(path))
+            result[name] = ('symlink', target)
+        elif stat.S_ISDIR(before.st_mode):
             result[name + '/'] = None
             for child in sorted(path.iterdir()):
                 visit(child, name + '/' + child.name)
@@ -60,7 +66,7 @@ def archive_and_trash(inputs, run=subprocess.run, report=lambda text: None):
     with tempfile.TemporaryDirectory(prefix='.mint-toolbox-zip-', dir=parent) as temporary:
         staged = Path(temporary) / 'archive.zip'
         report('Compressing with system zip')
-        run(['/usr/bin/zip', '-r', str(staged), '--',
+        run(['/usr/bin/zip', '-r', '-y', str(staged), '--',
              *['./' + p.name for p in paths]], cwd=parent, check=True)
         report('Testing ZIP integrity with system unzip')
         run(['/usr/bin/unzip', '-t', str(staged)], check=True)
@@ -72,7 +78,10 @@ def archive_and_trash(inputs, run=subprocess.run, report=lambda text: None):
                 if name in actual:
                     raise ValueError('ZIP contains duplicate entries. Originals retained.')
                 with archive.open(entry) as stream:
-                    actual[name] = None if entry.is_dir() else digest(stream)
+                    if stat.S_ISLNK(entry.external_attr >> 16):
+                        actual[name] = ('symlink', stream.read())
+                    else:
+                        actual[name] = None if entry.is_dir() else digest(stream)
         if actual != original or snapshot(paths) != original:
             raise ValueError('ZIP content differs or originals changed. Originals retained.')
         with staged.open('rb') as stream:
@@ -116,7 +125,7 @@ def main():
         confirm = tk.Tk()
         confirm.withdraw()
         accepted = messagebox.askyesno('Compress to ZIP and delete',
-            'Compress and verify the selection, then move originals to Trash?\n\nA window will show commands and live output.', parent=confirm)
+            'Compress and verify the selection, then move originals to Trash?\nSymbolic links are stored as links; their targets are not followed.\n\nA window will show commands and live output.', parent=confirm)
         confirm.destroy()
         if not accepted:
             return 0

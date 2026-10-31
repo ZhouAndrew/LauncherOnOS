@@ -5,7 +5,7 @@ A system-installable CLI and desktop tool for importing historical Anki statisti
 ## Install
 
 ```bash
-sudo apt install ./anki-time-travel_0.1.0_all.deb
+sudo apt install ./anki-time-travel_0.1.1_all.deb
 ```
 
 The package installs the `anki-time-travel` command and an **Anki Time Travel** application-menu entry.
