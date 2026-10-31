@@ -70,7 +70,7 @@ def run_import(files, site, log):
 
 def choose_files():
     import tkinter as tk
-    from tkinter import filedialog
+    import native_dialogs as filedialog
     window = tk.Tk()
     window.withdraw()
     try:
@@ -82,7 +82,8 @@ def choose_files():
 
 def show_gui(files=(), site=None, parent=None):
     import tkinter as tk
-    from tkinter import ttk, filedialog, messagebox
+    from tkinter import ttk, messagebox
+    import native_dialogs as filedialog
     window = tk.Toplevel(parent) if parent is not None else tk.Tk()
     window.title('Anki Time Travel - PDF to WordPress')
     window.geometry('980x720')

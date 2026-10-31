@@ -16,6 +16,7 @@ def main(argv=None):
     ops.add_argument('--list', action='store_true', help='list extensions and actual package states')
     choices = [row['id'] for row in lifecycle.plugins()]
     ops.add_argument('--enable', metavar='ID', choices=choices, help='install the bundled extension deb')
+    ops.add_argument('--update', metavar='ID', choices=choices, help='update an installed extension to a newer bundled version')
     ops.add_argument('--disable', metavar='ID', choices=choices, help='uninstall the extension package')
     ops.add_argument('--build', metavar='ID', choices=choices, help='build pinned sources as a regular user, then install')
     ops.add_argument('--open', metavar='ID', choices=choices, help='open an installed extension application')
@@ -28,6 +29,8 @@ def main(argv=None):
                 print(row['id'], row['name'], lifecycle.state_text(row['package']), sep='\t')
         elif args.enable:
             lifecycle.change(args.enable, True)
+        elif args.update:
+            lifecycle.change(args.update, True, update=True)
         elif args.disable:
             lifecycle.change(args.disable, False)
         elif args.build:

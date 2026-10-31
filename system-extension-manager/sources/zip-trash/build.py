@@ -10,8 +10,8 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parent
 PACKAGE = 'mint-toolbox-extension-zip-trash'
-VERSION = '0.4.2'
-SOURCES = ['zip_trash.py', 'execution.py', 'build.py', 'zip-trash.nemo_action']
+VERSION = '0.4.3'
+SOURCES = ['zip_trash.py', 'execution.py', 'native_dialogs.py', 'build.py', 'zip-trash.nemo_action']
 
 
 def build(output_dir):
@@ -25,6 +25,7 @@ def build(output_dir):
             file.parent.mkdir(parents=True, exist_ok=True)
             file.write_text(text, encoding='utf-8')
             file.chmod(mode)
+        write('usr/lib/system-extensions/zip-trash/native_dialogs.py', (ROOT / 'native_dialogs.py').read_text())
         write('DEBIAN/control', f'''Package: {PACKAGE}
 Version: {VERSION}
 Section: utils

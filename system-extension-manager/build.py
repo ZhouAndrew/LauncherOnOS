@@ -18,9 +18,9 @@ def build_extensions():
     packages = ROOT / 'packages'
     packages.mkdir(exist_ok=True)
     definitions = [
-        dict(id='zip-trash', name='ZIP and Trash', package='mint-toolbox-extension-zip-trash', version='0.4.2',
+        dict(id='zip-trash', name='ZIP and Trash', package='mint-toolbox-extension-zip-trash', version='0.4.3',
              description='Nemo right-click ZIP compression, exact-content verification and GIO Trash. Preserves file, directory, dangling and circular symbolic links without following their targets.'),
-        dict(id='anki-time-travel', name='Anki Time Travel', package='anki-time-travel', version='0.1.3',
+        dict(id='anki-time-travel', name='Anki Time Travel', package='anki-time-travel', version='0.1.4',
              launch=['/usr/bin/anki-time-travel', '--gui'],
              description='Import historical Anki PDF statistics into local WordPress, with a CLI, file chooser and live logs. Preserves historical dates and verifies imported posts, attachments and the exact post permalink. Requires WP-CLI and an accessible existing WordPress site.')
     ]

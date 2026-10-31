@@ -33,12 +33,12 @@ class CatalogTests(unittest.TestCase):
 
     def test_install_and_remove_only_selected_extension_with_readback(self):
         args = lifecycle.command('anki-time-travel', True)
-        self.assertTrue(args[-1].endswith('anki-time-travel_0.1.3_all.deb'))
+        self.assertTrue(args[-1].endswith('anki-time-travel_0.1.4_all.deb'))
         log = Mock()
         log.run.return_value = subprocess.CompletedProcess([], 0, '', '')
         with patch.object(lifecycle, 'command', return_value=args), \
-             patch.object(lifecycle, 'package_status', return_value=('install ok installed', '0.1.3')):
-            self.assertEqual(lifecycle.change('anki-time-travel', True, log), '0.1.3')
+             patch.object(lifecycle, 'package_status', side_effect=[('absent', None), ('install ok installed', '0.1.4')]):
+            self.assertEqual(lifecycle.change('anki-time-travel', True, log), '0.1.4')
         self.assertEqual(log.run.call_count, 2)
         removal = lifecycle.command('anki-time-travel', False)
         self.assertEqual(removal[-1], 'anki-time-travel')
@@ -137,7 +137,7 @@ class ManagerGuiTests(unittest.TestCase):
         parent = tk.Tk()
         parent.withdraw()
         errors = []
-        with patch.object(lifecycle, 'state_text', side_effect=lambda package: 'Enabled: 0.1.2' if package == 'anki-time-travel' else 'Disabled'), \
+        with patch.object(lifecycle, 'package_status', side_effect=lambda package, *args: ('install ok installed', '0.1.2') if package == 'anki-time-travel' else ('absent', None)), \
              patch.object(lifecycle, 'launch_command', return_value=['/bin/true']):
             window = lifecycle.show_gui(parent)
             def descendants(widget):
@@ -152,7 +152,7 @@ class ManagerGuiTests(unittest.TestCase):
             buttons = {w.cget('text'): w for w in descendants(window) if isinstance(w, ttk.Button)}
             for text in ['Enable / Install', 'Disable / Uninstall', 'Build from source...', 'Open', 'Build Package...']:
                 self.assertIn(text, buttons)
-            with patch('tkinter.filedialog.askdirectory', return_value=''), patch.object(lifecycle, 'build_manager_package') as build:
+            with patch('native_dialogs.askdirectory', return_value=''), patch.object(lifecycle, 'build_manager_package') as build:
                 buttons['Build Package...'].invoke()
                 build.assert_not_called()
             self.assertEqual(str(buttons['Open'].cget('state')), 'normal')

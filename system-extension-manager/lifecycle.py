@@ -66,6 +66,20 @@ def state_text(package):
     return 'Incomplete installation: ' + status
 
 
+def extension_state(item):
+    try:
+        status, version = package_status(item['package'])
+        if status == 'install ok installed':
+            newer = subprocess.run(['/usr/bin/dpkg', '--compare-versions', version, 'lt', item['version']]).returncode == 0
+            return dict(state='Enabled: ' + version + (' (Update available)' if newer else ''), installed=version,
+                        install=False, remove=True, update=newer)
+        if status == 'absent' or status.endswith(' ok config-files'):
+            return dict(state='Disabled', installed=None, install=True, remove=False, update=False)
+        return dict(state='Incomplete: ' + status, installed=version, install=False, remove=True, update=False)
+    except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
+        return dict(state='Unknown: ' + str(exc), installed=None, install=False, remove=False, update=False)
+
+
 def verify_deb(item, deb, expected_hash=None, log=None):
     if not deb.is_file() or deb.is_symlink():
         raise ValueError('Debian package is missing or is a symbolic link')
@@ -151,7 +165,7 @@ def build_source(item, log):
     return artifacts[0]
 
 
-def change(key, enable, log=None, from_source=False):
+def change(key, enable, log=None, from_source=False, update=False):
     owned = log is None
     log = log or OperationLog(key)
     try:
@@ -159,6 +173,23 @@ def change(key, enable, log=None, from_source=False):
         log.stage(('Enable' if enable else 'Disable') + ': ' + item['name'])
         if from_source and not enable:
             raise ValueError('Source builds are only valid for enabling an extension')
+        current_status, current_version = package_status(item['package'], log)
+        installed = current_status == 'install ok installed'
+        absent = current_status == 'absent' or current_status.endswith(' ok config-files')
+        if update:
+            if not enable or not installed:
+                raise ValueError('Update requires an installed extension')
+            if subprocess.run(['/usr/bin/dpkg', '--compare-versions', current_version, 'lt', item['version']]).returncode != 0:
+                log.stage('Already up to date; no package operation performed')
+                return current_version
+        elif enable and installed:
+            log.stage('Already installed: ' + current_version + '; use Update for a newer version')
+            return current_version
+        elif not enable and absent:
+            log.stage('Not installed; no package operation performed')
+            return None
+        elif enable and not absent:
+            raise ValueError('Incomplete installation; remove the extension before installing again')
         deb = build_source(item, log) if from_source else None
         args = command(key, enable, deb, log) if from_source else command(key, enable, log=log)
         # Dependency resolution errors are displayed before the authorized install.
@@ -245,7 +276,8 @@ def build_manager_package(output_dir, log=None):
 
 def show_gui(parent=None):
     import tkinter as tk
-    from tkinter import ttk, messagebox, filedialog
+    from tkinter import ttk, messagebox
+    import native_dialogs as filedialog
     window = tk.Toplevel(parent) if parent else tk.Tk()
     window.title('System Extension Manager')
     window.geometry('1100x760')
@@ -256,7 +288,7 @@ def show_gui(parent=None):
     ttk.Label(bar, text='Search').pack(side='left')
     query, status = tk.StringVar(), tk.StringVar(value='All')
     ttk.Entry(bar, textvariable=query).pack(side='left', fill='x', expand=True, padx=8)
-    ttk.Combobox(bar, textvariable=status, values=['All', 'Enabled', 'Disabled', 'Incomplete'], state='readonly', width=16).pack(side='left')
+    ttk.Combobox(bar, textvariable=status, values=['All', 'Enabled', 'Disabled', 'Incomplete', 'Unknown'], state='readonly', width=16).pack(side='left')
     pane = ttk.Panedwindow(window, orient='vertical')
     pane.pack(fill='both', expand=True, padx=12, pady=10)
     upper = ttk.Frame(pane)
@@ -296,25 +328,24 @@ def show_gui(parent=None):
         nonlocal rows
         rows = plugins()
         for row in rows:
-            try:
-                row['state'] = state_text(row['package'])
-            except Exception as exc:
-                row['state'] = 'Incomplete: ' + str(exc)
+            row.update(extension_state(row))
         render()
     def update_selection(*_):
         item = selected()
         description.set(item['description'] if item else 'Select an extension to view its description.')
         for control in operation_buttons:
             control.configure(state='normal' if item and not busy[0] else 'disabled')
-        if item and not item.get('source'):
-            source_button.configure(state='disabled')
+        install_button.configure(state='normal' if item and item['install'] and not busy[0] else 'disabled')
+        remove_button.configure(state='normal' if item and item['remove'] and not busy[0] else 'disabled')
+        update_button.configure(state='normal' if item and item['update'] and not busy[0] else 'disabled')
+        source_button.configure(state='normal' if item and item.get('source') and item['install'] and not busy[0] else 'disabled')
         open_button.configure(state='normal' if item and item.get('launch') and item['state'].startswith('Enabled') and not busy[0] else 'disabled')
         package_button.configure(state='disabled' if busy[0] else 'normal')
-    def operate(enable, from_source=False, launch=False):
+    def operate(enable, from_source=False, launch=False, update=False):
         item = selected()
         if not item or busy[0]:
             return
-        label = 'Open' if launch else ('Build from source and install' if from_source else ('Enable / Install' if enable else 'Disable / Uninstall'))
+        label = 'Update' if update else 'Open' if launch else ('Build from source and install' if from_source else ('Enable / Install' if enable else 'Disable / Uninstall'))
         if not launch and not messagebox.askyesno(label, label + ': ' + item['name'] + '\n\nCommands and output will appear below. Administrator authorization is requested only for package installation/removal.', parent=window):
             return
         busy[0] = True
@@ -328,7 +359,7 @@ def show_gui(parent=None):
                 if launch:
                     open_extension(item['id'], log)
                 else:
-                    change(item['id'], enable, log, from_source)
+                    change(item['id'], enable, log, from_source, update=update)
             except Exception as exc:
                 error = str(exc)
             finally:
@@ -378,7 +409,8 @@ def show_gui(parent=None):
     remove_button = ttk.Button(buttons, text='Disable / Uninstall', command=lambda: operate(False))
     source_button = ttk.Button(buttons, text='Build from source...', command=lambda: operate(True, True))
     open_button = ttk.Button(buttons, text='Open', command=lambda: operate(True, launch=True))
-    operation_buttons = [install_button, remove_button, source_button, open_button]
+    update_button = ttk.Button(buttons, text='Update', command=lambda: operate(True, update=True))
+    operation_buttons = [install_button, remove_button, update_button, source_button, open_button]
     for button in operation_buttons:
         button.pack(side='left', padx=(0, 8))
     refresh_button = ttk.Button(buttons, text='Refresh status', command=refresh)

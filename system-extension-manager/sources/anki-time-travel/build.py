@@ -8,7 +8,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parent
 PACKAGE = 'anki-time-travel'
-VERSION = '0.1.3'
+VERSION = '0.1.4'
 
 
 def main():
@@ -25,6 +25,7 @@ def main():
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(data, encoding='utf-8')
             path.chmod(mode)
+        write('usr/lib/anki-time-travel/native_dialogs.py', (ROOT / 'native_dialogs.py').read_text())
         write('DEBIAN/control', f'''Package: {PACKAGE}
 Version: {VERSION}
 Section: utils

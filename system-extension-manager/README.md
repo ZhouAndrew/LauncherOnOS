@@ -3,7 +3,7 @@
 An independent manager for system extensions. Enable installs a bundled Debian package;
 Disable uninstalls that package. The interface shows multiple real extensions and actual dpkg state.
 
-## Portable test release: 0.2.0-test1
+## Portable test release: 0.2.0-test2
 
 Extract the source ZIP, open its folder and run as your desktop user:
 
@@ -81,3 +81,15 @@ GUI tests require a graphical session (or xvfb-run). Running build.py without ar
 prints help and builds nothing. Tests do not build the main manager deb.
 Source builds require dpkg-deb and xz; ZIP and Trash requires Nemo, zip, unzip and GIO.
 Anki Time Travel requires the existing WP-CLI and WordPress environment.
+
+## State-aware actions
+
+Installed older versions are shown as Enabled with Update available. Install and
+source-install are disabled for installed extensions. Uninstall is disabled for absent
+extensions. Update is a separate action (`bash run.sh --update ID`). All changes
+recheck dpkg before execution and read the package state back afterward. Unknown
+status disables package actions and displays the error.
+
+File and folder selection prefers GTK FileChooserNative through the system Python
+and python3-gi / GTK 3. If unavailable, it falls back to Tk. Cancellation performs
+no action. These changes apply to manager packaging, log saving and Anki file selection.

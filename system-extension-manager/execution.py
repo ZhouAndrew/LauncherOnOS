@@ -64,7 +64,8 @@ class OperationLog:
 class LogPanel:
     def __init__(self, parent):
         import tkinter as tk
-        from tkinter import ttk, filedialog
+        from tkinter import ttk
+        import native_dialogs as filedialog
         self.frame = ttk.LabelFrame(parent, text='Execution log')
         self.text = tk.Text(self.frame, wrap='word', height=13, state='disabled')
         scroll = ttk.Scrollbar(self.frame, command=self.text.yview)
