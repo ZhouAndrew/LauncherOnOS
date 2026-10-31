@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Build the manager and both independently installable system extensions."""
+import argparse
 import hashlib
 import json
 import os
@@ -10,10 +11,10 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.0'
+from version import VERSION
 
 
-def main():
+def build_extensions():
     packages = ROOT / 'packages'
     packages.mkdir(exist_ok=True)
     definitions = [
@@ -34,8 +35,21 @@ def main():
             files={str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in files},
             argv=['python3', f'sources/{item["id"]}/build.py', '--output-dir', '{output}'])
     (ROOT / 'extensions.json').write_text(json.dumps(definitions, indent=2) + '\n')
-    output = ROOT / 'dist' / f'system-extension-manager_{VERSION}_all.deb'
-    output.parent.mkdir(exist_ok=True)
+    return definitions
+
+
+def build_manager(output_dir):
+    output_dir = Path(output_dir).expanduser().resolve()
+    if output_dir.is_relative_to(ROOT) and output_dir != ROOT / 'dist':
+        raise ValueError('Choose an output folder outside the source tree, or use its dist folder')
+    definitions = json.loads((ROOT / 'extensions.json').read_text())
+    for item in definitions:
+        path = ROOT / item['deb']
+        if hashlib.sha256(path.read_bytes()).hexdigest() != item['sha256']:
+            raise ValueError('Bundled extension checksum mismatch: ' + item['id'])
+    output = output_dir / f'system-extension-manager_{VERSION}_all.deb'
+
+    output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
         stage = Path(tmp)
         stage.chmod(0o755)
@@ -68,7 +82,24 @@ Description: Manage independent system extensions through Debian packages
         os.utime(stage, (1793404800, 1793404800))
         subprocess.run(['dpkg-deb', '-Zxz', '-z6', '--threads-max=1', '--root-owner-group', '--build', str(stage), str(output)],
                        check=True, env={**os.environ, 'SOURCE_DATE_EPOCH': '1793404800'})
-    print(output)
+    return output
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description='Build extension packages or optionally package the manager')
+    action = parser.add_mutually_exclusive_group()
+    action.add_argument('--extensions-only', action='store_true', help='rebuild bundled extension debs and their catalog only')
+    action.add_argument('--package', action='store_true', help='explicitly build a manager deb without installing it')
+    parser.add_argument('--output-dir', type=Path, default=ROOT / 'dist', help='output folder for --package')
+    args = parser.parse_args(argv)
+    if args.extensions_only:
+        build_extensions()
+        print('Extension packages and catalog updated. No manager package was built.')
+    elif args.package:
+        print('Built manager package: ' + str(build_manager(args.output_dir)))
+    else:
+        parser.print_help()
+    return 0
 
 
 if __name__ == '__main__':

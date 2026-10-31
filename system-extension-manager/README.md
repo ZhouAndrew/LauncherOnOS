@@ -3,16 +3,33 @@
 An independent manager for system extensions. Enable installs a bundled Debian package;
 Disable uninstalls that package. The interface shows multiple real extensions and actual dpkg state.
 
-## Install and open
+## Portable test release: 0.2.0-test1
+
+Extract the source ZIP, open its folder and run as your desktop user:
 
 ```bash
-sudo apt install ./system-extension-manager_0.1.0_all.deb
-system-extension-manager
+bash run.sh
 ```
 
-The application menu entry is **System Extension Manager**. Its desktop entry and CLI open the same manager.
-The package contains this manager, its extension catalog, both extension debs and verified source recipes.
-It does not require the abandoned toolbox application.
+No manager installation or package build runs at startup. Requires Linux Mint / Debian,
+Python 3.10+ and python3-tk for the desktop window. CLI listing does not require Tk.
+The source folder can be moved; run.sh resolves its own location.
+
+The manager includes two extension debs and pinned source recipes. Enabling or disabling
+an extension still uses the system package manager and requests administrator authorization.
+
+## Optional manager package
+
+Choose **Build Package...** in the source-running window and select an output folder.
+Commands and build output appear in the live log. This creates a deb without installing it.
+Alternatively:
+
+```bash
+bash run.sh --build-package --output-dir /tmp/manager-package
+```
+
+Only if you later want system installation, install that deb with apt.
+The included system-extension-manager.desktop is for the optional installed manager.
 
 ## Extensions
 
@@ -30,12 +47,12 @@ ZIP and Trash is used from Nemo's context menu and has no standalone application
 ## CLI
 
 ```bash
-system-extension-manager --list
-system-extension-manager --enable anki-time-travel
-system-extension-manager --open anki-time-travel
-system-extension-manager --disable anki-time-travel
-system-extension-manager --build anki-time-travel
-system-extension-manager --enable zip-trash
+bash run.sh --list
+bash run.sh --enable anki-time-travel
+bash run.sh --open anki-time-travel
+bash run.sh --disable anki-time-travel
+bash run.sh --build anki-time-travel
+bash run.sh --enable zip-trash
 ```
 
 Full commands, live combined stdout/stderr, stages, exit codes and package-state readback appear in the log.
@@ -51,9 +68,16 @@ or automatically port incompatible source code.
 Run the manager as your desktop user. Only installation/removal requests administrator authorization.
 Installing/removing an extension affects all users. Removing the manager itself leaves independently installed extensions intact.
 
-## Build and test
+## Build extension packages and test
+
+From this source folder:
 
 ```bash
-python3 system-extension-manager/build.py
-xvfb-run -a python3 -m unittest discover -s system-extension-manager/tests -v
+python3 build.py --extensions-only
+python3 -m unittest discover -s tests -v
 ```
+
+GUI tests require a graphical session (or xvfb-run). Running build.py without arguments
+prints help and builds nothing. Tests do not build the main manager deb.
+Source builds require dpkg-deb and xz; ZIP and Trash requires Nemo, zip, unzip and GIO.
+Anki Time Travel requires the existing WP-CLI and WordPress environment.

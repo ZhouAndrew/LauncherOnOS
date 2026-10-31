@@ -73,21 +73,25 @@ class CatalogTests(unittest.TestCase):
         self.assertIn('anki-time-travel\tAnki Time Travel', result.stdout)
         self.assertIn('zip-trash\tZIP and Trash', result.stdout)
 
-    def test_manager_package_does_not_install_extension_executables(self):
-        deb = ROOT / 'dist/system-extension-manager_0.1.0_all.deb'
+    def test_source_runs_without_installing_or_packaging_manager(self):
+        import shutil
         with tempfile.TemporaryDirectory() as tmp:
-            subprocess.run(['dpkg-deb', '-x', str(deb), tmp], check=True)
-            root = Path(tmp)
-            app = root / 'usr/share/system-extension-manager'
-            self.assertTrue((root / 'usr/bin/system-extension-manager').exists())
-            self.assertFalse((root / 'usr/bin/mint-toolbox').exists())
-            self.assertFalse((root / 'usr/bin/anki-time-travel').exists())
-            self.assertFalse((app / 'toolbox.py').exists())
+            app = Path(tmp) / 'source'
+            shutil.copytree(ROOT, app, ignore=shutil.ignore_patterns('dist', '__pycache__'))
+            for command in (['bash', str(app / 'run.sh'), '--list'],
+                            [sys.executable, str(app / 'build.py')]):
+                result = subprocess.run(command, cwd=tmp, capture_output=True, text=True, timeout=10)
+                self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse((app / 'dist').exists())
+            self.assertFalse(list(app.glob('system-extension-manager*.deb')))
             self.assertEqual(len(list((app / 'packages').glob('*.deb'))), 2)
-            result = subprocess.run([sys.executable, str(app / 'manager.py'), '--list'],
-                                    capture_output=True, text=True, timeout=10)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn('Anki Time Travel', result.stdout)
+
+    def test_manager_packaging_requires_explicit_cli_request(self):
+        with patch.object(lifecycle, 'build_manager_package') as build:
+            self.assertEqual(manager.main(['--list']), 0)
+            build.assert_not_called()
+            self.assertEqual(manager.main(['--build-package', '--output-dir', '/tmp/optional-package']), 0)
+            build.assert_called_once_with(Path('/tmp/optional-package'))
 
     def test_both_source_recipes_build_as_regular_user(self):
         code = '''import lifecycle
@@ -146,8 +150,11 @@ class ManagerGuiTests(unittest.TestCase):
             tree.event_generate('<<TreeviewSelect>>')
             parent.update()
             buttons = {w.cget('text'): w for w in descendants(window) if isinstance(w, ttk.Button)}
-            for text in ['Enable / Install', 'Disable / Uninstall', 'Build from source...', 'Open']:
+            for text in ['Enable / Install', 'Disable / Uninstall', 'Build from source...', 'Open', 'Build Package...']:
                 self.assertIn(text, buttons)
+            with patch('tkinter.filedialog.askdirectory', return_value=''), patch.object(lifecycle, 'build_manager_package') as build:
+                buttons['Build Package...'].invoke()
+                build.assert_not_called()
             self.assertEqual(str(buttons['Open'].cget('state')), 'normal')
             buttons['Open'].invoke()
             def check():

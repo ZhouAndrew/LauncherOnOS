@@ -223,9 +223,29 @@ def open_extension(key, log=None):
             log.close()
 
 
+def build_manager_package(output_dir, log=None):
+    from version import VERSION
+    owned = log is None
+    log = log or OperationLog('Build manager package')
+    output_dir = Path(output_dir).expanduser().resolve()
+    try:
+        log.stage('Building an optional manager package; no installation will run')
+        log.run([sys.executable, str(ROOT / 'build.py'), '--package', '--output-dir', str(output_dir)])
+        artifact = output_dir / f'system-extension-manager_{VERSION}_all.deb'
+        verify_deb({'package': 'system-extension-manager', 'version': VERSION}, artifact, log=log)
+        log.stage('Package ready: ' + str(artifact))
+        return artifact
+    except Exception as exc:
+        log.stage('FAILED: ' + str(exc))
+        raise
+    finally:
+        if owned:
+            log.close()
+
+
 def show_gui(parent=None):
     import tkinter as tk
-    from tkinter import ttk, messagebox
+    from tkinter import ttk, messagebox, filedialog
     window = tk.Toplevel(parent) if parent else tk.Tk()
     window.title('System Extension Manager')
     window.geometry('1100x760')
@@ -289,6 +309,7 @@ def show_gui(parent=None):
         if item and not item.get('source'):
             source_button.configure(state='disabled')
         open_button.configure(state='normal' if item and item.get('launch') and item['state'].startswith('Enabled') and not busy[0] else 'disabled')
+        package_button.configure(state='disabled' if busy[0] else 'normal')
     def operate(enable, from_source=False, launch=False):
         item = selected()
         if not item or busy[0]:
@@ -315,6 +336,29 @@ def show_gui(parent=None):
                     log.close()
                 events.put(('done', error))
         threading.Thread(target=worker, daemon=False).start()
+    def package_manager():
+        if busy[0]:
+            return
+        folder = filedialog.askdirectory(parent=window, title='Choose output folder for the optional manager package')
+        if not folder:
+            return
+        busy[0] = True
+        refresh_button.configure(state='disabled')
+        update_selection()
+        def worker():
+            error = None
+            log = None
+            try:
+                log = OperationLog('Build manager package', lambda text: events.put(('line', text)))
+                build_manager_package(folder, log)
+            except Exception as exc:
+                error = str(exc)
+            finally:
+                if log:
+                    log.close()
+                events.put(('done', error))
+        threading.Thread(target=worker, daemon=False).start()
+
     def poll():
         try:
             for _ in range(200):
@@ -339,6 +383,8 @@ def show_gui(parent=None):
         button.pack(side='left', padx=(0, 8))
     refresh_button = ttk.Button(buttons, text='Refresh status', command=refresh)
     refresh_button.pack(side='left')
+    package_button = ttk.Button(buttons, text='Build Package...', command=package_manager)
+    package_button.pack(side='right')
     tree.bind('<<TreeviewSelect>>', update_selection)
     query.trace_add('write', render)
     status.trace_add('write', render)
