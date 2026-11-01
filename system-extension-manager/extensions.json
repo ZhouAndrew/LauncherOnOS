@@ -68,10 +68,14 @@
     "id": "homebackup",
     "name": "HomeBackUp",
     "package": "mint-homebackup-extension",
-    "version": "0.1.0",
+    "version": "0.1.2",
+    "launch": [
+      "/usr/bin/homebackup-ext",
+      "gui"
+    ],
     "description": "Borg recovery backups on the HomeBackUp disk: monthly scheduling, verified deduplicated archives and at most 3 retained backup dates. Existing encrypted repository is reused; configure it after enabling from the Mint application menu. The /dev/sdc7 data partition is not included.",
-    "deb": "packages/mint-homebackup-extension_0.1.0_all.deb",
-    "sha256": "cd51d11049930325b4b0fe797f1c7663b36260e58b48a98b00f4048621730381",
+    "deb": "packages/mint-homebackup-extension_0.1.2_all.deb",
+    "sha256": "beafddb9a685cea835bd4f416c7bb69dbf759f92ca2980bf0c93285db5288a48",
     "source": {
       "kind": "bundled",
       "requires": [
@@ -81,7 +85,8 @@
       ],
       "files": {
         "sources/homebackup/backup.sh": "ed9ba64971759baa2f4c7292c992a73a6aa2e7d95e7526918e9618c05e8f1bb7",
-        "sources/homebackup/build.py": "f927639186e182a3d58b9d75e676cb7cd6115186d83512db9fa5fec70e3decb0",
+        "sources/homebackup/build.py": "f961e98211c3293e05d626f569173c82f3bd5965fa4fbb7ec6659461e01d0462",
+        "sources/homebackup/gui.py": "c3e4e7c7ac676b56dfc384e84bb6ab46f071af99a44b6a8a5a69502844fd7348",
         "sources/homebackup/setup.sh": "14502ec01a40c1e624660988659596cd9f8de162596390efb0ea25197373abe8"
       },
       "argv": [

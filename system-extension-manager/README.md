@@ -35,7 +35,7 @@ The included system-extension-manager.desktop is for the optional installed mana
 
 - **ZIP and Trash**: Nemo context-menu ZIP creation, content verification and moving originals to Trash.
   Symbolic links are stored as links without following targets, including dangling and directory links.
-- **HomeBackUp**: Independent Borg recovery backup extension. Installs into the manager as a normal system package with status/readback and optional source build. After Enable, configure once from the Linux Mint applications menu using `homebackup-ext setup` or `homebackup-ext use-existing` (existing root-only Borg credentials). Reuses `/media/andrew/HomeBackUp/Mint-Recovery-Borg` without deleting existing backups on installation; monthly timer with at most three backup dates. Requires an existing Borg 1.x repo and the configured HomeBackUp disk; `/dev/sdc7` is not included. The extension's console menu is separate from the manager.
+- **HomeBackUp**: Independent Borg recovery backup extension. Installs into the manager as a normal system package with status/readback and optional source build. After Enable, configure once from the Linux Mint applications menu using `homebackup-ext setup` or `homebackup-ext use-existing` (existing root-only Borg credentials). Reuses `/media/andrew/HomeBackUp/Mint-Recovery-Borg` without deleting existing backups on installation; monthly timer with at most three backup dates. Requires an existing Borg 1.x repo and the configured HomeBackUp disk; `/dev/sdc7` is not included. The extension opens a dedicated GTK window from the manager's Open action or Mint application menu.
 - **Anki Time Travel**: CLI and desktop import of historical Anki PDFs into local WordPress.
   Relative paths, numeric download suffixes, GMT evaluation and exact-post permalink verification are included.
   Requires an existing accessible WordPress installation and WP-CLI. Installing or opening the application does not start an import.
@@ -82,7 +82,7 @@ python3 -m unittest discover -s tests -v
 
 GUI tests require a graphical session (or xvfb-run). Running build.py without arguments
 prints help and builds nothing. Tests do not build the main manager deb.
-Source builds require dpkg-deb and xz; ZIP and Trash requires Nemo, zip, unzip and GIO. HomeBackUp requires BorgBackup 1.x and a separately enrolled encryption passphrase. Package installation does not request a Borg password; use the extension setup command afterwards.
+Source builds require dpkg-deb and xz; ZIP and Trash requires Nemo, zip, unzip and GIO. HomeBackUp requires BorgBackup 1.x, GTK 3 and a separately enrolled encryption passphrase. Launching `homebackup-ext` as the ordinary desktop user now opens a GTK window. Status requires no administrator privileges; privileged buttons invoke a standard PolicyKit prompt. The scheduler may genuinely be disabled and the UI reports this state rather than silently re-enabling it. Package installation does not request a Borg password; use the extension setup command afterwards.
 Anki Time Travel requires the existing WP-CLI and WordPress environment.
 
 ## State-aware actions
@@ -102,3 +102,7 @@ no action. These changes apply to manager packaging, log saving and Anki file se
 The GitHub Actions `System Extension Manager` workflow builds a portable source ZIP **with all three bundled extension debs** and an optional System Extension Manager `.deb` for download as CI artifacts. In the manager select **HomeBackUp** and choose **Enable / Install**; the system package manager requests one administrator authorization for installation. Updating an already-installed extension uses **Update**, and removing a missing package is a no-op. The Borg encryption password is a separate credential needed only for first setup or repository access. No sensitive backup data or credentials are shipped. Reinstall-and-restore and live Mint GUI installation are not yet acceptance-tested.
 
 For a raw Git checkout (rather than the CI-distributed source ZIP), run `python3 system-extension-manager/build.py --extensions-only` before `bash system-extension-manager/run.sh` so the locally built HomeBackUp extension package and catalog are available. CI releases include the ready-to-install manager and all three bundled extension packages.
+
+### HomeBackUp GUI update
+
+The HomeBackUp v0.1.2 application uses the native GTK 3 interface by default, with archive listing, retention preview, structural and data verification, monthly timer status, enable/disable, and one-time Borg password enrollment. Administrative actions use PolicyKit; ordinary status requires no sudo. Package installation does not enable the timer, and upgrading does not change the current timer state.

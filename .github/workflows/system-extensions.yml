@@ -9,45 +9,45 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Test dependencies
-        run: sudo apt-get update && sudo apt-get install -y python3-tk xvfb desktop-file-utils zip unzip libglib2.0-bin xz-utils
-      - name: Build bundled extensions (including HomeBackUp)
+        run: sudo apt-get update && sudo apt-get install -y python3-tk python3-gi gir1.2-gtk-3.0 xvfb desktop-file-utils zip unzip libglib2.0-bin xz-utils
+      - name: Build bundled extensions (including HomeBackUp GUI)
         run: python3 system-extension-manager/build.py --extensions-only
-      - name: Validate catalog against actual bundled packages and fixed source hashes
+      - name: Validate catalog and packaged extension source hashes
         run: |
           git diff --exit-code -- system-extension-manager/packages
-          python3 - <<'PY'
+          python3 - <<'PYCODE'
           import hashlib, json
           from pathlib import Path
           root = Path('system-extension-manager')
-          catalog = json.loads((root/'extensions.json').read_text())
-          assert {row['id'] for row in catalog} == {'zip-trash','anki-time-travel','homebackup'}
-          for row in catalog:
-              data = (root / row['deb']).read_bytes()
-              assert hashlib.sha256(data).hexdigest() == row['sha256'], row['id']
-              for path, expected in row['source']['files'].items():
-                  assert hashlib.sha256((root/path).read_bytes()).hexdigest() == expected, path
-          PY
-      - name: Check HomeBackUp package reproducibility
+          entries = json.loads((root / 'extensions.json').read_text())
+          assert {row['id'] for row in entries} == {'zip-trash','anki-time-travel','homebackup'}
+          for row in entries:
+              assert hashlib.sha256((root / row['deb']).read_bytes()).hexdigest() == row['sha256'], row['id']
+              for path, digest in row['source']['files'].items():
+                  assert hashlib.sha256((root / path).read_bytes()).hexdigest() == digest, path
+          PYCODE
+      - name: Check package reproducibility
         run: |
-          sha256sum system-extension-manager/packages/mint-homebackup-extension_0.1.0_all.deb > /tmp/homebackup-sha
+          sha256sum system-extension-manager/packages/mint-homebackup-extension_0.1.2_all.deb > /tmp/homebackup-sha
           python3 system-extension-manager/sources/homebackup/build.py --output-dir system-extension-manager/packages
           sha256sum -c /tmp/homebackup-sha
       - name: Validate desktop entries
         run: desktop-file-validate system-extension-manager/system-extension-manager.desktop system-extension-manager/sources/anki-time-travel/anki-time-travel.desktop
-      - name: Test CLI, builds, Anki import, ZIP/Trash and HomeBackUp catalog
+      - name: Test extension manager and catalog
         run: xvfb-run -a python3 -m unittest discover -s system-extension-manager/tests -v
-      - name: Build installable manager deb for publication
+      - name: Smoke test HomeBackUp GTK 3 window as normal user
+        run: xvfb-run -a /usr/bin/python3 system-extension-manager/sources/homebackup/gui.py --smoke-test
+      - name: Build distributable manager package
         run: python3 system-extension-manager/build.py --package --output-dir "$RUNNER_TEMP/manager"
-      - name: Verify packaged manager includes HomeBackUp extension
+      - name: Check distributed manager contains HomeBackUp GUI package
         run: |
-          dpkg-deb -f "$RUNNER_TEMP/manager/"*.deb Package Version
-          dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep 'packages/mint-homebackup-extension_0.1.0_all.deb'
-      - name: Archive portable source release with built-in extensions
+          dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep 'packages/mint-homebackup-extension_0.1.2_all.deb'
+      - name: Bundle portable manager source
         run: |
           (cd system-extension-manager && zip -q -r "$GITHUB_WORKSPACE/System-Extension-Manager-source.zip" . -x 'dist/*' '*/__pycache__/*' '*.pyc' 'sources/homebackup/build-mint-homebackup-extension/*' 'sources/homebackup/BUILD-NOTES.md')
       - uses: actions/upload-artifact@v4
         with:
-          name: System-Extension-Manager-with-HomeBackUp
+          name: System-Extension-Manager-GUI-HomeBackUp
           path: |
             System-Extension-Manager-source.zip
             ${{ runner.temp }}/manager/system-extension-manager_*.deb

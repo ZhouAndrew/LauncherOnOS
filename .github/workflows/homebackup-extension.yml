@@ -19,6 +19,6 @@ jobs:
       - name: Upload deb (not a release or live-machine acceptance)
         uses: actions/upload-artifact@v4
         with:
-          name: mint-homebackup-extension-0.1.0
-          path: extensions/homebackup/mint-homebackup-extension_0.1.0_all.deb
+          name: mint-homebackup-extension-0.1.2
+          path: extensions/homebackup/mint-homebackup-extension_0.1.2_all.deb
           if-no-files-found: error

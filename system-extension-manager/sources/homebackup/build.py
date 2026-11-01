@@ -2,7 +2,7 @@ from pathlib import Path
 import re, shutil, os, subprocess
 root=Path(__file__).resolve().parent / 'build-mint-homebackup-extension'
 if root.exists(): shutil.rmtree(root)
-base=root/'mint-homebackup-extension_0.1.0_all'
+base=root/'mint-homebackup-extension_0.1.2_all'
 lib=base/'usr/lib/mint-homebackup-extension'
 for sub in (lib,base/'usr/bin',base/'usr/share/applications',base/'etc/systemd/system',base/'DEBIAN'):
  sub.mkdir(parents=True,exist_ok=True)
@@ -10,6 +10,7 @@ for sub in (lib,base/'usr/bin',base/'usr/share/applications',base/'etc/systemd/s
 source=(Path(__file__).resolve().parent / 'setup.sh').read_text()
 backup=(Path(__file__).resolve().parent / 'backup.sh').read_text()
 (lib/'backup.sh').write_text(backup)
+(lib/'gui.py').write_text((Path(__file__).resolve().parent / 'gui.py').read_text())
 
 # Reuse the field-tested source's 3-archive selector and runner, with new paths.
 def heredoc(mark):
@@ -62,14 +63,25 @@ RUN='/usr/lib/mint-homebackup-extension/run-backup'
 OLD_TIMER='homebackup-monthly.timer'
 NEW_TIMER='mint-homebackup-extension.timer'
 fail(){ printf 'ERROR: %s\\n' "$*" >&2; exit 1; }
-[[ $(id -u) == 0 ]] || fail '需要管理员权限。'
+# Status is intentionally read-only and available to ordinary desktop users.
 case ${1:-} in
   status)
-    printf 'New timer: '; systemctl is-enabled "$NEW_TIMER" 2>/dev/null || true
-    printf 'Old timer: '; systemctl is-enabled "$OLD_TIMER" 2>/dev/null || true
-    systemctl list-timers "$NEW_TIMER" --all --no-pager || true
+    printf '每月定时器安装状态：'
+    systemctl is-enabled "$NEW_TIMER" 2>/dev/null || printf '未找到\n'
+    printf '每月定时器运行状态：'
+    systemctl is-active "$NEW_TIMER" 2>/dev/null || printf '未运行\n'
+    printf '旧定时器状态：'
+    systemctl is-enabled "$OLD_TIMER" 2>/dev/null || printf '未找到\n'
+    printf '备份磁盘挂载：'
+    if [[ $(findmnt -n -o UUID -T "$DEST" 2>/dev/null || :) == "$UUID" ]]; then
+      echo '已挂载正确磁盘'
+    else
+      echo '未挂载或 UUID 不符'
+    fi
+    systemctl list-timers "$NEW_TIMER" --all --no-pager 2>&1 || true
     exit 0;;
 esac
+[[ $(id -u) == 0 ]] || fail '该操作需要管理员授权。请从普通用户 GUI 通过授权对话框执行。'
 [[ $(findmnt -n -o TARGET -T "$DEST" 2>/dev/null || :) == "$DEST" ]] || fail 'HomeBackUp 未挂载。'
 [[ $(findmnt -n -o UUID -T "$DEST" 2>/dev/null || :) == "$UUID" ]] || fail '备份目标 UUID 不符。'
 [[ $(findmnt -n -o FSTYPE -T "$DEST") == btrfs ]] || fail '目标不是 Btrfs。'
@@ -99,11 +111,11 @@ case ${1:-} in
     borg list --short "$REPO" >/dev/null || fail '已存 Borg 密码无效。'
     unset BORG_PASSCOMMAND
     ;;
-  list|preview|check|run|enable|disable)
+  list|preview|check|verify-data|run|enable|disable)
     [[ -r "$SECRET" ]] || fail '请先设置 Borg 仓库密码。'
     export BORG_PASSCOMMAND="/usr/bin/cat $SECRET"
     ;;
-  *) fail '用法: status|enroll|use-existing|list|preview|check|run|enable|disable';;
+  *) fail '用法: status|enroll|use-existing|list|preview|check|verify-data|run|enable|disable';;
 esac
 # Prevent duplicate monthly scheduled services; no automatic removal of older work.
 case ${1:-} in
@@ -116,7 +128,24 @@ case ${1:-} in
     echo '已启用新定时器；错过的月度任务可能立即补执行。';;
   list) "$RUN" --list;;
   preview) "$RUN" --preview-prune;;
-  check) borg check --archives-only "$REPO";;
+  check)
+    echo '开始检查 Borg 仓库归档结构；不会验证全部文件内容。'
+    if borg check --archives-only "$REPO"; then
+      echo '检查通过：归档结构正常。完整数据恢复尚未验证。'
+    else
+      code=$?
+      echo "ERROR: 归档结构检查失败（退出码 $code）。" >&2
+      exit "$code"
+    fi;;
+  verify-data)
+    echo '开始执行 Borg 文件数据校验，可能需要很长时间。'
+    if borg check --archives-only --verify-data "$REPO"; then
+      echo '数据校验通过；尚未执行完整恢复演练。'
+    else
+      code=$?
+      echo "ERROR: 深度数据校验失败（退出码 $code）。" >&2
+      exit "$code"
+    fi;;
   run) systemctl start mint-homebackup-extension.service;;
   disable) systemctl disable --now "$NEW_TIMER";;
 esac
@@ -124,67 +153,63 @@ esac
 (lib/'admin').write_text(admin)
 
 client='''#!/usr/bin/env bash
-# Independent Mint extension. No MintBox dependency.
+# Graphical frontend by default; privileged operations use PolicyKit.
 set -Eeuo pipefail
 ADMIN='/usr/lib/mint-homebackup-extension/admin'
+GUI='/usr/lib/mint-homebackup-extension/gui.py'
 admin(){
-  if [[ $(id -u) == 0 ]]; then "$ADMIN" "$@"; else pkexec "$ADMIN" "$@"; fi
+  if [[ $(id -u) == 0 ]]; then "$ADMIN" "$@"; else /usr/bin/pkexec "$ADMIN" "$@"; fi
 }
 usage(){
  cat <<'HELP'
-Mint HomeBackUp Extension (independent of MintBox)
-  homebackup-ext menu          Interactive menu
-  homebackup-ext status        Scheduled-task state (no password prompt)
-  homebackup-ext setup         Save Borg password once; activate monthly timer
-  homebackup-ext use-existing  Use saved Borg password from older installer
+HomeBackUp Extension
+  homebackup-ext               Open GTK 3 interface as normal user
+  homebackup-ext gui           Same GUI
+  homebackup-ext status        Read-only state; no sudo needed
+  homebackup-ext setup         Save Borg password once and enable monthly timer
+  homebackup-ext use-existing  Reuse existing verified password file
   homebackup-ext list          List Borg archives
-  homebackup-ext preview       Preview archive cleanup (no deletion)
-  homebackup-ext backup        Manually start backup
-  homebackup-ext check         Check archive structure
-  homebackup-ext disable       Disable new monthly timer
-
-Installation uses the package manager's normal single admin authorization.
-Borg encryption requires its separate secret once during setup.
+  homebackup-ext preview       Preview retention only
+  homebackup-ext backup        Trigger a backup
+  homebackup-ext check         Validate archive structure
+  homebackup-ext verify-data   Verify full archive data (slow)
+  homebackup-ext enable        Enable monthly timer
+  homebackup-ext disable       Disable monthly timer
+Borg password and administrator authorization are different credentials.
 HELP
 }
 setup(){
-  printf '请输入 Borg 仓库解密密码（只输入一次，不会显示）：' >&2
-  IFS= read -rs pass
-  printf '\\n' >&2
-  [[ -n "$pass" ]] || { echo '密码不能为空。' >&2; exit 1; }
-  # pass only on stdin, not command line or exported environment.
-  if [[ $(id -u) == 0 ]]; then
-    printf '%s\\n' "$pass" | "$ADMIN" enroll
+  if [[ -t 0 ]]; then
+    printf '请输入 Borg 仓库解密密码（只输入一次，不会显示）：' >&2
+    IFS= read -rs pass
+    printf '\n' >&2
   else
-    printf '%s\\n' "$pass" | pkexec "$ADMIN" enroll
+    IFS= read -r pass || { echo '未收到密码。' >&2; exit 1; }
+  fi
+  [[ -n "${pass:-}" ]] || { echo '密码不能为空。' >&2; exit 1; }
+  # Password passes through standard input only; not command args or environment.
+  if [[ $(id -u) == 0 ]]; then
+    printf '%s\n' "$pass" | "$ADMIN" enroll
+  else
+    printf '%s\n' "$pass" | /usr/bin/pkexec "$ADMIN" enroll
   fi
   unset pass
 }
-cmd=${1:-menu}
-case $cmd in
- status) "$ADMIN" status;;
- setup) setup;;
- use-existing) admin use-existing;;
- list) admin list;;
- preview) admin preview;;
- backup) admin run;;
- check) admin check;;
- disable) admin disable;;
- menu)
-  while :; do
-    printf '\\nHomeBackUp 扩展管理器（替代 MintBox 入口）\\n'
-    printf '1. 查看状态  2. 查看备份  3. 清理预览  4. 立即备份\\n'
-    printf '5. 首次设置 Borg 密码  6. 复用已有密码文件\\n'
-    printf '7. 检查归档  8. 停用定时备份  0. 退出\\n> '
-    read -r n || break
-    case $n in
-      1) "$0" status;; 2) "$0" list;; 3) "$0" preview;; 4) "$0" backup;;
-      5) "$0" setup;; 6) "$0" use-existing;; 7) "$0" check;;
-      8) "$0" disable;; 0) break;; *) echo '无效选项';;
-    esac
-  done;;
- --help|-h|help) usage;;
- *) usage; exit 2;;
+cmd=${1:-gui}
+case "$cmd" in
+  gui|menu) exec /usr/bin/python3 "$GUI";;
+  status) "$ADMIN" status;;
+  setup) setup;;
+  use-existing) admin use-existing;;
+  list) admin list;;
+  preview) admin preview;;
+  backup) admin run;;
+  check) admin check;;
+  verify-data) admin verify-data;;
+  enable) admin enable;;
+  disable) admin disable;;
+  --help|-h|help) usage;;
+  *) usage; exit 2;;
 esac
 '''
 (base/'usr/bin/homebackup-ext').write_text(client)
@@ -194,19 +219,19 @@ Name=HomeBackUp Manager
 Name[zh_CN]=HomeBackUp 备份管理器
 Comment=Manage monthly Borg backups and recovery archives
 Comment[zh_CN]=管理每月 Borg 备份与历史归档
-Exec=homebackup-ext menu
-Terminal=true
+Exec=homebackup-ext gui
+Terminal=false
 Icon=drive-harddisk
 Categories=System;Utility;
 Keywords=backup;borg;Mint;备份;恢复;
 ''')
 control='''Package: mint-homebackup-extension
-Version: 0.1.0
+Version: 0.1.2
 Section: admin
 Priority: optional
 Architecture: all
 Maintainer: HomeBackUp project <noreply@example.invalid>
-Depends: bash, borgbackup (>= 1.2), python3, util-linux, systemd, pkexec, coreutils
+Depends: bash, borgbackup (>= 1.2), python3, python3-gi, gir1.2-gtk-3.0, util-linux, systemd, pkexec, coreutils
 Description: Standalone Linux Mint HomeBackUp management extension
  Manage the existing encrypted Borg repository with a monthly systemd timer,
  safe retention of latest three backup days, and separate password enrollment.
@@ -236,18 +261,18 @@ exit 0
 '''
 (base/'DEBIAN/prerm').write_text(prerm)
 # remove package files only on uninstall; root secret and Borg backup are never removed by package.
-for f in [lib/'backup.sh',lib/'select.py',lib/'run-backup',lib/'admin',base/'usr/bin/homebackup-ext',base/'DEBIAN/postinst',base/'DEBIAN/prerm']:
+for f in [lib/'gui.py',lib/'backup.sh',lib/'select.py',lib/'run-backup',lib/'admin',base/'usr/bin/homebackup-ext',base/'DEBIAN/postinst',base/'DEBIAN/prerm']:
  f.chmod(0o755)
 for f in [base/'etc/systemd/system/mint-homebackup-extension.service',base/'etc/systemd/system/mint-homebackup-extension.timer']:
  f.chmod(0o644)
-readme='''# Mint HomeBackUp Extension 0.1.0
+readme='''# Mint HomeBackUp Extension 0.1.2
 
-这是独立的 Linux Mint 集成包，不依赖 MintBox。安装不会初始化或修改已有 Borg 仓库，不主动删除任何归档，也不会自动开启定时备份。
+这是独立的 Linux Mint GTK 3 图形管理包，不依赖 MintBox。普通用户启动无需 sudo，查询定时器状态无需授权。安装不会初始化或修改已有 Borg 仓库，不主动删除任何归档，也不会自动开启定时备份。
 
 **安装（一次系统管理员授权）：**
 
 ```bash
-sudo apt install ./mint-homebackup-extension_0.1.0_all.deb
+sudo apt install ./mint-homebackup-extension_0.1.2_all.deb
 ```
 
 APT 可能因为 sudo 会话过期而要求管理员密码，但此安装包不会再次主动提示密码。它也不会在软件包安装环节要求 Borg 密码。
@@ -264,7 +289,7 @@ homebackup-ext setup
 homebackup-ext use-existing
 ```
 
-**管理：** `homebackup-ext menu` 或从 Mint 应用菜单运行 `HomeBackUp 备份管理器`。
+**图形管理：** 普通用户执行 `homebackup-ext` 或从 Mint 应用菜单运行 `HomeBackUp 备份管理器`。
 
 系统定时器：每月 1 日 03:00，Persistent=true（错过日期后开机补执行），最多保留三个不同备份日期的最新归档；只有新备份完成并通过内容验证后才能清理。其他命名的 Borg 归档、Timeshift 快照和 HomeBackUp 盘内其他文件不受处理。若检测到旧 `homebackup-monthly.timer` 仍启用，新版会拒绝激活以防重复执行。
 
@@ -287,5 +312,5 @@ if __name__ == '__main__':
     for target in sorted(base.rglob('*'), reverse=True):
         os.utime(target, (epoch, epoch), follow_symlinks=False)
     os.utime(base, (epoch, epoch))
-    subprocess.run(['dpkg-deb', '-Zxz', '-z6', '--threads-max=1', '--root-owner-group', '--build', str(base), str(dest / 'mint-homebackup-extension_0.1.0_all.deb')],
+    subprocess.run(['dpkg-deb', '-Zxz', '-z6', '--threads-max=1', '--root-owner-group', '--build', str(base), str(dest / 'mint-homebackup-extension_0.1.2_all.deb')],
                    check=True, env={**os.environ, 'SOURCE_DATE_EPOCH': str(epoch)})

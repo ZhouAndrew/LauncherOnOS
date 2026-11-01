@@ -26,6 +26,25 @@ class CatalogTests(unittest.TestCase):
                 self.assertEqual(hashlib.sha256((ROOT / name).read_bytes()).hexdigest(), sha)
         self.assertEqual(lifecycle.plugin('anki-time-travel')['launch'], ['/usr/bin/anki-time-travel', '--gui'])
 
+    def test_homebackup_gui_package_is_bundled_and_status_needs_no_root(self):
+        import tempfile
+        item = lifecycle.plugin('homebackup')
+        self.assertEqual(item['launch'], ['/usr/bin/homebackup-ext', 'gui'])
+        with tempfile.TemporaryDirectory() as tmp:
+            subprocess.run(['dpkg-deb', '-x', str(lifecycle.bundled_deb(item)), tmp], check=True)
+            base = Path(tmp)
+            client = (base/'usr/bin/homebackup-ext').read_text()
+            admin = (base/'usr/lib/mint-homebackup-extension/admin').read_text()
+            desktop = (base/'usr/share/applications/mint-homebackup-extension.desktop').read_text()
+            self.assertIn("cmd=${1:-gui}", client)
+            self.assertIn('status) "$ADMIN" status', client)
+            self.assertLess(admin.index('  status)'), admin.index("[[ $(id -u) == 0 ]]") )
+            self.assertIn('检查通过：归档结构正常', admin)
+            self.assertIn('check --archives-only --verify-data', admin)
+            self.assertIn('Terminal=false', desktop)
+            self.assertIn('Exec=homebackup-ext gui', desktop)
+            self.assertTrue((base/'usr/lib/mint-homebackup-extension/gui.py').exists())
+
     def test_anki_enabled_by_its_actual_package_state(self):
         result = subprocess.CompletedProcess([], 0, 'install ok installed\n0.1.2', '')
         with patch.object(lifecycle.subprocess, 'run', return_value=result):

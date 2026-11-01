@@ -1,40 +1,19 @@
-# Mint HomeBackUp Extension (0.1.0)
+# Mint HomeBackUp Extension 0.1.2 — GTK GUI
 
-Source for the standalone Linux Mint HomeBackUp `.deb` package. This is maintained within `ZhouAndrew/LauncherOnOS` for now, but **does not depend on or alter LauncherOnOS, MintBox, or Mint Toolbox**. It is a separate package, not a Cinnamon in-process extension.
+This standalone `.deb` is distributed **through System Extension Manager** in the same repository. It is a separate system package, and does not require MintBox or LauncherOnOS at runtime.
 
-## Build
+Run **HomeBackUp** from the Mint application menu, or run `homebackup-ext` as the regular desktop user (no `sudo`). The GTK 3 window provides read-only schedule status, archive listing, cleanup preview, integrity checks, full data verification, timer controls and password setup. System-changing actions use PolicyKit authorization, not a root GUI. Setup requires the separate Borg passphrase once and stores it in a root-only file; it is **not** the Linux administrator password.
 
-```bash
-python3 build.py
-dpkg-deb --root-owner-group --build build-mint-homebackup-extension/mint-homebackup-extension_0.1.0_all mint-homebackup-extension_0.1.0_all.deb
-```
+If the scheduler reports **disabled**, no automatic backup is currently scheduled. Use the GUI's *Enable monthly backup* button only if you want it enabled; package installation and upgrade do **not** silently enable the timer. Existing archive data is never removed at installation.
 
-Requirements: Python 3, `dpkg-deb`, and Bash. `backup.sh` is the recovery-backup source. `setup.sh` is retained as the source for the existing retention selector and runner; **do not execute `setup.sh` to install this package**. The package is assembled by `build.py`.
-
-## Usage (after installation)
+Build from this folder (the output file is also bundled in the Extension Manager release):
 
 ```bash
-sudo apt install ./mint-homebackup-extension_0.1.0_all.deb
-homebackup-ext use-existing   # reuse an already enrolled Borg credential, if present
-# OR
-homebackup-ext setup          # request Borg passphrase one time (separate from system authorization)
-homebackup-ext menu
+python3 build.py --output-dir .
 ```
 
-Package installation itself does not prompt for a Borg password, initialize a repository, enable backups, or delete archives. `setup`/`use-existing` enables the monthly timer, subject to a check for an already-enabled old timer. Normal administrative actions may still require polkit authorization; **single sudo prompt and single Borg prompt cannot be combined into one universal credential**.
+Requires Python 3, `dpkg-deb`, xz and shell. The installed application additionally needs Borg 1.x, Python `gi` GTK 3, PolicyKit and systemd. Default Borg repo: `/media/andrew/HomeBackUp/Mint-Recovery-Borg`, UUID `6cb1c243-6bdb-4e82-9301-cf6231b87a66`.
 
-Defaults currently target one verified Linux Mint machine: Btrfs target `/media/andrew/HomeBackUp`, Borg 1.x repo `Mint-Recovery-Borg`, source system UUID and Btrfs target UUID are hard-coded as guards. Review the source and adapt before using on other computers. Passwords are not bundled. Backup passphrase storage is root-only under `/var/backups/homebackup-scheduler/passphrase`. Keep an independent offline recovery copy of the key/passphrase.
+The included `setup.sh` is a **source template for retention selection and the background runner**, not an installer. `backup.sh` is the existing recovery-backup source. Backup schedule: monthly day 1 at 03:00 (catch up on boot, if enabled); retention at most three distinct backup dates, with only newest archive from each date. No deletion unless a new backup and its data integrity verification succeed. Other data partitions, including `/dev/sdc7`, are **not included**. A complete reinstall-and-restore exercise has not been performed on the user's Linux Mint host.
 
-Schedule: monthly on the 1st at 03:00 (with missed-run catch-up). On successful backup and verification, retain **at most three mint-* archives from distinct backup dates**, selecting each day's newest; the old snapshots are not removed if a new backup fails. Purging only concerns recognized `mint-*` Borg archives and never Timeshift or other files on HomeBackUp. Preview using `homebackup-ext preview`.
-
-The default backup includes `/home`, selected system directories, installation and driver inventories and database exports. Other partitions including `/dev/sdc7` are **not backed up by default**. This is intended for reinstall-then-selective-restore, not a full disk image. No live Linux Mint installation or disaster-recovery test has been recorded for this `.deb`; build and syntax tests are not a substitute.
-
-## Tests
-
-```bash
-bash tests/check-package.sh
-```
-
-## Existing backup
-
-The existing Borg archive `mint-20261031T065630Z` is kept in place. Do **not** delete it or reinstall the repository while migrating to this extension.
+The existing encrypted Borg archive, Timeshift snapshots, and root-only saved passphrase are left untouched by the upgrade.
