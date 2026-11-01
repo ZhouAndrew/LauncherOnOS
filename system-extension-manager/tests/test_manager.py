@@ -146,7 +146,7 @@ class ManagerGuiTests(unittest.TestCase):
                     yield child
                     yield from descendants(child)
             tree = next(w for w in descendants(window) if isinstance(w, ttk.Treeview))
-            self.assertEqual(set(tree.get_children()), {'zip-trash', 'anki-time-travel'})
+            self.assertEqual(set(tree.get_children()), {'zip-trash', 'anki-time-travel', 'homebackup'})
             tree.selection_set('anki-time-travel')
             tree.event_generate('<<TreeviewSelect>>')
             parent.update()
