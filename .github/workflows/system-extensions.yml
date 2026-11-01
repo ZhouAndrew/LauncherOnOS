@@ -14,10 +14,7 @@ jobs:
         run: python3 system-extension-manager/build.py --extensions-only
       - name: Validate catalog and packaged extension source hashes
         run: |
-          # The pinned bundled package is verified against the committed catalog on checkout.
-          # CI may rebuild with a different dpkg/xz toolchain; verify the rebuilt
-          # package and source hashes below rather than requiring identical bytes.
-          echo 'Validating rebuilt bundle and pinned sources'
+          git diff --exit-code -- system-extension-manager/packages
           python3 - <<'PYCODE'
           import hashlib, json
           from pathlib import Path
@@ -31,7 +28,7 @@ jobs:
           PYCODE
       - name: Check package reproducibility
         run: |
-          sha256sum system-extension-manager/packages/mint-homebackup-extension_0.1.2_all.deb > /tmp/homebackup-sha
+          sha256sum system-extension-manager/packages/mint-homebackup-extension_0.1.3_all.deb > /tmp/homebackup-sha
           python3 system-extension-manager/sources/homebackup/build.py --output-dir system-extension-manager/packages
           sha256sum -c /tmp/homebackup-sha
       - name: Validate desktop entries
@@ -44,7 +41,7 @@ jobs:
         run: python3 system-extension-manager/build.py --package --output-dir "$RUNNER_TEMP/manager"
       - name: Check distributed manager contains HomeBackUp GUI package
         run: |
-          dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep 'packages/mint-homebackup-extension_0.1.2_all.deb'
+          dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep 'packages/mint-homebackup-extension_0.1.3_all.deb'
       - name: Bundle portable manager source
         run: |
           (cd system-extension-manager && zip -q -r "$GITHUB_WORKSPACE/System-Extension-Manager-source.zip" . -x 'dist/*' '*/__pycache__/*' '*.pyc' 'sources/homebackup/build-mint-homebackup-extension/*' 'sources/homebackup/BUILD-NOTES.md')

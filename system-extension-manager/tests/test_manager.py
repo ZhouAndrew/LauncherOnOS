@@ -46,9 +46,9 @@ class CatalogTests(unittest.TestCase):
             self.assertTrue((base/'usr/lib/mint-homebackup-extension/gui.py').exists())
 
     def test_anki_enabled_by_its_actual_package_state(self):
-        result = subprocess.CompletedProcess([], 0, 'install ok installed\n0.1.2', '')
+        result = subprocess.CompletedProcess([], 0, 'install ok installed\n0.1.3', '')
         with patch.object(lifecycle.subprocess, 'run', return_value=result):
-            self.assertEqual(lifecycle.state_text('anki-time-travel'), 'Enabled: 0.1.2')
+            self.assertEqual(lifecycle.state_text('anki-time-travel'), 'Enabled: 0.1.3')
 
     def test_install_and_remove_only_selected_extension_with_readback(self):
         args = lifecycle.command('anki-time-travel', True)
@@ -77,7 +77,7 @@ class CatalogTests(unittest.TestCase):
         with patch.object(lifecycle, 'installed_version', return_value=None):
             with self.assertRaisesRegex(ValueError, 'Enable / Install'):
                 lifecycle.launch_command('anki-time-travel')
-        with patch.object(lifecycle, 'installed_version', return_value='0.1.2'), \
+        with patch.object(lifecycle, 'installed_version', return_value='0.1.3'), \
              patch.object(Path, 'is_file', return_value=True), patch.object(lifecycle.os, 'access', return_value=True):
             self.assertEqual(lifecycle.launch_command('anki-time-travel'), ['/usr/bin/anki-time-travel', '--gui'])
 
@@ -157,7 +157,7 @@ class ManagerGuiTests(unittest.TestCase):
         parent = tk.Tk()
         parent.withdraw()
         errors = []
-        with patch.object(lifecycle, 'package_status', side_effect=lambda package, *args: ('install ok installed', '0.1.2') if package == 'anki-time-travel' else ('absent', None)), \
+        with patch.object(lifecycle, 'package_status', side_effect=lambda package, *args: ('install ok installed', '0.1.3') if package == 'anki-time-travel' else ('absent', None)), \
              patch.object(lifecycle, 'launch_command', return_value=['/bin/true']):
             window = lifecycle.show_gui(parent)
             def descendants(widget):

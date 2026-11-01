@@ -3,7 +3,7 @@
 An independent manager for system extensions. Enable installs a bundled Debian package;
 Disable uninstalls that package. The interface shows multiple real extensions and actual dpkg state.
 
-## Portable test release: 0.2.0-test2
+## Portable test release: 0.2.1-test3
 
 Extract the source ZIP, open its folder and run as your desktop user:
 
@@ -105,4 +105,4 @@ For a raw Git checkout (rather than the CI-distributed source ZIP), run `python3
 
 ### HomeBackUp GUI update
 
-The HomeBackUp v0.1.2 application uses the native GTK 3 interface by default, with archive listing, retention preview, structural and data verification, monthly timer status, enable/disable, and one-time Borg password enrollment. Administrative actions use PolicyKit; ordinary status requires no sudo. Package installation does not enable the timer, and upgrading does not change the current timer state.
+The HomeBackUp v0.1.3 application uses the native GTK 3 interface by default, with archive listing, retention preview, structural and data verification, monthly timer status, enable/disable, and one-time Borg password enrollment. Administrative actions use PolicyKit; ordinary status requires no sudo. Package installation does not enable the timer, and upgrading does not change the current timer state.

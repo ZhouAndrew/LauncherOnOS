@@ -2,7 +2,7 @@ from pathlib import Path
 import re, shutil, os, subprocess
 root=Path(__file__).resolve().parent / 'build-mint-homebackup-extension'
 if root.exists(): shutil.rmtree(root)
-base=root/'mint-homebackup-extension_0.1.2_all'
+base=root/'mint-homebackup-extension_0.1.3_all'
 lib=base/'usr/lib/mint-homebackup-extension'
 for sub in (lib,base/'usr/bin',base/'usr/share/applications',base/'etc/systemd/system',base/'DEBIAN'):
  sub.mkdir(parents=True,exist_ok=True)
@@ -66,12 +66,12 @@ fail(){ printf 'ERROR: %s\\n' "$*" >&2; exit 1; }
 # Status is intentionally read-only and available to ordinary desktop users.
 case ${1:-} in
   status)
-    printf '每月定时器安装状态：'
-    systemctl is-enabled "$NEW_TIMER" 2>/dev/null || printf '未找到\n'
-    printf '每月定时器运行状态：'
-    systemctl is-active "$NEW_TIMER" 2>/dev/null || printf '未运行\n'
-    printf '旧定时器状态：'
-    systemctl is-enabled "$OLD_TIMER" 2>/dev/null || printf '未找到\n'
+    timer_enabled=$(systemctl is-enabled "$NEW_TIMER" 2>/dev/null || true)
+    timer_active=$(systemctl is-active "$NEW_TIMER" 2>/dev/null || true)
+    old_enabled=$(systemctl is-enabled "$OLD_TIMER" 2>/dev/null || true)
+    printf '每月定时器安装状态：%s\n' "${timer_enabled:-not-found}"
+    printf '每月定时器运行状态：%s\n' "${timer_active:-unknown}"
+    printf '旧定时器状态：%s\n' "${old_enabled:-not-found}"
     printf '备份磁盘挂载：'
     if [[ $(findmnt -n -o UUID -T "$DEST" 2>/dev/null || :) == "$UUID" ]]; then
       echo '已挂载正确磁盘'
@@ -226,7 +226,7 @@ Categories=System;Utility;
 Keywords=backup;borg;Mint;备份;恢复;
 ''')
 control='''Package: mint-homebackup-extension
-Version: 0.1.2
+Version: 0.1.3
 Section: admin
 Priority: optional
 Architecture: all
@@ -265,14 +265,14 @@ for f in [lib/'gui.py',lib/'backup.sh',lib/'select.py',lib/'run-backup',lib/'adm
  f.chmod(0o755)
 for f in [base/'etc/systemd/system/mint-homebackup-extension.service',base/'etc/systemd/system/mint-homebackup-extension.timer']:
  f.chmod(0o644)
-readme='''# Mint HomeBackUp Extension 0.1.2
+readme='''# Mint HomeBackUp Extension 0.1.3
 
 这是独立的 Linux Mint GTK 3 图形管理包，不依赖 MintBox。普通用户启动无需 sudo，查询定时器状态无需授权。安装不会初始化或修改已有 Borg 仓库，不主动删除任何归档，也不会自动开启定时备份。
 
 **安装（一次系统管理员授权）：**
 
 ```bash
-sudo apt install ./mint-homebackup-extension_0.1.2_all.deb
+sudo apt install ./mint-homebackup-extension_0.1.3_all.deb
 ```
 
 APT 可能因为 sudo 会话过期而要求管理员密码，但此安装包不会再次主动提示密码。它也不会在软件包安装环节要求 Borg 密码。
@@ -312,5 +312,5 @@ if __name__ == '__main__':
     for target in sorted(base.rglob('*'), reverse=True):
         os.utime(target, (epoch, epoch), follow_symlinks=False)
     os.utime(base, (epoch, epoch))
-    subprocess.run(['dpkg-deb', '-Zxz', '-z6', '--threads-max=1', '--root-owner-group', '--build', str(base), str(dest / 'mint-homebackup-extension_0.1.2_all.deb')],
+    subprocess.run(['dpkg-deb', '-Zxz', '-z6', '--threads-max=1', '--root-owner-group', '--build', str(base), str(dest / 'mint-homebackup-extension_0.1.3_all.deb')],
                    check=True, env={**os.environ, 'SOURCE_DATE_EPOCH': str(epoch)})
