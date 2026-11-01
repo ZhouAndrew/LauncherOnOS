@@ -14,7 +14,11 @@ jobs:
         run: python3 system-extension-manager/build.py --extensions-only
       - name: Validate catalog and packaged extension source hashes
         run: |
-          # The pinned bundled package is verified against the committed catalog on checkout.\n          # CI may rebuild with a different dpkg/xz toolchain; verify the rebuilt\n          # package and source hashes below rather than requiring identical bytes.\n          echo 'Validating rebuilt bundle and pinned sources'\n          python3 - <<'PYCODE'
+          # The pinned bundled package is verified against the committed catalog on checkout.
+          # CI may rebuild with a different dpkg/xz toolchain; verify the rebuilt
+          # package and source hashes below rather than requiring identical bytes.
+          echo 'Validating rebuilt bundle and pinned sources'
+          python3 - <<'PYCODE'
           import hashlib, json
           from pathlib import Path
           root = Path('system-extension-manager')
