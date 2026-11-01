@@ -72,3 +72,8 @@ Fixed and regression-tested:
 - Auto-generated IDs support non-ASCII filenames.
 
 Known limitations: standalone script installation does not resolve external dependencies; imported restore archives, automatic upgrades, and whole virtual-environment packaging are not implemented. A registered external tool is never bundled into export archives. The repository's CI tests are not a substitute for verification on the user's own Linux Mint system.
+
+
+## Companion package: Mint HomeBackUp Extension
+
+The standalone [HomeBackUp Extension](extensions/homebackup/) source and Debian package builder are maintained in this repository, replacing the abandoned MintBox/Toolbox integration path for backup management. It is **not** a runtime dependency of LauncherOnOS and does not change its CLI, installation or security model. Build with `bash extensions/homebackup/tests/check-package.sh` (requires Debian/Ubuntu tools); the extension manages an existing encrypted Borg recovery repository, monthly scheduling, and a maximum of three backup dates. It has not yet been live-tested on Linux Mint for installation and disaster recovery.

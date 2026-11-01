@@ -1,0 +1,24 @@
+name: Mint HomeBackUp Extension
+on:
+  push:
+    paths:
+      - 'extensions/homebackup/**'
+      - '.github/workflows/homebackup-extension.yml'
+  pull_request:
+    paths:
+      - 'extensions/homebackup/**'
+      - '.github/workflows/homebackup-extension.yml'
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and verify extension package
+        run: bash extensions/homebackup/tests/check-package.sh
+      - name: Upload deb (not a release or live-machine acceptance)
+        uses: actions/upload-artifact@v4
+        with:
+          name: mint-homebackup-extension-0.1.0
+          path: extensions/homebackup/mint-homebackup-extension_0.1.0_all.deb
+          if-no-files-found: error
