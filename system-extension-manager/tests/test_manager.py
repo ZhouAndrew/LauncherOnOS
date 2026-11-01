@@ -14,10 +14,10 @@ import manager
 
 
 class CatalogTests(unittest.TestCase):
-    def test_two_real_extensions_have_valid_bundled_debs_and_pinned_sources(self):
+    def test_three_real_extensions_have_valid_bundled_debs_and_pinned_sources(self):
         import hashlib
         rows = lifecycle.plugins()
-        self.assertEqual({row['id'] for row in rows}, {'zip-trash', 'anki-time-travel'})
+        self.assertEqual({row['id'] for row in rows}, {'zip-trash', 'anki-time-travel', 'homebackup'})
         for row in rows:
             deb = lifecycle.bundled_deb(row)
             info = lifecycle.verify_deb(row, deb)
@@ -66,12 +66,13 @@ class CatalogTests(unittest.TestCase):
         with patch.object(lifecycle, 'change', side_effect=subprocess.CalledProcessError(100, ['apt-get'])):
             self.assertEqual(manager.main(['--enable', 'anki-time-travel']), 1)
 
-    def test_cli_lists_both_extensions(self):
+    def test_cli_lists_three_extensions(self):
         result = subprocess.run([sys.executable, str(ROOT / 'manager.py'), '--list'],
                                 text=True, capture_output=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('anki-time-travel\tAnki Time Travel', result.stdout)
         self.assertIn('zip-trash\tZIP and Trash', result.stdout)
+        self.assertIn('homebackup\tHomeBackUp', result.stdout)
 
     def test_source_runs_without_installing_or_packaging_manager(self):
         import shutil
@@ -84,7 +85,7 @@ class CatalogTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
             self.assertFalse((app / 'dist').exists())
             self.assertFalse(list(app.glob('system-extension-manager*.deb')))
-            self.assertEqual(len(list((app / 'packages').glob('*.deb'))), 2)
+            self.assertEqual(len(list((app / 'packages').glob('*.deb'))), 3)
 
     def test_manager_packaging_requires_explicit_cli_request(self):
         with patch.object(lifecycle, 'build_manager_package') as build:
@@ -93,7 +94,7 @@ class CatalogTests(unittest.TestCase):
             self.assertEqual(manager.main(['--build-package', '--output-dir', '/tmp/optional-package']), 0)
             build.assert_called_once_with(Path('/tmp/optional-package'))
 
-    def test_both_source_recipes_build_as_regular_user(self):
+    def test_all_source_recipes_build_as_regular_user(self):
         code = '''import lifecycle
 from execution import OperationLog
 import os
@@ -103,7 +104,7 @@ for row in lifecycle.plugins():
     artifact = lifecycle.build_source(row, log)
     assert artifact.is_file()
 log.close()
-print('BOTH_RECIPES_OK')
+print('ALL_RECIPES_OK')
 '''
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -126,7 +127,7 @@ print('BOTH_RECIPES_OK')
                     raise
                 self.skipTest('Host cannot switch from root; CI runs as a regular user')
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertIn('BOTH_RECIPES_OK', result.stdout)
+            self.assertIn('ALL_RECIPES_OK', result.stdout)
 
 
 @unittest.skipUnless(os.environ.get('DISPLAY'), 'requires a graphical environment')

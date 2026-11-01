@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the manager and both independently installable system extensions."""
+"""Build the manager and three independently installable system extensions."""
 import argparse
 import hashlib
 import json
@@ -22,7 +22,9 @@ def build_extensions():
              description='Nemo right-click ZIP compression, exact-content verification and GIO Trash. Preserves file, directory, dangling and circular symbolic links without following their targets.'),
         dict(id='anki-time-travel', name='Anki Time Travel', package='anki-time-travel', version='0.1.4',
              launch=['/usr/bin/anki-time-travel', '--gui'],
-             description='Import historical Anki PDF statistics into local WordPress, with a CLI, file chooser and live logs. Preserves historical dates and verifies imported posts, attachments and the exact post permalink. Requires WP-CLI and an accessible existing WordPress site.')
+             description='Import historical Anki PDF statistics into local WordPress, with a CLI, file chooser and live logs. Preserves historical dates and verifies imported posts, attachments and the exact post permalink. Requires WP-CLI and an accessible existing WordPress site.'),
+        dict(id='homebackup', name='HomeBackUp', package='mint-homebackup-extension', version='0.1.0',
+             description='Borg recovery backups on the HomeBackUp disk: monthly scheduling, verified deduplicated archives and at most 3 retained backup dates. Existing encrypted repository is reused; configure it after enabling from the Mint application menu. The /dev/sdc7 data partition is not included.')
     ]
     for item in definitions:
         source = ROOT / 'sources' / item['id']
@@ -69,7 +71,7 @@ Maintainer: ZhouAndrew <zhouandrew@users.noreply.github.com>
 Depends: python3 (>= 3.10), python3-tk, dpkg, apt, pkexec
 Description: Manage independent system extensions through Debian packages
  Provides multiple-extension listing, install/remove controls, verified source
- builds, application launching, live logs, and bundled Anki and ZIP extensions.
+ builds, application launching, live logs, and bundled Anki, ZIP and HomeBackUp extensions.
 ''')
         write('usr/bin/system-extension-manager', '#!/bin/sh\nexec /usr/bin/python3 /usr/share/system-extension-manager/manager.py "$@"\n', 0o755)
         write('usr/share/applications/system-extension-manager.desktop', (ROOT / 'system-extension-manager.desktop').read_text())

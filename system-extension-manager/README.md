@@ -15,7 +15,7 @@ No manager installation or package build runs at startup. Requires Linux Mint / 
 Python 3.10+ and python3-tk for the desktop window. CLI listing does not require Tk.
 The source folder can be moved; run.sh resolves its own location.
 
-The manager includes two extension debs and pinned source recipes. Enabling or disabling
+The manager includes three extension debs and pinned source recipes. Enabling or disabling
 an extension still uses the system package manager and requests administrator authorization.
 
 ## Optional manager package
@@ -35,6 +35,7 @@ The included system-extension-manager.desktop is for the optional installed mana
 
 - **ZIP and Trash**: Nemo context-menu ZIP creation, content verification and moving originals to Trash.
   Symbolic links are stored as links without following targets, including dangling and directory links.
+- **HomeBackUp**: Independent Borg recovery backup extension. Installs into the manager as a normal system package with status/readback and optional source build. After Enable, configure once from the Linux Mint applications menu using `homebackup-ext setup` or `homebackup-ext use-existing` (existing root-only Borg credentials). Reuses `/media/andrew/HomeBackUp/Mint-Recovery-Borg` without deleting existing backups on installation; monthly timer with at most three backup dates. Requires an existing Borg 1.x repo and the configured HomeBackUp disk; `/dev/sdc7` is not included. The extension's console menu is separate from the manager.
 - **Anki Time Travel**: CLI and desktop import of historical Anki PDFs into local WordPress.
   Relative paths, numeric download suffixes, GMT evaluation and exact-post permalink verification are included.
   Requires an existing accessible WordPress installation and WP-CLI. Installing or opening the application does not start an import.
@@ -53,6 +54,8 @@ bash run.sh --open anki-time-travel
 bash run.sh --disable anki-time-travel
 bash run.sh --build anki-time-travel
 bash run.sh --enable zip-trash
+bash run.sh --enable homebackup
+bash run.sh --build homebackup
 ```
 
 Full commands, live combined stdout/stderr, stages, exit codes and package-state readback appear in the log.
@@ -79,7 +82,7 @@ python3 -m unittest discover -s tests -v
 
 GUI tests require a graphical session (or xvfb-run). Running build.py without arguments
 prints help and builds nothing. Tests do not build the main manager deb.
-Source builds require dpkg-deb and xz; ZIP and Trash requires Nemo, zip, unzip and GIO.
+Source builds require dpkg-deb and xz; ZIP and Trash requires Nemo, zip, unzip and GIO. HomeBackUp requires BorgBackup 1.x and a separately enrolled encryption passphrase. Package installation does not request a Borg password; use the extension setup command afterwards.
 Anki Time Travel requires the existing WP-CLI and WordPress environment.
 
 ## State-aware actions
@@ -93,3 +96,7 @@ status disables package actions and displays the error.
 File and folder selection prefers GTK FileChooserNative through the system Python
 and python3-gi / GTK 3. If unavailable, it falls back to Tk. Cancellation performs
 no action. These changes apply to manager packaging, log saving and Anki file selection.
+
+## Distribution
+
+The GitHub Actions `System Extension Manager` workflow builds a portable source ZIP **with all three bundled extension debs** and an optional System Extension Manager `.deb` for download as CI artifacts. In the manager select **HomeBackUp** and choose **Enable / Install**; the system package manager requests one administrator authorization for installation. Updating an already-installed extension uses **Update**, and removing a missing package is a no-op. The Borg encryption password is a separate credential needed only for first setup or repository access. No sensitive backup data or credentials are shipped. Reinstall-and-restore and live Mint GUI installation are not yet acceptance-tested.
