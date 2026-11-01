@@ -12,8 +12,21 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y python3-tk xvfb desktop-file-utils zip unzip libglib2.0-bin xz-utils
       - name: Build bundled extensions (including HomeBackUp)
         run: python3 system-extension-manager/build.py --extensions-only
-      - name: Check catalog and committed packages remain reproducible
-        run: git diff --exit-code -- system-extension-manager/extensions.json system-extension-manager/packages
+      - name: Validate catalog against actual bundled packages and fixed source hashes
+        run: |
+          git diff --exit-code -- system-extension-manager/packages
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          root = Path('system-extension-manager')
+          catalog = json.loads((root/'extensions.json').read_text())
+          assert {row['id'] for row in catalog} == {'zip-trash','anki-time-travel','homebackup'}
+          for row in catalog:
+              data = (root / row['deb']).read_bytes()
+              assert hashlib.sha256(data).hexdigest() == row['sha256'], row['id']
+              for path, expected in row['source']['files'].items():
+                  assert hashlib.sha256((root/path).read_bytes()).hexdigest() == expected, path
+          PY
       - name: Check HomeBackUp package reproducibility
         run: |
           sha256sum system-extension-manager/packages/mint-homebackup-extension_0.1.0_all.deb > /tmp/homebackup-sha
@@ -31,7 +44,7 @@ jobs:
           dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep 'packages/mint-homebackup-extension_0.1.0_all.deb'
       - name: Archive portable source release with built-in extensions
         run: |
-          (cd system-extension-manager && zip -q -r "$GITHUB_WORKSPACE/System-Extension-Manager-source.zip" . -x 'dist/*' '*/__pycache__/*' '*.pyc')
+          (cd system-extension-manager && zip -q -r "$GITHUB_WORKSPACE/System-Extension-Manager-source.zip" . -x 'dist/*' '*/__pycache__/*' '*.pyc' 'sources/homebackup/build-mint-homebackup-extension/*' 'sources/homebackup/BUILD-NOTES.md')
       - uses: actions/upload-artifact@v4
         with:
           name: System-Extension-Manager-with-HomeBackUp

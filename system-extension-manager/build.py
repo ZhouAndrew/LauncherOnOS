@@ -32,7 +32,7 @@ def build_extensions():
         deb = packages / f'{item["package"]}_{item["version"]}_all.deb'
         item['deb'] = str(deb.relative_to(ROOT))
         item['sha256'] = hashlib.sha256(deb.read_bytes()).hexdigest()
-        files = sorted(p for p in source.iterdir() if p.is_file() and p.suffix != '.pyc')
+        files = sorted(p for p in source.iterdir() if p.is_file() and p.suffix != '.pyc' and p.name != 'BUILD-NOTES.md')
         item['source'] = dict(kind='bundled', requires=['python3', 'dpkg-deb', 'xz'],
             files={str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in files},
             argv=['python3', f'sources/{item["id"]}/build.py', '--output-dir', '{output}'])
@@ -56,7 +56,7 @@ def build_manager(output_dir):
         stage = Path(tmp)
         stage.chmod(0o755)
         shutil.copytree(ROOT, stage / 'usr/share/system-extension-manager',
-                        ignore=shutil.ignore_patterns('dist', 'tests', '__pycache__', '*.pyc'))
+                        ignore=shutil.ignore_patterns('dist', 'tests', '__pycache__', '*.pyc', 'build-mint-homebackup-extension', 'BUILD-NOTES.md'))
         def write(path, text, mode=0o644):
             path = stage / path
             path.parent.mkdir(parents=True, exist_ok=True)

@@ -100,3 +100,5 @@ no action. These changes apply to manager packaging, log saving and Anki file se
 ## Distribution
 
 The GitHub Actions `System Extension Manager` workflow builds a portable source ZIP **with all three bundled extension debs** and an optional System Extension Manager `.deb` for download as CI artifacts. In the manager select **HomeBackUp** and choose **Enable / Install**; the system package manager requests one administrator authorization for installation. Updating an already-installed extension uses **Update**, and removing a missing package is a no-op. The Borg encryption password is a separate credential needed only for first setup or repository access. No sensitive backup data or credentials are shipped. Reinstall-and-restore and live Mint GUI installation are not yet acceptance-tested.
+
+For a raw Git checkout (rather than the CI-distributed source ZIP), run `python3 system-extension-manager/build.py --extensions-only` before `bash system-extension-manager/run.sh` so the locally built HomeBackUp extension package and catalog are available. CI releases include the ready-to-install manager and all three bundled extension packages.
