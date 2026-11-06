@@ -10,7 +10,12 @@ usage() {
 
 [[ $# -ge 1 && $# -le 2 ]] || usage
 
-src="${1%/}"
+# WARNING: concurrent source writes cannot be excluded; this tool only archives.
+# Move originals manually after reviewing the archive and closing all writers.
+src="$1"
+while [[ "$src" == */ && "$src" != / ]]; do src="${src%/}"; done
+[[ "$src" != / ]] || { echo 'ERROR: Refusing to archive the filesystem root.' >&2; exit 1; }
+[[ ! -L "$src" ]] || { echo 'ERROR: Select the real directory, not a symbolic link.' >&2; exit 1; }
 
 if [[ ! -d "$src" ]]; then
   echo "Error: not a folder: $src" >&2
@@ -35,7 +40,7 @@ esac
 
 stamp="$(date +%Y%m%d-%H%M%S)"
 archive="$outdir_abs/${base}-${stamp}.tar.gz"
-tmp_archive="${archive}.part"
+tmp_archive="$(mktemp "$outdir_abs/.archive.XXXXXXXX.tar.gz")"
 
 cleanup() {
   [[ -f "$tmp_archive" ]] && rm -f -- "$tmp_archive"
@@ -52,7 +57,8 @@ tar -C "$parent" -czf "$tmp_archive" -- "$base"
 echo "Testing archive structure..."
 tar -tzf "$tmp_archive" >/dev/null
 
-mv -- "$tmp_archive" "$archive"
+ln -- "$tmp_archive" "$archive"
+rm -- "$tmp_archive"
 trap - EXIT
 
 echo
@@ -66,22 +72,5 @@ tar -tzf "$archive" | head -80
 set -o pipefail
 
 echo
-echo "Moving original folder to Trash..."
-
-if command -v gio >/dev/null 2>&1; then
-  gio trash -- "$src_abs"
-elif command -v trash-put >/dev/null 2>&1; then
-  trash-put -- "$src_abs"
-else
-  echo "Archive was created, but I could not move the folder to Trash." >&2
-  echo "Install trash-cli or use a desktop environment with gio." >&2
-  echo "Original folder is still here:" >&2
-  echo "  $src_abs" >&2
-  exit 1
-fi
-
-echo
-echo "Done."
-echo "Original folder moved to Trash."
-echo "To inspect the archive without extracting:"
-echo "  tar -tzf \"$archive\" | less"
+echo "WARNING: Originals retained. A live source may change during or after compression."
+echo "Close all writers and inspect the archive before moving originals manually."

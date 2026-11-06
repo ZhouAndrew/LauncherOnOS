@@ -2,7 +2,7 @@ from pathlib import Path
 import re, shutil, os, subprocess
 root=Path(__file__).resolve().parent / 'build-mint-homebackup-extension'
 if root.exists(): shutil.rmtree(root)
-base=root/'mint-homebackup-extension_0.1.3_all'
+base=root/'mint-homebackup-extension_0.1.4_all'
 lib=base/'usr/lib/mint-homebackup-extension'
 for sub in (lib,base/'usr/bin',base/'usr/share/applications',base/'etc/systemd/system',base/'DEBIAN'):
  sub.mkdir(parents=True,exist_ok=True)
@@ -33,6 +33,9 @@ Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7
 TimeoutStartSec=0
+KillSignal=SIGINT
+TimeoutStopSec=120
+SendSIGKILL=no
 '''
 timer='''[Unit]
 Description=Mint HomeBackUp monthly backup
@@ -49,6 +52,27 @@ WantedBy=timers.target
 '''
 (base/'etc/systemd/system/mint-homebackup-extension.service').write_text(service)
 (base/'etc/systemd/system/mint-homebackup-extension.timer').write_text(timer)
+
+stop_scheduler = """#!/usr/bin/env bash
+# Stop triggers and active work before disabling/removing package files.
+set -Eeuo pipefail
+[[ $(id -u) == 0 ]] || { echo 'ERROR: Administrator authorization required.' >&2; exit 1; }
+command -v systemctl >/dev/null || { echo 'ERROR: systemctl unavailable; cannot verify shutdown.' >&2; exit 1; }
+for unit in mint-homebackup-extension.timer mint-homebackup-extension.service; do
+  systemctl stop "$unit"
+  state=$(systemctl show --property=ActiveState --value "$unit")
+  case "$state" in inactive|failed) ;; *) echo "ERROR: $unit remains $state; refusing removal." >&2; exit 1;; esac
+  if [[ "$unit" == *.service ]]; then
+    pid=$(systemctl show --property=MainPID --value "$unit")
+    [[ "$pid" == 0 ]] || { echo "ERROR: $unit still has PID $pid." >&2; exit 1; }
+  fi
+done
+systemctl disable mint-homebackup-extension.timer
+state=$(systemctl is-enabled mint-homebackup-extension.timer 2>/dev/null || true)
+case "$state" in disabled|masked) ;; *) echo "ERROR: Timer shutdown unverified: $state" >&2; exit 1;; esac
+echo 'Verified: monthly timer disabled and backup service stopped.'
+"""
+(lib/'stop-scheduler').write_text(stop_scheduler)
 
 admin='''#!/usr/bin/env bash
 # Privileged entry point. No password is requested when installing the package.
@@ -82,6 +106,10 @@ case ${1:-} in
     exit 0;;
 esac
 [[ $(id -u) == 0 ]] || fail '该操作需要管理员授权。请从普通用户 GUI 通过授权对话框执行。'
+# Shutdown must work with an absent disk, missing Borg, or missing credentials.
+if [[ ${1:-} == disable ]]; then
+  exec /usr/lib/mint-homebackup-extension/stop-scheduler
+fi
 [[ $(findmnt -n -o TARGET -T "$DEST" 2>/dev/null || :) == "$DEST" ]] || fail 'HomeBackUp 未挂载。'
 [[ $(findmnt -n -o UUID -T "$DEST" 2>/dev/null || :) == "$UUID" ]] || fail '备份目标 UUID 不符。'
 [[ $(findmnt -n -o FSTYPE -T "$DEST") == btrfs ]] || fail '目标不是 Btrfs。'
@@ -147,7 +175,7 @@ case ${1:-} in
       exit "$code"
     fi;;
   run) systemctl start mint-homebackup-extension.service;;
-  disable) systemctl disable --now "$NEW_TIMER";;
+  disable) fail 'Internal error: shutdown must use stop-scheduler';;
 esac
 '''
 (lib/'admin').write_text(admin)
@@ -226,7 +254,7 @@ Categories=System;Utility;
 Keywords=backup;borg;Mint;备份;恢复;
 ''')
 control='''Package: mint-homebackup-extension
-Version: 0.1.3
+Version: 0.1.4
 Section: admin
 Priority: optional
 Architecture: all
@@ -252,27 +280,35 @@ exit 0
 (base/'DEBIAN/postinst').write_text(postinst)
 prerm='''#!/bin/sh
 set -e
+if [ "$1" = upgrade ]; then
+  for unit in mint-homebackup-extension.service mint-homebackup-extension.timer; do
+    state=$(systemctl show --property=ActiveState --value "$unit") || exit 1
+    case "$state" in activating|deactivating) echo "ERROR: $unit is transitioning; retry later." >&2; exit 1;; esac
+    if [ "$unit" = mint-homebackup-extension.service ] && [ "$state" = active ]; then
+      echo 'ERROR: Backup is active. Disable monthly backups before upgrading.' >&2
+      exit 1
+    fi
+  done
+fi
 if [ "$1" = remove ] || [ "$1" = deconfigure ]; then
-  if command -v systemctl >/dev/null 2>&1; then
-    systemctl disable --now mint-homebackup-extension.timer 2>/dev/null || true
-  fi
+  /usr/lib/mint-homebackup-extension/stop-scheduler
 fi
 exit 0
 '''
 (base/'DEBIAN/prerm').write_text(prerm)
 # remove package files only on uninstall; root secret and Borg backup are never removed by package.
-for f in [lib/'gui.py',lib/'backup.sh',lib/'select.py',lib/'run-backup',lib/'admin',base/'usr/bin/homebackup-ext',base/'DEBIAN/postinst',base/'DEBIAN/prerm']:
+for f in [lib/'gui.py',lib/'backup.sh',lib/'select.py',lib/'run-backup',lib/'admin',lib/'stop-scheduler',base/'usr/bin/homebackup-ext',base/'DEBIAN/postinst',base/'DEBIAN/prerm']:
  f.chmod(0o755)
 for f in [base/'etc/systemd/system/mint-homebackup-extension.service',base/'etc/systemd/system/mint-homebackup-extension.timer']:
  f.chmod(0o644)
-readme='''# Mint HomeBackUp Extension 0.1.3
+readme='''# Mint HomeBackUp Extension 0.1.4
 
 这是独立的 Linux Mint GTK 3 图形管理包，不依赖 MintBox。普通用户启动无需 sudo，查询定时器状态无需授权。安装不会初始化或修改已有 Borg 仓库，不主动删除任何归档，也不会自动开启定时备份。
 
 **安装（一次系统管理员授权）：**
 
 ```bash
-sudo apt install ./mint-homebackup-extension_0.1.3_all.deb
+sudo apt install ./mint-homebackup-extension_0.1.4_all.deb
 ```
 
 APT 可能因为 sudo 会话过期而要求管理员密码，但此安装包不会再次主动提示密码。它也不会在软件包安装环节要求 Borg 密码。
@@ -312,5 +348,5 @@ if __name__ == '__main__':
     for target in sorted(base.rglob('*'), reverse=True):
         os.utime(target, (epoch, epoch), follow_symlinks=False)
     os.utime(base, (epoch, epoch))
-    subprocess.run(['dpkg-deb', '-Zxz', '-z6', '--threads-max=1', '--root-owner-group', '--build', str(base), str(dest / 'mint-homebackup-extension_0.1.3_all.deb')],
+    subprocess.run(['dpkg-deb', '-Zxz', '-z6', '--threads-max=1', '--root-owner-group', '--build', str(base), str(dest / 'mint-homebackup-extension_0.1.4_all.deb')],
                    check=True, env={**os.environ, 'SOURCE_DATE_EPOCH': str(epoch)})

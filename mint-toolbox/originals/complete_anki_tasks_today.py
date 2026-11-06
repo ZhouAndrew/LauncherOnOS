@@ -15,7 +15,7 @@ from typing import Any
 from urllib.parse import unquote, urlparse
 
 
-CALDAV_URL = "http://andrew.local:5232/andrew/"
+CALDAV_URL = "https://andrew.local:5232/andrew/"
 DEFAULT_USERNAME = "andrew"
 DEFAULT_TIMEZONE = "Asia/Shanghai"
 DEFAULT_KEYWORD = "Anki"
@@ -178,6 +178,8 @@ def parse_args() -> argparse.Namespace:
         help="Preview only; do not modify any tasks",
     )
 
+    parser.add_argument('--url', default=os.environ.get('CALDAV_URL', CALDAV_URL))
+    parser.add_argument('--allow-insecure-http', action='store_true', help='WARNING: expose credentials and task data to network observers')
     return parser.parse_args()
 
 
@@ -374,6 +376,19 @@ def get_pending_todos(
 
 
 def main() -> int:
+    args = parse_args()
+    from urllib.parse import urlsplit
+    parsed = urlsplit(args.url)
+    if (parsed.scheme not in ('https', 'http') or not parsed.hostname or parsed.username
+            or parsed.password or any(ord(c) < 32 or ord(c) == 127 for c in args.url)):
+        print('ERROR: Invalid CalDAV URL; use HTTPS without embedded credentials.', file=sys.stderr)
+        return 2
+    if parsed.scheme == 'http' and not args.allow_insecure_http:
+        print('ERROR: HTTP can expose credentials. Use HTTPS, or explicitly opt in with --allow-insecure-http.', file=sys.stderr)
+        return 2
+    if parsed.scheme == 'http':
+        print('WARNING: INSECURE HTTP exposes credentials and task data to network observers.', file=sys.stderr)
+    print('WARNING: Bulk completion changes matching tasks. Server readback of recurring tasks is not independently verified; preview first.', file=sys.stderr)
     ensure_runtime()
 
     import caldav
@@ -381,8 +396,6 @@ def main() -> int:
         ZoneInfo,
         ZoneInfoNotFoundError,
     )
-
-    args = parse_args()
 
     try:
         local_tz = ZoneInfo(
@@ -446,7 +459,7 @@ def main() -> int:
 
     try:
         with caldav.get_davclient(
-            url=CALDAV_URL,
+            url=args.url,
             username=args.username,
             password=password,
         ) as client:
@@ -460,7 +473,7 @@ def main() -> int:
 
             print(
                 "Principal："
-                f"{getattr(principal, 'url', CALDAV_URL)}"
+                f"{getattr(principal, 'url', args.url)}"
             )
 
             print(

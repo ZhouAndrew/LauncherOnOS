@@ -1,3 +1,5 @@
+> **DEPRECATED / NOT ACTIVE:** Use the independent [System Extension Manager](../system-extension-manager/). This compatibility program is not the active product. WeChat remains security-unfixed; imports intentionally publish.
+
 # Mint Toolbox v0.5.0
 
 A GUI-first collection of Linux utilities with a Debian system extension manager.

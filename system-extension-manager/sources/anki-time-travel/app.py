@@ -14,6 +14,8 @@ import tempfile
 from execution import LogPanel, OperationLog
 
 ROOT = Path(__file__).resolve().parent
+# SECURITY WARNING: imports intentionally publish; the warning does not prevent collisions.
+IMPORT_WARNING = 'WARNING: This import PUBLISHES WordPress posts. A matching title/date can overwrite existing content and replace categories/tags. A same-path attachment may reuse older bytes. Uploaded PDFs may be directly accessible. Back up the site first; review the result.'
 DEFAULT_WP = '/var/www/html/wordpress'
 IMPORT_SCRIPT = ROOT / 'anki-time-travel.sh'
 
@@ -62,6 +64,7 @@ def run_import(files, site, log):
     if not files:
         raise ValueError('Select at least one PDF file')
     check_environment(site)
+    log.stage(IMPORT_WARNING)
     log.stage('Importing historical PDFs into WordPress')
     # Bash preflights all inputs and handles WordPress timestamps and readback.
     log.run(['/bin/bash', str(IMPORT_SCRIPT), *files], env={'WP_PATH': str(site)})
@@ -91,7 +94,7 @@ def show_gui(files=(), site=None, parent=None):
     holder = ttk.Frame(window, padding=12)
     holder.pack(fill='both', expand=True)
     ttk.Label(holder, text='Historical Anki PDFs to WordPress', font=('Sans', 17, 'bold')).pack(anchor='w')
-    ttk.Label(holder, text='Uses the filename timestamp; publishes posts and attachments, then verifies the result.').pack(anchor='w', pady=(4, 12))
+    ttk.Label(holder, text=IMPORT_WARNING, wraplength=900, foreground='#9b3200').pack(anchor='w', pady=(4, 12))
     wp_row = ttk.Frame(holder)
     wp_row.pack(fill='x')
     ttk.Label(wp_row, text='WordPress root').pack(side='left')
@@ -150,7 +153,7 @@ def show_gui(files=(), site=None, parent=None):
             messagebox.showerror('Cannot start import', str(exc), parent=window)
             return
         if not messagebox.askyesno('Confirm WordPress import',
-            f'Import {len(paths)} PDF file(s) into {site}?\n\nThis creates or updates WordPress posts and attachments.', parent=window):
+            f'Import {len(paths)} PDF file(s) into {site}?\n\n{IMPORT_WARNING}', parent=window):
             return
         busy[0] = True
         state.set('Running... Full commands and output are shown below.')

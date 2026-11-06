@@ -30,6 +30,14 @@ done
 [[ $(findmnt -n -o FSTYPE -T "$TARGET") == btrfs ]] || err 'HomeBackUp 不是 Btrfs。'
 [[ $(findmnt -n -o OPTIONS -T "$TARGET") == *rw* ]] || err 'HomeBackUp 为只读挂载。'
 
+# The runner passes inherited fd 8; direct invocations acquire the same lock.
+# Retain it across inventory, create and verification. The runner retains it
+# through its later retention phase as well.
+if [[ $(readlink /proc/self/fd/8 2>/dev/null || :) != /run/lock/homebackup-monthly.lock ]]; then
+  exec 8>/run/lock/homebackup-monthly.lock
+fi
+flock -n 8 || err 'Another HomeBackUp transaction is running.'
+
 mkdir -p "$TARGET"
 exec 9>"$TARGET/.mint-recovery.lock"
 flock -n 9 || err '已有另一项备份正在进行。'

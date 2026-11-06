@@ -9,6 +9,8 @@ import re
 import shutil
 import subprocess
 import sys
+# SECURITY WARNING: WeChat security issues are NOT repaired in this release.
+# See the runtime warning and SECURITY_STATUS.md before using these legacy tools.
 from pathlib import Path
 from urllib.parse import quote
 
@@ -266,6 +268,7 @@ def create_or_update_post(
 
 
 def main() -> int:
+    print('WARNING - UNFIXED WECHAT RISKS: This publishes private chats and copies ALL export files to web-accessible uploads. Static files are not protected by private WordPress posts. Active HTML/PHP may be unsafe. Same-name exports use rsync --delete and can erase older archived files. Dry-run preprocessing may generate and write HTML. Use only trusted exports; back up the site first.', file=sys.stderr)
     parser = argparse.ArgumentParser(
         description=(
             "Copy the WeChat export directory and associated assets into WordPress, "

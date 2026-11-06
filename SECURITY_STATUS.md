@@ -1,0 +1,66 @@
+# Security status — 2026-11-06
+
+## Active product
+
+**ACTIVE / MAINTAINED: System Extension Manager 0.2.2**, under
+`system-extension-manager/`. Its independently installed extensions are
+ZIP and Trash 0.4.4, Anki Time Travel 0.1.5 and HomeBackUp 0.1.4.
+
+**DEPRECATED / NOT ACTIVE: Mint Toolbox**, under `mint-toolbox/`.
+Its GUI, CLI and README display this warning. Merging its history does not
+reactivate it. The standalone `anki-time-travel/` directory is a compatibility
+entry point for that legacy application; use the active manager's extension.
+The original LauncherOnOS CLI is a separate script registry, not the active
+extension-management GUI.
+
+## Publication is intentional
+
+The user explicitly requires imports to **publish**, not create drafts.
+This release preserves their existing output and publication behavior.
+Warnings are disclosure, not a claim that import collision/privacy risks are fixed.
+
+| Area | Status and behavior |
+| --- | --- |
+| Anki imports | **PUBLICATION RETAINED; RESIDUAL RISK.** GUI banner, confirmation dialog, operation log, Bash runtime and code warn that matching title/date may replace existing body/categories/tags, same-path attachments may reuse older bytes, and PDFs can be directly accessible. Back up WordPress and inspect results. |
+| WeChat imports/unlocking | **NOT SECURITY-FIXED.** Legacy GUI descriptions/confirmations, catalog, direct CLI and source comments warn about public chats/static files, active HTML/PHP, `rsync --delete` collisions and preprocessing writes even during preview. Publication remains intentional. Do not assume private posts protect uploads. |
+| ZIP default / Nemo action | **NON-DESTRUCTIVE DEFAULT.** Create and verify ZIP; KEEP originals. A writer can still change files while archiving. A verified ZIP is not a filesystem snapshot. |
+| ZIP `--trash-originals` | **EXPLICIT RESIDUAL RISK.** CLI warning / GUI confirmation and source comments explain that validation and Trash are not atomic. Close writers and inspect before choosing this opt-in. No fallback to permanent deletion. |
+| Legacy tar tool | Refuses selected directory symlinks, uses exclusive temporary files and no-clobber publication, and keeps originals. Warns about live changes and manual cleanup. |
+| Desktop web launcher | Rejects CR/LF and other control characters at input, final URL and Exec serialization, preventing the reproduced extra-Exec-key injection. |
+| HomeBackUp stop | Runs before disk, repository, Borg and password checks. Stops timer and active service; reads back inactive state and service PID, disables and verifies timer. Stop failures propagate. |
+| HomeBackUp uninstall | Uses the same verified shutdown helper before removing files; no ignored stop errors. Service uses SIGINT, a bounded stop wait and no forced SIGKILL. Uncooperative processes cause failure rather than unverified removal. |
+| HomeBackUp retention | **INTENTIONAL DELETION.** Successful verified backup retains newest archive for each of the latest three backup dates, then deletes other matching mint-* archives and compacts. GUI setup/enable/backup prompts warn that missed schedules may run immediately and pruning is permanent. Preview first. Direct and scheduled backups share an inherited transaction lock through create/check/prune. |
+| HomeBackUp upgrade | New package's pre-removal script refuses upgrade during active/transitioning backup. **When upgrading from an older package, its old maintenance scripts still run: stop the scheduler and active service first.** This transition needs live Mint verification. |
+| CalDAV legacy task tool | Defaults to HTTPS and refuses HTTP before dependencies/password handling. Plain HTTP requires `--allow-insecure-http` and warns about credential/data exposure. Bulk recurring-task completion still lacks independent readback and warns accordingly. |
+| Diagnostic reports | Random exclusive report creation with umask 077 / mode 0600. Warns that logs/configuration snippets are sensitive; review before sharing. |
+| APT operations | Simulate both installation and removal, reject unrelated removals and implicit kernel/NVIDIA changes before authorization. No broad system upgrade or security-update timer is installed. |
+| Source distribution | Rebuilt extension packages and source pins; removed stale missing test-check.sh reference. CI verifies committed source/package pins BEFORE rebuilding so rebuilding cannot hide an inconsistent checkout. |
+| CI supply chain | Actions pinned to GitHub-resolved commits; explicit contents:read permissions. Third-party runtime dependencies and the account's branch protection settings are outside this code change. |
+
+## Operational limits
+
+- “Enabled” in the manager describes the Debian extension installation. It does
+  not mean HomeBackUp's timer is enabled. Open HomeBackUp to inspect the scheduler.
+- Updating repository files does not update already-installed packages on a user's
+  machine. Run the new source manager and use its explicit Update action.
+- Disabling/removing the manager itself does not remove separately installed
+  extension packages or previously configured legacy monthly timers.
+- Historical Thunderbird experiment scripts and third-party application runtimes
+  are not newly certified. The legacy app remains deprecated and warns accordingly.
+- No changes to the user's real WordPress site, backup repository, installed
+  services, drivers or kernel were made while implementing these changes.
+
+## Verification
+
+Behavioral regression tests exercise control-character injection rejection,
+non-destructive ZIP defaults after a late source write, explicit Trash warnings,
+directory-link refusal, disable without disk/password, shutdown/readback failure,
+uninstall failure propagation, insecure HTTP refusal and dangerous APT plans.
+Existing WordPress stub tests still exercise publication and exact permalinks.
+Package checks validate all pinned source recipes as an ordinary user.
+
+Local container GIO may report “Trashing on system internal mounts is not
+supported.” Tests skip only this specific filesystem capability failure;
+other Trash failures are still failures. Graphical tests require a display.
+Neither mock tests nor CI replace live Mint service shutdown, upgrade, backup
+and restore acceptance.

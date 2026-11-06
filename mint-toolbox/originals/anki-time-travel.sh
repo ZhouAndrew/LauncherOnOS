@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+# SECURITY WARNING: publication/overwrite and same-path attachment reuse are intentional
+# legacy semantics, not security fixes. Keep the runtime warning before all writes.
+
 # Anki historical stats PDF "time-travel" backfill helper
 #
 # Usage:
@@ -115,6 +118,8 @@ ensure_term() {
 
     wp term create "$taxonomy" "$name" --slug="$slug" >/dev/null
 }
+
+printf '%s\n' 'WARNING: This import PUBLISHES WordPress posts. A matching title/date can overwrite existing content and replace categories/tags. A same-path attachment may reuse older bytes. Uploaded PDFs may be directly accessible. Back up the site first; review the result.' >&2
 
 ensure_term category "Anki" "anki"
 ensure_term post_tag "Anki" "anki"

@@ -230,6 +230,9 @@ Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7
 TimeoutStartSec=0
+KillSignal=SIGINT
+TimeoutStopSec=120
+SendSIGKILL=no
 UNIT
 
 cat > "$TIMER" <<'UNIT'

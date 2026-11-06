@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Nemo ZIP action: system zip/unzip, verified contents, GIO trash only."""
+"""Verified ZIP; preserve originals by default. WARNING: opt-in Trash is not atomic with concurrent writers."""
 import hashlib
 import os
 from pathlib import Path
@@ -52,7 +52,7 @@ def snapshot(paths):
     return result
 
 
-def archive_and_trash(inputs, run=subprocess.run, report=lambda text: None):
+def archive_and_trash(inputs, run=subprocess.run, report=lambda text: None, *, trash_originals=False):
     paths = [Path(os.path.abspath(p)) for p in inputs]
     if not paths or len(set(paths)) != len(paths):
         raise ValueError('Select nonduplicate files or folders')
@@ -101,6 +101,12 @@ def archive_and_trash(inputs, run=subprocess.run, report=lambda text: None):
             os.fsync(fd)
         finally:
             os.close(fd)
+        if not trash_originals:
+            report('Archive verified. Originals retained; concurrent writers cannot be safely excluded.')
+            return target
+        # WARNING: opt-in Trash is not atomic with snapshot validation. Open
+        # writers can change data after this check; never claim otherwise.
+        report('WARNING: explicit Trash requested. Close all writers; new data may not be in the ZIP.')
         # Never fall back to rm. Failed/partial trash keeps the verified ZIP.
         try:
             if snapshot(paths) != original:
@@ -117,6 +123,7 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description='Compress to ZIP and move originals to Trash')
     parser.add_argument('--gui', action='store_true')
+    parser.add_argument('--trash-originals', action='store_true', help='WARNING: opt in to non-atomic Trash; close all writers first')
     parser.add_argument('paths', nargs='+')
     args = parser.parse_args()
     if args.gui:
@@ -125,16 +132,18 @@ def main():
         confirm = tk.Tk()
         confirm.withdraw()
         accepted = messagebox.askyesno('Compress to ZIP and delete',
-            'Compress and verify the selection, then move originals to Trash?\nSymbolic links are stored as links; their targets are not followed.\n\nA window will show commands and live output.', parent=confirm)
+            ('WARNING: move originals to Trash after compression? Concurrent writes may be missing from the ZIP. Close all writers first.' if args.trash_originals else 'Create a verified ZIP and KEEP all originals?') + '\nSymbolic links are stored as links. Commands and output remain visible.', parent=confirm)
         confirm.destroy()
         if not accepted:
             return 0
-        return run_operation_window('Mint Toolbox - ZIP and Trash',
-            lambda log: archive_and_trash(args.paths, log.run, log.stage))
+        return run_operation_window('ZIP and Trash',
+            lambda log: archive_and_trash(args.paths, log.run, log.stage, trash_originals=args.trash_originals))
+    if args.trash_originals:
+        print('WARNING: Trash is not atomic with file validation. Close all writers. Originals may contain newer data than the ZIP.', file=sys.stderr)
     log = OperationLog('ZIP and Trash')
     try:
-        target = archive_and_trash(args.paths, log.run, log.stage)
-        log.stage('ZIP created; originals moved to Trash: ' + str(target))
+        target = archive_and_trash(args.paths, log.run, log.stage, trash_originals=args.trash_originals)
+        log.stage(('ZIP created; originals moved to Trash: ' if args.trash_originals else 'ZIP created; originals retained: ') + str(target))
         return 0
     except Exception as exc:
         log.stage('FAILED: ' + str(exc))

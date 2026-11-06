@@ -2,6 +2,7 @@
 # WordPress read-only diagnostics
 # Version: 1.0.0
 
+umask 077
 set -u
 set -o pipefail
 
@@ -108,7 +109,9 @@ if [[ ! -d "$OUTPUT_DIR" || ! -w "$OUTPUT_DIR" ]]; then
 fi
 
 STAMP="$(date +%Y%m%d_%H%M%S)"
-REPORT="${OUTPUT_DIR}/wordpress_diagnose_${STAMP}.txt"
+REPORT="$(mktemp "${OUTPUT_DIR}/wordpress_diagnose_${STAMP}.XXXXXXXX.txt")" || exit 1
+chmod 600 "$REPORT"
+echo "WARNING: Report contains sensitive logs and configuration fragments. Review before sharing." >&2
 
 if command -v sudo >/dev/null 2>&1; then
     if ! sudo -v; then

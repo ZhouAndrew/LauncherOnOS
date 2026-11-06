@@ -74,6 +74,8 @@ else: raise AssertionError('Unexpected command: ' + repr(args))
         self.assertIn(['eval', 'echo get_permalink(15128);'], calls)
         self.assertFalse(any(call[:2] == ['post', 'url'] for call in calls))
         self.assertTrue(self.pdf.exists())
+        self.assertIn('WARNING: This import PUBLISHES', result.stderr)
+        self.assertTrue(any(call[:2] == ['post', 'update'] and '--post_status=publish' in call for call in calls))
 
     def test_multiple_permalink_lines_cannot_report_success(self):
         result = self.run_import('multiple')
