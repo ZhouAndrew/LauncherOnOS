@@ -205,7 +205,7 @@ def change(key, enable, log=None, from_source=False, update=False):
             package = parts[1].split(':')[0]
             if parts[0] == 'Remv' and (enable or package != item['package']):
                 raise ValueError('Refusing unrelated package removal: ' + package)
-            if parts[0] == 'Inst' and re.match(r'^(linux-(image|headers|modules|generic|hwe|oem|virtual|lowlatency)|nvidia-|libnvidia-)', package):
+            if parts[0] == 'Inst' and re.match(r'^(linux-|nvidia-|libnvidia-)', package):
                 raise ValueError('Kernel/driver changes require separate manual review: ' + package)
         if enable and installed and item['id'] == 'homebackup':
             # An upgrade first executes the OLD package's maintenance scripts.

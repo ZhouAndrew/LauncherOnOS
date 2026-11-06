@@ -33,7 +33,7 @@ jobs:
           from pathlib import Path
           root = Path('system-extension-manager')
           entries = json.loads((root / 'extensions.json').read_text())
-          assert {row['id'] for row in entries} == {'zip-trash','anki-time-travel','homebackup'}
+          assert {row['id'] for row in entries} == {'zip-trash','anki-time-travel','homebackup','security-updates'}
           for row in entries:
               assert hashlib.sha256((root / row['deb']).read_bytes()).hexdigest() == row['sha256'], row['id']
               for path, digest in row['source']['files'].items():
@@ -44,8 +44,15 @@ jobs:
           sha256sum system-extension-manager/packages/mint-homebackup-extension_0.1.4_all.deb > /tmp/homebackup-sha
           python3 system-extension-manager/sources/homebackup/build.py --output-dir system-extension-manager/packages
           sha256sum -c /tmp/homebackup-sha
+      - name: Verify manual security-update package and reproducibility
+        run: |
+          sha256sum system-extension-manager/packages/mint-security-updates-extension_0.1.1_all.deb > /tmp/security-update-sha
+          python3 system-extension-manager/sources/security-updates/build.py --output-dir system-extension-manager/packages
+          sha256sum -c /tmp/security-update-sha
+          dpkg-deb -c system-extension-manager/packages/mint-security-updates-extension_0.1.1_all.deb | grep 'usr/bin/mint-security-updates'
+          ! dpkg-deb -c system-extension-manager/packages/mint-security-updates-extension_0.1.1_all.deb | grep -E 'systemd|cron\.'
       - name: Validate desktop entries
-        run: desktop-file-validate system-extension-manager/system-extension-manager.desktop system-extension-manager/sources/anki-time-travel/anki-time-travel.desktop
+        run: desktop-file-validate system-extension-manager/system-extension-manager.desktop system-extension-manager/sources/anki-time-travel/anki-time-travel.desktop system-extension-manager/sources/security-updates/security-updates.desktop
       - name: Test extension manager and catalog
         run: xvfb-run -a python3 -m unittest discover -s system-extension-manager/tests -v
       - name: Smoke test HomeBackUp GTK 3 window as normal user
@@ -60,7 +67,7 @@ jobs:
           (cd system-extension-manager && zip -q -r "$GITHUB_WORKSPACE/System-Extension-Manager-source.zip" . -x 'dist/*' '*/__pycache__/*' '*.pyc' 'sources/homebackup/build-mint-homebackup-extension/*' 'sources/homebackup/BUILD-NOTES.md')
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: System-Extension-Manager-GUI-HomeBackUp
+          name: System-Extension-Manager-GUI-Four-Extensions
           path: |
             System-Extension-Manager-source.zip
             ${{ runner.temp }}/manager/system-extension-manager_*.deb
