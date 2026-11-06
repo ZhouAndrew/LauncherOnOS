@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "id": "user-example",
+  "name": "My file-processing tool",
+  "category": "Files and archives",
+  "description": "Process a selected file and save the result to an output folder.",
+  "executable": "/home/USERNAME/bin/my-tool.sh",
+  "risk": "medium",
+  "actions": [
+    {
+      "key": "process",
+      "label": "Process file...",
+      "severity": "medium",
+      "note": "Check the input file and output directory before processing.",
+      "fields": [
+        {
+          "key": "source",
+          "label": "Input file",
+          "kind": "file"
+        },
+        {
+          "key": "output",
+          "label": "Output folder",
+          "kind": "folder",
+          "required": false
+        },
+        {
+          "key": "verbose",
+          "label": "Verbose output",
+          "kind": "boolean",
+          "required": false
+        }
+      ],
+      "argv": [
+        {
+          "field": "source",
+          "flag": "--input"
+        },
+        {
+          "field": "output",
+          "flag": "--output"
+        },
+        {
+          "field": "verbose",
+          "flag": "--verbose"
+        }
+      ]
+    }
+  ]
+}

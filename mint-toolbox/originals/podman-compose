@@ -1,0 +1,6 @@
+#!/home/andrew/.local/share/pipx/venvs/podman-compose/bin/python
+import sys
+from podman_compose import main
+if __name__ == '__main__':
+    sys.argv[0] = sys.argv[0].removesuffix('.exe')
+    sys.exit(main())

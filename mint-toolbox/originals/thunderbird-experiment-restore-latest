@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+PROFILE="/home/andrew/.local/share/thunderbird-taskfix/profile"
+BACKUP_ROOT="/home/andrew/Thunderbird-Experiment-Backups"
+
+echo
+echo "============================================================"
+echo " Thunderbird experimental data recovery"
+echo "============================================================"
+echo
+
+if pgrep -u "$UID" -x thunderbird >/dev/null 2>&1 ||
+   pgrep -u "$UID" -x thunderbird-bin >/dev/null 2>&1; then
+    echo "✗ Thunderbird is running."
+    echo "Close Thunderbird before restoring."
+    exit 1
+fi
+
+LATEST="$(
+    find "$BACKUP_ROOT"         -mindepth 1         -maxdepth 1         -type d         -name '*-before-experiment'         -printf '%T@ %p\n' |
+    sort -nr |
+    head -n1 |
+    cut -d' ' -f2-
+)"
+
+if [ -z "$LATEST" ] || [ ! -d "$LATEST/profile" ]; then
+    echo "✗ No pre-experiment backup was found."
+    exit 1
+fi
+
+echo "Preparing to restore: "
+echo
+echo "  $LATEST/profile"
+echo "       ↓"
+echo "  $PROFILE"
+echo
+
+read -r -p "Restore this backup? Type YES: " ANSWER
+
+if [ "$ANSWER" != "YES" ]; then
+    echo "Cancelled."
+    exit 0
+fi
+
+EMERGENCY="$BACKUP_ROOT/$(date '+%Y%m%d-%H%M%S')-before-restore-current"
+
+mkdir -p "$EMERGENCY"
+
+echo
+echo "Saving current state before restoring: "
+echo "  $EMERGENCY/profile"
+
+cp -a --reflink=auto     "$PROFILE"     "$EMERGENCY/profile"
+
+echo
+echo "Restoring the latest pre-experiment data..."
+
+rm -rf "$PROFILE.restore-new"
+
+cp -a --reflink=auto     "$LATEST/profile"     "$PROFILE.restore-new"
+
+OLD="$PROFILE.before-restore-$(date '+%Y%m%d-%H%M%S')"
+
+mv "$PROFILE" "$OLD"
+mv "$PROFILE.restore-new" "$PROFILE"
+
+rm -f     "$PROFILE/.parentlock"     "$PROFILE/lock"     2>/dev/null || true
+
+echo
+echo "✓ Restore complete"
+echo
+echo "Restored from: "
+echo "  $LATEST"
+echo
+echo "Previous state retained at: "
+echo "  $OLD"

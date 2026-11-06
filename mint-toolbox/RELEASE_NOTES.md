@@ -1,0 +1,31 @@
+# v0.5.0
+
+- Ships the whole Mint Toolbox as one installable system Debian package.
+- Opens the main toolbox from the desktop entry and source installer.
+- Integrates Anki PDF import into a child window of the main toolbox, with shared live logs.
+- Adds `mint-toolbox --anki` for CLI imports and desktop file selection.
+- The standalone compatibility entry delegates to the same canonical importer implementation.
+
+# v0.4.2
+
+- Query the canonical permalink for the exact imported Post ID.
+- Reject multiple URLs or failed permalink queries before reporting success.
+- Includes the standalone Anki Time Travel 0.1.2 importer fix.
+
+# v0.4.1
+
+- Preserve file, directory, dangling and circular symbolic links in ZIP using system zip -y.
+- Verify both Unix link type and exact target bytes before moving originals to Trash.
+- Link targets outside the selection are never followed or moved to Trash.
+- Includes repaired Anki PDF path handling, numeric download suffixes, and WP-CLI GMT evaluation.
+
+# v0.4.0
+
+- English toolbox UI, prompts, diagnostics, comments and manuals.
+- Searchable multi-tool extension table with status filtering.
+- Live commands, stdout/stderr, stages, exit codes, and persistent private operation logs.
+- Verified local-source recipes, non-root builds, generated-deb verification and apt compatibility checks.
+- Nemo ZIP operation now displays a live log window and keeps its result visible.
+- Existing user configuration, script identifiers and WordPress content compatibility are preserved.
+
+Linux Mint desktop acceptance remains pending for system authorization and Nemo's menu interaction.
