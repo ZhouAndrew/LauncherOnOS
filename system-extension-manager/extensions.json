@@ -99,34 +99,11 @@
   },
   {
     "id": "security-updates",
+    "kind": "portable",
     "name": "Security Updates",
-    "package": "mint-security-updates-extension",
-    "version": "0.1.1",
-    "launch": [
-      "/usr/bin/mint-security-updates",
-      "--gui"
-    ],
-    "description": "Manually inspect, refresh and apply official Ubuntu noble-security updates. Kernel, NVIDIA, DKMS, firmware and boot packages are protected. Refuses unexpected installs/removals, requires explicit authorization, and creates no automatic update timers.",
-    "deb": "packages/mint-security-updates-extension_0.1.1_all.deb",
-    "sha256": "5c25f19fcd01c9f11a06705465c7054d1b6db19a8b5dd6e323d4ee3dc382b4f4",
-    "source": {
-      "kind": "bundled",
-      "requires": [
-        "python3",
-        "dpkg-deb",
-        "xz"
-      ],
-      "files": {
-        "sources/security-updates/build.py": "7ec4b451796ac99543f337d48620470dc033b6af30d43b02038723073b31b1f6",
-        "sources/security-updates/security-updates.desktop": "a0dade5f2be947c6a0198fd509ee40e5ea6e99e9510b07661b4afdd835da8810",
-        "sources/security-updates/security_updates.py": "32b9717a7b5bc030faa9330487b1061c6044ef40446966814931831e5004ccc9"
-      },
-      "argv": [
-        "python3",
-        "sources/security-updates/build.py",
-        "--output-dir",
-        "{output}"
-      ]
-    }
+    "version": "Built-in",
+    "script": "sources/security-updates/security_updates.py",
+    "sha256": "dde15e4a9017ecdb51a96f88759281751e15b68df7025eb81544db09280a1fd8",
+    "description": "Run one interactive command in a terminal; manually refresh and install trusted Ubuntu noble-security updates after review. No extension package or scheduled jobs. Kernel, NVIDIA, DKMS, firmware and boot packages are protected."
   }
 ]

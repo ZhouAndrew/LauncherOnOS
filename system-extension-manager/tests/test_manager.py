@@ -14,17 +14,54 @@ import manager
 
 
 class CatalogTests(unittest.TestCase):
-    def test_four_real_extensions_have_valid_bundled_debs_and_pinned_sources(self):
+    def test_three_debs_plus_portable_updater(self):
         import hashlib
         rows = lifecycle.plugins()
         self.assertEqual({row['id'] for row in rows}, {'zip-trash', 'anki-time-travel', 'homebackup', 'security-updates'})
         for row in rows:
+            if row.get('kind') == 'portable':
+                self.assertEqual(row['id'], 'security-updates')
+                self.assertNotIn('deb', row)
+                self.assertNotIn('package', row)
+                self.assertNotIn('source', row)
+                self.assertTrue(lifecycle.portable_script(row).is_file())
+                continue
             deb = lifecycle.bundled_deb(row)
             info = lifecycle.verify_deb(row, deb)
             self.assertEqual(info['Package'], row['package'])
             for name, sha in row['source']['files'].items():
                 self.assertEqual(hashlib.sha256((ROOT / name).read_bytes()).hexdigest(), sha)
         self.assertEqual(lifecycle.plugin('anki-time-travel')['launch'], ['/usr/bin/anki-time-travel', '--gui'])
+
+    def test_portable_security_updates_never_installs_a_package(self):
+        row = lifecycle.plugin('security-updates')
+        self.assertEqual(row['kind'], 'portable')
+        self.assertEqual(lifecycle.extension_state(row)['state'], 'Ready (no installation required)')
+        self.assertNotIn('package', row)
+        self.assertNotIn('deb', row)
+        for fn in (
+            lambda: lifecycle.command('security-updates', True),
+            lambda: lifecycle.command('security-updates', False),
+            lambda: lifecycle.change('security-updates', True, Mock()),
+            lambda: lifecycle.change('security-updates', False, Mock()),
+        ):
+            with self.assertRaisesRegex(ValueError, 'Portable tools'):
+                fn()
+
+    def test_portable_open_starts_terminal_without_dpkg_or_apt(self):
+        with (
+            patch.object(lifecycle.shutil, 'which', side_effect=lambda name: '/usr/bin/x-terminal-emulator' if name == 'x-terminal-emulator' else None),
+            patch.object(lifecycle.subprocess, 'Popen') as popen,
+            patch.object(lifecycle, 'package_status', side_effect=AssertionError('dpkg should not be checked')),
+            patch.object(lifecycle, 'command', side_effect=AssertionError('apt should not be launched')),
+        ):
+            args = lifecycle.launch_command('security-updates')
+            self.assertEqual(args[:2], ['/usr/bin/x-terminal-emulator', '-e'])
+            self.assertEqual(args[-1], '--interactive')
+            log = Mock()
+            lifecycle.open_extension('security-updates', log)
+            popen.assert_called_once()
+            self.assertNotIn('/usr/bin/apt-get', ' '.join(popen.call_args.args[0]))
 
     def test_homebackup_gui_package_is_bundled_and_status_needs_no_root(self):
         import tempfile
@@ -105,7 +142,7 @@ class CatalogTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
             self.assertFalse((app / 'dist').exists())
             self.assertFalse(list(app.glob('system-extension-manager*.deb')))
-            self.assertEqual(len(list((app / 'packages').glob('*.deb'))), 4)
+            self.assertEqual(len(list((app / 'packages').glob('*.deb'))), 3)
 
     def test_manager_packaging_requires_explicit_cli_request(self):
         with patch.object(lifecycle, 'build_manager_package') as build:
@@ -121,6 +158,8 @@ import os
 assert os.geteuid() != 0
 log = OperationLog('source recipe verification', lambda line: None)
 for row in lifecycle.plugins():
+    if row.get('kind') == 'portable':
+        continue
     artifact = lifecycle.build_source(row, log)
     assert artifact.is_file()
 log.close()
@@ -152,6 +191,35 @@ print('ALL_RECIPES_OK')
 
 @unittest.skipUnless(os.environ.get('DISPLAY'), 'requires a graphical environment')
 class ManagerGuiTests(unittest.TestCase):
+    def test_portable_security_row_has_run_only(self):
+        import tkinter as tk
+        from tkinter import ttk
+        parent = tk.Tk()
+        parent.withdraw()
+        with (
+            patch.object(lifecycle, 'package_status', return_value=('absent', None)),
+            patch.object(lifecycle, 'open_extension') as opened,
+        ):
+            window = lifecycle.show_gui(parent)
+            def descendants(widget):
+                for child in widget.winfo_children():
+                    yield child
+                    yield from descendants(child)
+            tree = next(w for w in descendants(window) if isinstance(w, ttk.Treeview))
+            tree.selection_set('security-updates')
+            tree.event_generate('<<TreeviewSelect>>')
+            parent.update()
+            buttons = {w.cget('text'): w for w in descendants(window) if isinstance(w, ttk.Button)}
+            self.assertEqual(str(buttons['Run in Terminal'].cget('state')), 'normal')
+            for label in ('Enable / Install', 'Disable / Uninstall', 'Update', 'Build from source...'):
+                self.assertEqual(str(buttons[label].cget('state')), 'disabled', label)
+            buttons['Run in Terminal'].invoke()
+            parent.after(500, parent.quit)
+            parent.mainloop()
+            opened.assert_called_once()
+            window.destroy()
+        parent.destroy()
+
     def test_real_anki_row_has_install_remove_open_and_live_launch_log(self):
         import tkinter as tk
         from tkinter import ttk

@@ -10,14 +10,10 @@ import re
 import stat
 import subprocess
 import sys
-import threading
-import queue
 
 
 LOCK = '/run/lock/mint-security-updates.lock'
 APT = '/usr/bin/apt-get'
-PKEXEC = '/usr/bin/pkexec'
-SELF = '/usr/bin/mint-security-updates'
 APT_OPTIONS = [
     '-o', 'DPkg::Lock::Timeout=0',
     '-o', 'Acquire::http::Timeout=30', '-o', 'Acquire::https::Timeout=30',
@@ -235,137 +231,46 @@ def refresh():
         print('APT index refresh completed.', flush=True)
 
 
-def privilege(action, expected=None):
-    argv = [PKEXEC, SELF, action]
-    if expected is not None:
-        argv += ['--expect', expected]
-    return subprocess.call(argv)
-
-
-def gui():
-    import tkinter as tk
-    from tkinter import ttk, messagebox, scrolledtext
-    root = tk.Tk()
-    root.title('Manual Security Updates')
-    root.geometry('880x600')
-    root.minsize(690, 450)
-    ttk.Label(root, text='Ubuntu security updates only. Kernel, NVIDIA, DKMS and boot components are excluded.',
-              wraplength=830).pack(anchor='w', padx=12, pady=(12, 4))
-    ttk.Label(root, text='WARNING: Updates may restart services or fail partially. Keep this window open. Manual operation only; no scheduler or automatic reboot.',
-              wraplength=830).pack(anchor='w', padx=12, pady=(0, 8))
-    status = tk.StringVar(value='Checking the cached security-update list...')
-    ttk.Label(root, textvariable=status).pack(anchor='w', padx=12)
-    items = tk.Listbox(root, height=8)
-    items.pack(fill='both', expand=True, padx=12, pady=8)
-    ttk.Label(root, text='Execution log').pack(anchor='w', padx=12)
-    log = scrolledtext.ScrolledText(root, height=12, state='disabled')
-    log.pack(fill='both', expand=True, padx=12, pady=8)
-    bar = ttk.Frame(root)
-    bar.pack(fill='x', padx=12, pady=(0, 12))
-    events = queue.Queue()
-    state = {'busy': False, 'packages': {}, 'digest': None}
-
-    def write(line):
-        log.configure(state='normal')
-        log.insert('end', line)
-        log.see('end')
-        log.configure(state='disabled')
-
-    def redraw():
-        for widget in (check_btn, refresh_btn):
-            widget.configure(state='disabled' if state['busy'] else 'normal')
-        apply_btn.configure(state='normal' if not state['busy'] and state['packages'] else 'disabled')
-
-    def read_plan():
-        proc = subprocess.run([SELF, '--check', '--json'], capture_output=True, text=True)
-        if proc.returncode:
-            raise SafetyError(proc.stderr or proc.stdout)
-        return json.loads(proc.stdout)
-
-    def launch(action):
-        if state['busy']:
-            return
-        state['busy'] = True
-        if action != 'check':
-            state['packages'] = {}
-        redraw()
-        status.set('Running ' + action + '...')
-        def worker():
-            try:
-                if action != 'check':
-                    argv = [PKEXEC, SELF, '--refresh-root' if action == 'refresh' else '--apply-root']
-                    if action == 'apply':
-                        argv += ['--expect', state['digest']]
-                    events.put(('log', '$ ' + ' '.join(argv) + '\n'))
-                    with subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                          text=True, bufsize=1) as proc:
-                        for line in proc.stdout:
-                            events.put(('log', line))
-                        code = proc.wait()
-                    if code:
-                        raise SafetyError('Operation exited with code {}'.format(code))
-                result = read_plan()
-                events.put(('complete', result))
-            except Exception as exc:
-                events.put(('error', str(exc)))
-        threading.Thread(target=worker, daemon=True).start()
-
-    def poll():
-        try:
-            for _ in range(200):
-                kind, value = events.get_nowait()
-                if kind == 'log':
-                    write(value)
-                elif kind == 'complete':
-                    state['packages'] = value['packages']
-                    state['digest'] = value['digest']
-                    items.delete(0, 'end')
-                    for name, version in value['packages'].items():
-                        items.insert('end', '{}  ->  {}'.format(name, version))
-                    status.set('{} eligible security updates. Protected packages remain unchanged.'.format(len(value['packages'])))
-                    write('Check complete: {} eligible packages.\n'.format(len(value['packages'])))
-                    state['busy'] = False
-                else:
-                    state['packages'] = {}
-                    status.set('Failed: ' + value)
-                    write('ERROR: ' + value + '\n')
-                    state['busy'] = False
-                redraw()
-        except queue.Empty:
-            pass
-        root.after(80, poll)
-
-    def confirm_apply():
-        count = len(state['packages'])
-        if count and messagebox.askyesno('Install security updates',
-                'Install {} Ubuntu security updates?\n\n'
-                'APT will first simulate the transaction and abort if it needs to add, remove, '
-                'or change unapproved packages. Some services may restart. This is not reversible automatically.'.format(count),
-                parent=root):
-            launch('apply')
-
-    check_btn = ttk.Button(bar, text='Check cached list', command=lambda: launch('check'))
-    check_btn.pack(side='left')
-    refresh_btn = ttk.Button(bar, text='Refresh package indexes (administrator)', command=lambda: launch('refresh'))
-    refresh_btn.pack(side='left', padx=8)
-    apply_btn = ttk.Button(bar, text='Install security updates...', command=confirm_apply)
-    apply_btn.pack(side='left')
-    redraw()
-    def close():
-        if state['busy']:
-            messagebox.showinfo('Operation running', 'Wait for the update operation to finish. APT may still be modifying packages.', parent=root)
-        else:
-            root.destroy()
-    root.protocol('WM_DELETE_WINDOW', close)
-    root.after(80, poll)
-    root.after(120, lambda: launch('check'))
-    root.mainloop()
+def interactive():
+    """Refresh and inspect updates in a real terminal; install only after explicit approval."""
+    if os.geteuid() == 0:
+        raise SafetyError('Run this interactive command as your normal desktop user.')
+    if not sys.stdin.isatty():
+        raise SafetyError('An interactive terminal is required. No background operation is allowed.')
+    script = str(Path(__file__).resolve())
+    print('=== Manual security updates (Linux Mint 22.x) ===', flush=True)
+    print('Kernel / NVIDIA / DKMS / firmware / boot components are protected.', flush=True)
+    print('No timers, background upgrades, autoremove or reboot will be configured.', flush=True)
+    # WARNING: closing the terminal can interrupt APT; there is no automatic rollback.
+    print('Keep this terminal open until the operation finishes.', flush=True)
+    print('Updates can restart services. Interrupted installs cannot be automatically rolled back.\n', flush=True)
+    print('Refreshing package indexes; sudo may request your password...', flush=True)
+    if subprocess.call(['sudo', '/usr/bin/python3', script, '--refresh-root']):
+        raise SafetyError('APT index refresh failed or was cancelled; nothing was installed.')
+    wanted, frozen = scan()
+    print('Eligible security updates: {} (protected packages: {})'.format(len(wanted), len(frozen)), flush=True)
+    if not wanted:
+        print('No eligible security updates. Nothing to install.', flush=True)
+        return
+    for name, version in wanted.items():
+        print('  {} -> {}'.format(name, version), flush=True)
+    print('\nSimulating APT transaction...', flush=True)
+    simulate(wanted)
+    print('Simulation approved: no additions, removals or unapproved upgrades.', flush=True)
+    print('Type UPDATE to install these updates. Any other input cancels.', flush=True)
+    if input('Confirm [UPDATE]: ').strip() != 'UPDATE':
+        print('Cancelled; no packages installed.', flush=True)
+        return
+    if subprocess.call(['sudo', '/usr/bin/python3', script,
+                        '--apply-root', '--expect', digest(wanted)]):
+        raise SafetyError('Update failed or was cancelled. A partial installation may exist; inspect the output.')
+    print('Update completed and verified.', flush=True)
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--gui', action='store_true')
+    group.add_argument('--interactive', action='store_true', help='refresh, review and approve updates in a terminal')
     group.add_argument('--check', action='store_true', help='read-only scan of cached APT metadata')
     group.add_argument('--refresh', action='store_true', help='refresh APT package indexes with explicit authorization')
     group.add_argument('--apply', action='store_true', help='manually install only safe eligible security updates')
@@ -382,7 +287,9 @@ def main(argv=None):
                 raise SafetyError('Missing or invalid approved update fingerprint.')
             apply(args.expect)
         elif args.refresh:
-            return privilege('--refresh-root')
+            return subprocess.call(['sudo', '/usr/bin/python3', str(Path(__file__).resolve()), '--refresh-root'])
+        elif args.interactive:
+            interactive()
         elif args.apply:
             wanted, _ = scan()
             if not wanted:
@@ -391,7 +298,12 @@ def main(argv=None):
             print('Requested security updates:')
             for name, version in wanted.items():
                 print('  {} -> {}'.format(name, version))
-            return privilege('--apply-root', digest(wanted))
+            simulate(wanted)
+            if not sys.stdin.isatty() or input('Type UPDATE to install: ').strip() != 'UPDATE':
+                print('Cancelled; no packages installed.')
+                return 0
+            return subprocess.call(['sudo', '/usr/bin/python3', str(Path(__file__).resolve()),
+                                    '--apply-root', '--expect', digest(wanted)])
         elif args.check:
             wanted, frozen = scan()
             data = {'packages': wanted, 'digest': digest(wanted), 'protected_count': len(frozen)}
@@ -402,7 +314,7 @@ def main(argv=None):
                 for name, version in wanted.items():
                     print('  {} -> {}'.format(name, version))
         else:
-            gui()
+            parser.print_help()
         return 0
     except (SafetyError, OSError, ImportError, subprocess.SubprocessError) as exc:
         print('ERROR: ' + str(exc), file=sys.stderr)

@@ -4,7 +4,7 @@
 
 **ACTIVE / MAINTAINED: System Extension Manager 0.2.2**, under
 `system-extension-manager/`. Its independently installed extensions are
-ZIP and Trash 0.4.4, Anki Time Travel 0.1.5, HomeBackUp 0.1.4 and Manual Security Updates 0.1.1.
+ZIP and Trash 0.4.4, Anki Time Travel 0.1.5, HomeBackUp 0.1.4 plus the built-in terminal-only Security Updates tool.
 
 **DEPRECATED / NOT ACTIVE: Mint Toolbox**, under `mint-toolbox/`.
 Its GUI, CLI and README display this warning. Merging its history does not
@@ -37,17 +37,17 @@ Warnings are disclosure, not a claim that import collision/privacy risks are fix
 | Source distribution | Rebuilt extension packages and source pins; removed stale missing test-check.sh reference. CI verifies committed source/package pins BEFORE rebuilding so rebuilding cannot hide an inconsistent checkout. |
 | CI supply chain | Actions pinned to GitHub-resolved commits; explicit contents:read permissions. Third-party runtime dependencies and the account's branch protection settings are outside this code change. |
 
-## Newly integrated manual Security Updates extension
+## Newly integrated manual Security Updates tool
 
-A concurrent main-branch change added the fourth extension during this review.
-It is retained and reviewed: only trusted Ubuntu noble-security versions of
-already installed packages are eligible; protected kernel/NVIDIA/DKMS/boot
-packages are excluded; root rechecks the plan fingerprint, rejects unapproved
-simulation changes and reads back installed/protected versions. No cron/systemd
-update scheduler is shipped. Additional hardening rejects symlink/non-root lock
-files, fixes parser locale, bounds network waits and prevents closing the GUI
-while APT is active. The window warns about service restarts and partial failure.
-Actual APT updates were not run in this development environment.
+Concurrent main-branch changes added Security Updates, then intentionally made
+it a terminal-only portable tool. This architecture is preserved: no updater
+extension deb is installed. Its root checks retain trusted Ubuntu security-only
+selection, kernel/NVIDIA/DKMS/firmware/boot protection, plan fingerprint,
+simulation and installed-version readback. Additional hardening rejects planted
+lock files, fixes parser locale, bounds network waits and validates configuration
+versions. The manager verifies the portable source checksum before launching.
+The terminal warns about service restarts, partial failures and keeping it open.
+No cron/systemd updater is created; actual APT upgrades were not run here.
 
 ## Operational limits
 
