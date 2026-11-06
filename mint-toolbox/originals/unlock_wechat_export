@@ -1,0 +1,219 @@
+#!/usr/bin/env python3
+
+from pathlib import Path
+import argparse
+import re
+import sys
+
+
+FORCE_CSS = """
+<style id="wceForceShow">
+html, body {
+    margin: 0 !important;
+    min-height: 100% !important;
+}
+
+.wce-root,
+.wce-index {
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+#wceBrandAttribution {
+    display: none !important;
+}
+</style>
+"""
+
+
+def unlock_html(src: Path, overwrite: bool = False) -> tuple[bool, str]:
+    """
+    Process one messages.html file and
+    create messages-unlocked.html in the same directory.
+    """
+
+    dst = src.with_name("messages-unlocked.html")
+
+    if dst.exists() and not overwrite:
+        return False, f"Skipped; destination already exists: {dst}"
+
+    try:
+        html = src.read_text(encoding="utf-8")
+    except Exception as exc:
+        return False, f"Read failed: {src}\n  Reason: {exc}"
+
+    original_size = len(html.encode("utf-8"))
+
+    # 1. Remove integrity-gate CSS that hides chat content.
+    html = re.sub(
+        r'<style\b[^>]*\bid=["\']wceGateStyle["\'][^>]*>.*?</style>',
+        '',
+        html,
+        flags=re.I | re.S,
+    )
+
+    # 2. Remove integrity-check scripts.
+    html = re.sub(
+        r'<script\b[^>]*\bdata-wce-integrity-bundle=["\']1["\'][^>]*>'
+        r'.*?</script>',
+        '',
+        html,
+        flags=re.I | re.S,
+    )
+
+    # 3. Remove WCE runtime scripts r-*.js.
+    # Prevent another validation attempt from displaying a failure page.
+    html = re.sub(
+        r'<script\b[^>]*\bsrc=["\'][^"\']*/assets/_wce/r-[^"\']+\.js["\']'
+        r'[^>]*>.*?</script>',
+        '',
+        html,
+        flags=re.I | re.S,
+    )
+
+    # Also match paths such as ../../assets/_wce/r-xxx.js.
+    html = re.sub(
+        r'<script\b[^>]*\bsrc=["\'][^"\']*assets/_wce/r-[^"\']+\.js["\']'
+        r'[^>]*>.*?</script>',
+        '',
+        html,
+        flags=re.I | re.S,
+    )
+
+    # 4. Remove the JavaScript-required banner.
+    html = re.sub(
+        r'<div\b[^>]*\bid=["\']wceJsMissing["\'][^>]*>.*?</div>',
+        '',
+        html,
+        flags=re.I | re.S,
+    )
+
+    # 5. Set the verified state on the html element.
+    html_tag_match = re.search(r'<html\b([^>]*)>', html, flags=re.I)
+
+    if html_tag_match:
+        old_tag = html_tag_match.group(0)
+
+        new_tag = old_tag
+
+        if not re.search(
+            r'\bdata-wce-brand-ok\s*=',
+            new_tag,
+            flags=re.I,
+        ):
+            new_tag = new_tag[:-1] + ' data-wce-brand-ok="1">'
+
+        if not re.search(
+            r'\bdata-wce-integrity-ok\s*=',
+            new_tag,
+            flags=re.I,
+        ):
+            new_tag = new_tag[:-1] + ' data-wce-integrity-ok="1">'
+
+        html = html.replace(old_tag, new_tag, 1)
+
+    # 6. Make the chat body visible.
+    if 'id="wceForceShow"' not in html and "id='wceForceShow'" not in html:
+        if re.search(r'</head\s*>', html, flags=re.I):
+            html = re.sub(
+                r'</head\s*>',
+                FORCE_CSS + "\n</head>",
+                html,
+                count=1,
+                flags=re.I,
+            )
+        else:
+            html = FORCE_CSS + "\n" + html
+
+    try:
+        dst.write_text(html, encoding="utf-8")
+    except Exception as exc:
+        return False, f"Write failed: {dst}\n  Reason: {exc}"
+
+    new_size = dst.stat().st_size
+
+    return True, (
+        f"Success: {src.parent.name}\n"
+        f"  Original: {src.name} ({original_size} bytes)\n"
+        f"  Output: {dst.name} ({new_size} bytes)"
+    )
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Remove integrity gates from exported WeChatDataAnalysis HTML and "
+            "generate messages-unlocked.html files."
+        )
+    )
+
+    parser.add_argument(
+        "root",
+        nargs="?",
+        default=".",
+        help="WeChat export directory; defaults to the current directory",
+    )
+
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Overwrite existing messages-unlocked.html files",
+    )
+
+    args = parser.parse_args()
+
+    root = Path(args.root).expanduser().resolve()
+
+    if not root.exists():
+        print(f"Error: directory does not exist: {root}", file=sys.stderr)
+        return 1
+
+    conversations_dir = root / "conversations"
+
+    if not conversations_dir.is_dir():
+        print(
+            f"Error: conversations directory not found: {conversations_dir}",
+            file=sys.stderr,
+        )
+        return 1
+
+    files = sorted(conversations_dir.glob("*/messages.html"))
+
+    if not files:
+        print(
+            f"Error: no conversations/*/messages.html files were found",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"Export directory: {root}")
+    print(f"Conversations found: {len(files)}")
+    print()
+
+    success_count = 0
+    skipped_count = 0
+
+    for src in files:
+        success, message = unlock_html(
+            src,
+            overwrite=args.overwrite,
+        )
+
+        print(message)
+        print()
+
+        if success:
+            success_count += 1
+        else:
+            skipped_count += 1
+
+    print("=" * 60)
+    print(f"Processing complete")
+    print(f"Success: {success_count}")
+    print(f"Skipped or failed: {skipped_count}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

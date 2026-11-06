@@ -1,0 +1,314 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# Find WordPress posts containing a keyword, preview the matches, ask for
+# confirmation, assign the matching posts to a category, and report results.
+#
+# Usage:
+#   ./categorize-posts-by-keyword.sh "THE KEYWORD"
+#   ./categorize-posts-by-keyword.sh "THE KEYWORD" "Category Name"
+#   ./categorize-posts-by-keyword.sh --dry-run "THE KEYWORD"
+#   ./categorize-posts-by-keyword.sh --yes "THE KEYWORD" "Category Name"
+#
+# Search behavior:
+#   WordPress exact-phrase search is used across post titles, excerpts, and
+#   content.
+#
+# Environment variables:
+#   WP_PATH=/var/www/html/wordpress   WordPress installation path
+#   POST_TYPE=post                    Post type to search
+#   POST_STATUS=any                   Post status to search
+#
+# Exit codes:
+#   0  Success, no matches, dry run, or user declined
+#   1  Runtime or WordPress error
+#   2  Invalid arguments
+#   3  One or more posts could not be updated
+
+WP_PATH="${WP_PATH:-/var/www/html/wordpress}"
+POST_TYPE="${POST_TYPE:-post}"
+POST_STATUS="${POST_STATUS:-any}"
+
+AUTO_CONFIRM=0
+DRY_RUN=0
+TITLE_ONLY=0
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  categorize-posts-by-keyword.sh [--dry-run] [--yes] [--title-only] <keyword> [category-name]
+
+Options:
+  --dry-run   Find and report matching posts, but make no changes.
+  --yes        Skip the interactive confirmation prompt.
+  --title-only Search only post titles instead of title, excerpt, and content.
+  -h, --help  Show this help.
+
+Examples:
+  categorize-posts-by-keyword.sh "THE KEYWORD"
+  categorize-posts-by-keyword.sh "THE KEYWORD" "THE KEYWORD"
+  categorize-posts-by-keyword.sh --dry-run "homework"
+  categorize-posts-by-keyword.sh --yes "think3" "think3"
+
+Environment:
+  WP_PATH      WordPress path. Default: /var/www/html/wordpress
+  POST_TYPE    Post type. Default: post
+  POST_STATUS  Post status. Default: any
+USAGE
+}
+
+while (($# > 0)); do
+  case "$1" in
+    --dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    --yes)
+      AUTO_CONFIRM=1
+      shift
+      ;;
+    --title-only)
+      TITLE_ONLY=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      echo "Error: unknown option: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+KEYWORD="${1:-}"
+CATEGORY_NAME="${2:-${KEYWORD}}"
+
+if [[ -z "$KEYWORD" ]]; then
+  echo "Error: a search keyword is required." >&2
+  usage >&2
+  exit 2
+fi
+
+if (($# > 2)); then
+  echo "Error: too many arguments." >&2
+  usage >&2
+  exit 2
+fi
+
+command -v wp >/dev/null 2>&1 || {
+  echo "Error: wp-cli was not found in PATH." >&2
+  exit 1
+}
+
+if ! wp core is-installed --path="$WP_PATH" >/dev/null 2>&1; then
+  echo "Error: no WordPress installation was found at: $WP_PATH" >&2
+  exit 1
+fi
+
+# Ask WP_Query to perform an exact-phrase search. Returning only IDs avoids
+# unsafe parsing of titles containing commas, tabs, or quotation marks.
+search_args=(--search="$KEYWORD" --sentence=1)
+if ((TITLE_ONLY == 1)); then
+  search_args+=(--search_columns=post_title)
+fi
+
+ids_output="$(
+  wp post list \
+    --path="$WP_PATH" \
+    --post_type="$POST_TYPE" \
+    --post_status="$POST_STATUS" \
+    "${search_args[@]}" \
+    --format=ids
+)"
+
+IDS=()
+if [[ -n "${ids_output//[[:space:]]/}" ]]; then
+  read -r -a IDS <<<"$ids_output"
+fi
+
+if ((${#IDS[@]} == 0)); then
+  echo "No matching posts found."
+  echo "  Keyword    : $KEYWORD"
+  echo "  Post type  : $POST_TYPE"
+  echo "  Post status: $POST_STATUS"
+  exit 0
+fi
+
+# Resolve the category before previewing, but do not create it until the user
+# confirms. Try exact name first, then exact slug.
+CATEGORY_ID="$(
+  wp term get category "$CATEGORY_NAME" \
+    --path="$WP_PATH" --by=name --field=term_id 2>/dev/null || true
+)"
+
+if [[ -z "$CATEGORY_ID" ]]; then
+  CATEGORY_ID="$(
+    wp term get category "$CATEGORY_NAME" \
+      --path="$WP_PATH" --by=slug --field=term_id 2>/dev/null || true
+  )"
+fi
+
+already_count=0
+pending_count=0
+ALREADY_IDS=()
+PENDING_IDS=()
+
+printf '\nSearch result\n'
+printf '  Keyword       : %s\n' "$KEYWORD"
+printf '  Category      : %s\n' "$CATEGORY_NAME"
+if ((TITLE_ONLY == 1)); then
+  printf '  Search scope  : title only\n'
+else
+  printf '  Search scope  : title, excerpt, and content\n'
+fi
+printf '  WordPress path: %s\n' "$WP_PATH"
+printf '  Matching posts: %d\n\n' "${#IDS[@]}"
+
+printf '%-8s %-10s %-19s %-12s %s\n' "ID" "STATUS" "DATE" "CATEGORY" "TITLE"
+printf '%-8s %-10s %-19s %-12s %s\n' "--------" "----------" "-------------------" "------------" "-----"
+
+for id in "${IDS[@]}"; do
+  title="$(wp post get "$id" --path="$WP_PATH" --field=post_title)"
+  status="$(wp post get "$id" --path="$WP_PATH" --field=post_status)"
+  post_date="$(wp post get "$id" --path="$WP_PATH" --field=post_date)"
+
+  category_state="TO ADD"
+  if [[ -n "$CATEGORY_ID" ]]; then
+    term_ids="$(
+      wp post term list "$id" category \
+        --path="$WP_PATH" --field=term_id --format=ids 2>/dev/null || true
+    )"
+
+    if [[ " $term_ids " == *" $CATEGORY_ID "* ]]; then
+      category_state="ALREADY"
+      ALREADY_IDS+=("$id")
+      ((already_count += 1))
+    else
+      PENDING_IDS+=("$id")
+      ((pending_count += 1))
+    fi
+  else
+    PENDING_IDS+=("$id")
+    ((pending_count += 1))
+  fi
+
+  printf '%-8s %-10s %-19s %-12s %s\n' \
+    "$id" "$status" "$post_date" "$category_state" "$title"
+done
+
+printf '\nPreview summary\n'
+printf '  Matched                : %d\n' "${#IDS[@]}"
+printf '  Already in category    : %d\n' "$already_count"
+printf '  Will be added          : %d\n' "$pending_count"
+
+if [[ -z "$CATEGORY_ID" ]]; then
+  printf '  Category creation      : required\n'
+else
+  printf '  Existing category ID   : %s\n' "$CATEGORY_ID"
+fi
+
+if ((DRY_RUN == 1)); then
+  echo
+  echo "Dry run complete. No WordPress data was changed."
+  exit 0
+fi
+
+if ((pending_count == 0)); then
+  echo
+  echo "Nothing to change. Every matching post already has this category."
+  exit 0
+fi
+
+if ((AUTO_CONFIRM == 0)); then
+  if [[ ! -t 0 ]]; then
+    echo "Error: confirmation requires an interactive terminal." >&2
+    echo "Run with --yes to approve non-interactively, or --dry-run to preview." >&2
+    exit 1
+  fi
+
+  echo
+  printf 'Type YES to add %d post(s) to category "%s": ' \
+    "$pending_count" "$CATEGORY_NAME"
+  read -r confirmation
+
+  if [[ "$confirmation" != "YES" ]]; then
+    echo "Cancelled. No WordPress data was changed."
+    exit 0
+  fi
+fi
+
+if [[ -z "$CATEGORY_ID" ]]; then
+  echo
+  echo "Creating category: $CATEGORY_NAME"
+  CATEGORY_ID="$(
+    wp term create category "$CATEGORY_NAME" \
+      --path="$WP_PATH" --porcelain
+  )"
+  echo "Created category ID: $CATEGORY_ID"
+fi
+
+added_count=0
+failed_count=0
+FAILED_IDS=()
+
+echo
+echo "Applying category..."
+
+for id in "${PENDING_IDS[@]}"; do
+  title="$(wp post get "$id" --path="$WP_PATH" --field=post_title)"
+
+  if wp post term add "$id" category "$CATEGORY_ID" \
+      --path="$WP_PATH" --by=id >/dev/null; then
+    printf '[ADDED]  ID=%s  %s\n' "$id" "$title"
+    ((added_count += 1))
+  else
+    printf '[FAILED] ID=%s  %s\n' "$id" "$title" >&2
+    FAILED_IDS+=("$id")
+    ((failed_count += 1))
+  fi
+done
+
+# Verify the final state independently of the update command's exit status.
+verified_count=0
+for id in "${IDS[@]}"; do
+  term_ids="$(
+    wp post term list "$id" category \
+      --path="$WP_PATH" --field=term_id --format=ids 2>/dev/null || true
+  )"
+  if [[ " $term_ids " == *" $CATEGORY_ID "* ]]; then
+    ((verified_count += 1))
+  fi
+done
+
+echo
+printf 'Final report\n'
+printf '  Keyword                 : %s\n' "$KEYWORD"
+printf '  Category                : %s\n' "$CATEGORY_NAME"
+printf '  Category ID             : %s\n' "$CATEGORY_ID"
+printf '  Matching posts          : %d\n' "${#IDS[@]}"
+printf '  Already assigned before : %d\n' "$already_count"
+printf '  Added now               : %d\n' "$added_count"
+printf '  Failed updates          : %d\n' "$failed_count"
+printf '  Verified in category    : %d/%d\n' "$verified_count" "${#IDS[@]}"
+
+if ((failed_count > 0)); then
+  printf '  Failed post IDs         : %s\n' "${FAILED_IDS[*]}" >&2
+  exit 3
+fi
+
+if ((verified_count != ${#IDS[@]})); then
+  echo "Error: final verification did not include every matched post." >&2
+  exit 3
+fi
+
+echo "Done. All matching posts are now assigned to the category."

@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+FLOW_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/anki-flow"
+SRC="$FLOW_HOME/backend/anki-26.08.1"
+
+[[ -f "$HOME/.cargo/env" ]] && . "$HOME/.cargo/env"
+[[ -x "$SRC/run" ]] || {
+    printf '[Flow] ERROR: Anki source launcher missing: %s/run\n' "$SRC" >&2
+    exit 1
+}
+
+# Anki 26.08.1 parses ANKIDEV with int().  An empty string crashes startup.
+# Always use the explicit non-development value for the Flow side-by-side build.
+export ANKIDEV=0
+
+cd "$SRC"
+exec ./run "$@"

@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+BIN="/home/andrew/.local/opt/thunderbird-experiment-153.1.0/thunderbird"
+PROFILE="/home/andrew/.local/share/thunderbird-taskfix/profile"
+BACKUP_ROOT="/home/andrew/Thunderbird-Experiment-Backups"
+
+echo
+echo "============================================================"
+echo " Thunderbird experimental build"
+echo " PROGRAM : independent copy"
+echo " DATA    : shared with working TaskFix profile"
+echo "============================================================"
+echo
+echo "Application: "
+echo "  $BIN"
+echo
+echo "Data: "
+echo "  $PROFILE"
+echo
+
+if pgrep -u "$UID" -x thunderbird >/dev/null 2>&1 ||
+   pgrep -u "$UID" -x thunderbird-bin >/dev/null 2>&1
+then
+    echo "✗ Thunderbird is already running."
+    echo
+    echo "The stable and experimental builds share data; do not run them simultaneously."
+    read -r -p "Press Enter to exit..."
+    exit 1
+fi
+
+STAMP="$(date '+%Y%m%d-%H%M%S')"
+DEST="$BACKUP_ROOT/$STAMP-before-experiment"
+
+mkdir -p "$DEST"
+
+echo "Pre-launch backup: "
+echo "  $DEST/profile"
+
+if ! cp -a --reflink=auto       "$PROFILE"       "$DEST/profile"
+then
+    echo "✗ Backup failed; launch cancelled."
+    read -r -p "Press Enter to exit..."
+    exit 1
+fi
+
+rm -f     "$DEST/profile/lock"     "$DEST/profile/.parentlock"     "$DEST/profile/parent.lock"     2>/dev/null || true
+
+echo "✓ Backup successful"
+echo
+
+# This launch method was previously used successfully on the target system.
+"$BIN" -profile "$PROFILE" "$@"

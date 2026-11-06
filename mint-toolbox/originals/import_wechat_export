@@ -1,0 +1,372 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import hashlib
+import html
+import os
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from urllib.parse import quote
+
+WORDPRESS_ROOT = Path("/var/www/html/wordpress")
+ARCHIVE_SUBDIR = Path("wp-content/uploads/wechat-archive")
+UNLOCK_COMMAND = "unlock_wechat_export"
+META_KEY = "_wechat_archive_source"
+POST_TYPE = "post"
+SCRIPT_VERSION = "2026-07-14-post-only-v1"
+
+
+def run(cmd: list[str], *, cwd: Path | None = None, capture: bool = False) -> str:
+    print("+", " ".join(cmd))
+    result = subprocess.run(
+        cmd,
+        cwd=str(cwd) if cwd else None,
+        text=True,
+        stdout=subprocess.PIPE if capture else None,
+        stderr=subprocess.PIPE if capture else None,
+    )
+    if result.returncode != 0:
+        if capture:
+            if result.stdout:
+                print(result.stdout, file=sys.stderr)
+            if result.stderr:
+                print(result.stderr, file=sys.stderr)
+        raise RuntimeError(
+            f"Command failed (exit code {result.returncode})：{' '.join(cmd)}"
+        )
+    return (result.stdout or "").strip() if capture else ""
+
+
+def sudo_cmd(*args: str) -> list[str]:
+    if os.geteuid() == 0:
+        return list(args)
+    return ["sudo", *args]
+
+
+def wp_cmd(wp_binary: str, *args: str, capture: bool = False) -> str:
+    wp_args = [wp_binary, f"--path={WORDPRESS_ROOT}", *args]
+    if os.geteuid() == 0:
+        cmd = ["runuser", "-u", "www-data", "--", *wp_args]
+    else:
+        cmd = ["sudo", "-u", "www-data", *wp_args]
+    return run(cmd, capture=capture)
+
+
+def find_wp_binary() -> str:
+    wp = shutil.which("wp")
+    if not wp:
+        raise RuntimeError("wp command not found. Install WP-CLI and add it to PATH.")
+    return wp
+
+
+def ensure_unlocked(source: Path) -> list[Path]:
+    files = sorted((source / "conversations").glob("*/messages-unlocked.html"))
+    if files:
+        return files
+
+    unlock = shutil.which(UNLOCK_COMMAND)
+    if not unlock:
+        raise RuntimeError(
+            f"No messages-unlocked.html files were found, and the following command is unavailable: {UNLOCK_COMMAND}."
+        )
+
+    print(f"No unlocked HTML found; running {UNLOCK_COMMAND} ...")
+    run([unlock], cwd=source)
+
+    files = sorted((source / "conversations").glob("*/messages-unlocked.html"))
+    if not files:
+        raise RuntimeError("The unlock command completed but no messages-unlocked.html files were found.")
+    return files
+
+
+def conversation_title(conversation_dir: str) -> str:
+    """
+    Extract the contact or group title from the directory name.
+
+    Example:
+      0001_FileTransferHelper_filehelper_abaf4442
+      -> FileTransferHelper
+    """
+    name = re.sub(r"^\d+_", "", conversation_dir)
+
+    patterns = [
+        r"^(.*)_filehelper_[0-9a-fA-F]+$",
+        r"^(.*)_wxid_[^_]+_[0-9a-fA-F]+$",
+        r"^(.*)_[^_]+_[0-9a-fA-F]{6,}$",
+    ]
+
+    for pattern in patterns:
+        match = re.match(pattern, name)
+        if match and match.group(1):
+            return match.group(1)
+
+    return name
+
+
+def post_content(public_url: str, title: str) -> str:
+    """
+    Generate post content with an iframe that extends beyond the theme content width.
+
+    WordPress themes commonly set contentSize or max-width on post content.
+    width: 100% fills the content column, not the browser viewport.
+
+    Use the standard full-bleed technique:
+      position: relative
+      left: 50%
+      width: 100vw
+      margin-left: -50vw
+
+    The chat can fill the viewport even when the theme content column is only 600-700px wide.
+    """
+    safe_url = html.escape(public_url, quote=True)
+    safe_title = html.escape(title, quote=True)
+
+    return f'''<!-- wp:html -->
+<div
+  class="wechat-archive-frame-wrap alignfull"
+  style="
+    position: relative !important;
+    left: 50% !important;
+    width: 100vw !important;
+    width: 100dvw !important;
+    max-width: none !important;
+    margin-left: -50vw !important;
+    margin-left: -50dvw !important;
+    margin-right: -50vw !important;
+    margin-right: -50dvw !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  "
+>
+  <iframe
+    src="{safe_url}"
+    title="{safe_title}"
+    loading="lazy"
+    scrolling="yes"
+    referrerpolicy="same-origin"
+    style="
+      width: 100% !important;
+      max-width: none !important;
+      height: 90vh;
+      min-height: 760px;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: 0 !important;
+      display: block !important;
+      background: #fff;
+    "
+  ></iframe>
+</div>
+<!-- /wp:html -->'''
+
+
+def make_slug(source_key: str) -> str:
+    digest = hashlib.sha1(source_key.encode("utf-8")).hexdigest()[:12]
+    return f"wechat-archive-{digest}"
+
+
+def find_existing_post(
+    wp_binary: str,
+    source_key: str,
+) -> str | None:
+    """Find existing posts only. Ignore legacy pages without converting them."""
+    output = wp_cmd(
+        wp_binary,
+        "post",
+        "list",
+        "--post_type=post",
+        f"--meta_key={META_KEY}",
+        f"--meta_value={source_key}",
+        "--field=ID",
+        "--format=ids",
+        capture=True,
+    )
+    ids = output.split()
+    return ids[0] if ids else None
+
+
+def create_or_update_post(
+    wp_binary: str,
+    *,
+    title: str,
+    content: str,
+    source_key: str,
+    dry_run: bool,
+) -> tuple[str, str, str | None]:
+    existing_id = find_existing_post(wp_binary, source_key)
+
+    if existing_id:
+        if dry_run:
+            return existing_id, "would-update", "post"
+
+        wp_cmd(
+            wp_binary,
+            "post",
+            "update",
+            existing_id,
+            f"--post_title=微信聊天：{title}",
+            f"--post_content={content}",
+            "--post_status=publish",
+        )
+
+        actual_type = wp_cmd(
+            wp_binary,
+            "post",
+            "get",
+            existing_id,
+            "--field=post_type",
+            capture=True,
+        ).strip()
+        if actual_type != "post":
+            raise RuntimeError(
+                f"Type verification failed after update: post ID {existing_id} has type {actual_type!r}"
+            )
+
+        return existing_id, "updated", "post"
+
+    if dry_run:
+        return "-", "would-create", None
+
+    slug = make_slug(source_key)
+    post_id = wp_cmd(
+        wp_binary,
+        "post",
+        "create",
+        f"--post_type={POST_TYPE}",
+        "--post_status=publish",
+        f"--post_title=微信聊天：{title}",
+        f"--post_name={slug}",
+        f"--post_content={content}",
+        "--porcelain",
+        capture=True,
+    ).strip()
+
+    if not post_id.isdigit():
+        raise RuntimeError(f"WP-CLI did not return a valid post ID: {post_id!r}")
+
+    actual_type = wp_cmd(
+        wp_binary,
+        "post",
+        "get",
+        post_id,
+        "--field=post_type",
+        capture=True,
+    ).strip()
+    if actual_type != "post":
+        raise RuntimeError(
+            f"Creation failed: new content ID {post_id} has type {actual_type!r}, expected 'post'"
+        )
+
+    wp_cmd(wp_binary, "post", "meta", "update", post_id, META_KEY, source_key)
+    return post_id, "created", None
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Copy the WeChat export directory and associated assets into WordPress, "
+            "and create or update a post for each messages-unlocked.html file."
+        )
+    )
+    parser.add_argument(
+        "export_dir",
+        nargs="?",
+        default=".",
+        help="WeChat export directory; defaults to the current directory",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show planned imports without copying assets or modifying WordPress posts; preprocessing may still generate HTML",
+    )
+    args = parser.parse_args()
+
+    source = Path(args.export_dir).expanduser().resolve()
+
+    if not source.is_dir():
+        raise RuntimeError(f"Export directory does not exist: {source}")
+    if not (source / "conversations").is_dir():
+        raise RuntimeError(f"conversations directory not found: {source / 'conversations'}")
+    if not WORDPRESS_ROOT.is_dir():
+        raise RuntimeError(f"WordPress root directory not found: {WORDPRESS_ROOT}")
+
+    wp_binary = find_wp_binary()
+    unlocked_files = ensure_unlocked(source)
+
+    archive_root = WORDPRESS_ROOT / ARCHIVE_SUBDIR
+    destination = archive_root / source.name
+
+    print(f"Script version: {SCRIPT_VERSION}")
+    print("Mode: POST ONLY (never creates pages)")
+    print(f"Export directory: {source}")
+    print(f"Unlocked conversations found: {len(unlocked_files)}")
+    print(f"WordPress destination: {destination}")
+    print("Import type: post; create directly without converting pages")
+    print("Display width: full viewport (100vw)")
+
+    if not args.dry_run:
+        run(sudo_cmd("mkdir", "-p", str(destination)))
+        run(sudo_cmd("rsync", "-a", "--delete", f"{source}/", f"{destination}/"))
+        run(sudo_cmd("chown", "-R", "www-data:www-data", str(destination)))
+
+    created = 0
+    updated = 0
+    failed = 0
+
+    for unlocked in unlocked_files:
+        try:
+            rel = unlocked.relative_to(source)
+            public_rel = Path("/") / ARCHIVE_SUBDIR / source.name / rel
+            public_url = quote(public_rel.as_posix(), safe="/:")
+
+            title = conversation_title(unlocked.parent.name)
+            source_key = f"{source.name}/{rel.as_posix()}"
+            content = post_content(public_url, f"微信聊天：{title}")
+
+            post_id, action, previous_type = create_or_update_post(
+                wp_binary,
+                title=title,
+                content=content,
+                source_key=source_key,
+                dry_run=args.dry_run,
+            )
+
+            if action in {"created", "would-create"}:
+                created += 1
+                label = "Would create" if args.dry_run else "Created"
+            else:
+                updated += 1
+                label = "Would update" if args.dry_run else "Updated"
+
+            print(f"[{label}] {title}  Post ID: {post_id}")
+            print(f"         HTML: {public_url}")
+
+        except Exception as exc:
+            failed += 1
+            print(f"[FAILED] {unlocked.parent.name}: {exc}", file=sys.stderr)
+
+    if not args.dry_run:
+        wp_cmd(wp_binary, "cache", "flush")
+
+    print("\n" + "=" * 60)
+    print("Processing complete")
+    print(f"Posts created: {created}")
+    print(f"Posts updated: {updated}")
+    print(f"Failed: {failed}")
+
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except KeyboardInterrupt:
+        print("\nCancelled.", file=sys.stderr)
+        raise SystemExit(130)
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1)

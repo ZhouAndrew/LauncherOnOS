@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+PROFILE="/home/andrew/.thunderbird/4vs0bf41.default-esr-1"
+EXP_BIN="/home/andrew/.local/opt/thunderbird-experiment-153.1.0esr/thunderbird"
+BACKUP_ROOT="/home/andrew/Thunderbird-Experiment-Backups"
+VERSION="153.1.0esr"
+
+echo
+echo "================================================"
+echo " Thunderbird experimental build $VERSION"
+echo " Shares live data with the stable build"
+echo "================================================"
+echo
+
+# Never allow two Thunderbird processes to write the same profile.
+if pgrep -u "$UID" -x thunderbird >/dev/null 2>&1 ||
+   pgrep -u "$UID" -x thunderbird-bin >/dev/null 2>&1; then
+    echo "✗ Thunderbird is already running."
+    echo
+    echo "Stable and experimental builds share one profile; never run them simultaneously."
+    echo
+    read -r -p "Press Enter to close..."
+    exit 1
+fi
+
+mkdir -p "$BACKUP_ROOT"
+
+STAMP="$(date '+%Y%m%d-%H%M%S')"
+DEST="$BACKUP_ROOT/$STAMP-before-experiment"
+
+echo "Pre-experiment backup: "
+echo "  $PROFILE"
+echo "        ↓"
+echo "  $DEST"
+echo
+
+mkdir -p "$DEST"
+
+if ! cp -a --reflink=auto       "$PROFILE"       "$DEST/profile"
+then
+    echo
+    echo "✗ Backup failed."
+    echo "The experimental build will not start, to protect the live profile."
+    read -r -p "Press Enter to close..."
+    exit 1
+fi
+
+rm -f     "$DEST/profile/.parentlock"     "$DEST/profile/lock"     2>/dev/null || true
+
+printf '%s\n' "$PROFILE" >     "$DEST/original-profile-path.txt"
+
+printf '%s\n' "$VERSION" >     "$DEST/thunderbird-version.txt"
+
+echo "✓ Profile snapshot complete"
+
+# Keep the latest seven automatic experimental backups.
+mapfile -t OLD_BACKUPS < <(
+    find "$BACKUP_ROOT"         -mindepth 1         -maxdepth 1         -type d         -name '*-before-experiment'         -printf '%T@ %p\n' |
+    sort -nr |
+    tail -n +8 |
+    cut -d' ' -f2-
+)
+
+if [ "${#OLD_BACKUPS[@]}" -gt 0 ]; then
+    for OLD in "${OLD_BACKUPS[@]}"; do
+        rm -rf -- "$OLD"
+    done
+fi
+
+echo
+echo "==============================================="
+echo " EXPERIMENTAL THUNDERBIRD"
+echo " Application: isolated"
+echo " Data: shared with the stable build"
+echo "==============================================="
+echo
+
+set +e
+
+"$EXP_BIN"     --no-remote     --profile "$PROFILE"     "$@"
+
+RC=$?
+
+set -e
+
+echo
+echo "Thunderbird experimental build has exited."
+echo
+echo "Data snapshot taken before this launch: "
+echo "  $DEST"
+echo
+
+exit "$RC"
