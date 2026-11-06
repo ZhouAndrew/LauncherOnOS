@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the manager and three independently installable system extensions."""
+"""Build the manager and four independently installable system extensions."""
 import argparse
 import hashlib
 import json
@@ -25,7 +25,10 @@ def build_extensions():
              description='Import historical Anki PDF statistics into local WordPress, with a CLI, file chooser and live logs. Preserves historical dates and verifies imported posts, attachments and the exact post permalink. Requires WP-CLI and an accessible existing WordPress site.'),
         dict(id='homebackup', name='HomeBackUp', package='mint-homebackup-extension', version='0.1.3',
              launch=['/usr/bin/homebackup-ext', 'gui'],
-             description='Borg recovery backups on the HomeBackUp disk: monthly scheduling, verified deduplicated archives and at most 3 retained backup dates. Existing encrypted repository is reused; configure it after enabling from the Mint application menu. The /dev/sdc7 data partition is not included.')
+             description='Borg recovery backups on the HomeBackUp disk: monthly scheduling, verified deduplicated archives and at most 3 retained backup dates. Existing encrypted repository is reused; configure it after enabling from the Mint application menu. The /dev/sdc7 data partition is not included.'),
+        dict(id='security-updates', name='Security Updates', package='mint-security-updates-extension', version='0.1.0',
+             launch=['/usr/bin/mint-security-updates', '--gui'],
+             description='Manually inspect, refresh and apply official Ubuntu noble-security updates. Kernel, NVIDIA, DKMS, firmware and boot packages are protected. Refuses unexpected installs/removals, requires explicit authorization, and creates no automatic update timers.')
     ]
     for item in definitions:
         source = ROOT / 'sources' / item['id']
@@ -72,7 +75,7 @@ Maintainer: ZhouAndrew <zhouandrew@users.noreply.github.com>
 Depends: python3 (>= 3.10), python3-tk, dpkg, apt, pkexec
 Description: Manage independent system extensions through Debian packages
  Provides multiple-extension listing, install/remove controls, verified source
- builds, application launching, live logs, and bundled Anki, ZIP and HomeBackUp extensions.
+ builds, application launching, live logs, and bundled Anki, ZIP, HomeBackUp and Security Updates extensions.
 ''')
         write('usr/bin/system-extension-manager', '#!/bin/sh\nexec /usr/bin/python3 /usr/share/system-extension-manager/manager.py "$@"\n', 0o755)
         write('usr/share/applications/system-extension-manager.desktop', (ROOT / 'system-extension-manager.desktop').read_text())

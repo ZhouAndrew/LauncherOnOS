@@ -3,7 +3,7 @@
 An independent manager for system extensions. Enable installs a bundled Debian package;
 Disable uninstalls that package. The interface shows multiple real extensions and actual dpkg state.
 
-## Portable test release: 0.2.1-test3
+## Portable test release: 0.2.1-test4
 
 Extract the source ZIP, open its folder and run as your desktop user:
 
@@ -15,7 +15,7 @@ No manager installation or package build runs at startup. Requires Linux Mint / 
 Python 3.10+ and python3-tk for the desktop window. CLI listing does not require Tk.
 The source folder can be moved; run.sh resolves its own location.
 
-The manager includes three extension debs and pinned source recipes. Enabling or disabling
+The manager includes four extension debs and pinned source recipes. Enabling or disabling
 an extension still uses the system package manager and requests administrator authorization.
 
 ## Optional manager package
@@ -36,6 +36,7 @@ The included system-extension-manager.desktop is for the optional installed mana
 - **ZIP and Trash**: Nemo context-menu ZIP creation, content verification and moving originals to Trash.
   Symbolic links are stored as links without following targets, including dangling and directory links.
 - **HomeBackUp**: Independent Borg recovery backup extension. Installs into the manager as a normal system package with status/readback and optional source build. After Enable, configure once from the Linux Mint applications menu using `homebackup-ext setup` or `homebackup-ext use-existing` (existing root-only Borg credentials). Reuses `/media/andrew/HomeBackUp/Mint-Recovery-Borg` without deleting existing backups on installation; monthly timer with at most three backup dates. Requires an existing Borg 1.x repo and the configured HomeBackUp disk; `/dev/sdc7` is not included. The extension opens a dedicated GTK window from the manager's Open action or Mint application menu.
+- **Security Updates**: Manual check, explicit index refresh and approved Ubuntu noble-security updates with a dedicated GUI and CLI. Kernel/NVIDIA/DKMS/firmware/boot packages are excluded; APT simulation must approve exact package versions without adding or removing packages. No automatic service, timer or reboot is configured. Updating can restart services and cannot be rolled back automatically.
 - **Anki Time Travel**: CLI and desktop import of historical Anki PDFs into local WordPress.
   Relative paths, numeric download suffixes, GMT evaluation and exact-post permalink verification are included.
   Requires an existing accessible WordPress installation and WP-CLI. Installing or opening the application does not start an import.
@@ -56,6 +57,8 @@ bash run.sh --build anki-time-travel
 bash run.sh --enable zip-trash
 bash run.sh --enable homebackup
 bash run.sh --build homebackup
+bash run.sh --enable security-updates
+bash run.sh --open security-updates
 ```
 
 Full commands, live combined stdout/stderr, stages, exit codes and package-state readback appear in the log.
@@ -99,10 +102,18 @@ no action. These changes apply to manager packaging, log saving and Anki file se
 
 ## Distribution
 
-The GitHub Actions `System Extension Manager` workflow builds a portable source ZIP **with all three bundled extension debs** and an optional System Extension Manager `.deb` for download as CI artifacts. In the manager select **HomeBackUp** and choose **Enable / Install**; the system package manager requests one administrator authorization for installation. Updating an already-installed extension uses **Update**, and removing a missing package is a no-op. The Borg encryption password is a separate credential needed only for first setup or repository access. No sensitive backup data or credentials are shipped. Reinstall-and-restore and live Mint GUI installation are not yet acceptance-tested.
+The GitHub Actions `System Extension Manager` workflow builds a portable source ZIP **with all four bundled extension debs** and an optional System Extension Manager `.deb` for download as CI artifacts. In the manager select **HomeBackUp** and choose **Enable / Install**; the system package manager requests one administrator authorization for installation. Updating an already-installed extension uses **Update**, and removing a missing package is a no-op. The Borg encryption password is a separate credential needed only for first setup or repository access. No sensitive backup data or credentials are shipped. Reinstall-and-restore and live Mint GUI installation are not yet acceptance-tested.
 
-For a raw Git checkout (rather than the CI-distributed source ZIP), run `python3 system-extension-manager/build.py --extensions-only` before `bash system-extension-manager/run.sh` so the locally built HomeBackUp extension package and catalog are available. CI releases include the ready-to-install manager and all three bundled extension packages.
+For a raw Git checkout (rather than the CI-distributed source ZIP), run `python3 system-extension-manager/build.py --extensions-only` before `bash system-extension-manager/run.sh` so the locally built HomeBackUp extension package and catalog are available. CI releases include the ready-to-install manager and all four bundled extension packages.
 
 ### HomeBackUp GUI update
 
 The HomeBackUp v0.1.3 application uses the native GTK 3 interface by default, with archive listing, retention preview, structural and data verification, monthly timer status, enable/disable, and one-time Borg password enrollment. Administrative actions use PolicyKit; ordinary status requires no sudo. Package installation does not enable the timer, and upgrading does not change the current timer state.
+
+### Manual Security Updates (Linux Mint 22.x)
+
+Security Updates is a separate opt-in Debian package. Installing it does not run any APT upgrades or enable background updates. Select it in the manager, choose Open and use Check cached list, Refresh package indexes (administrator), or Install security updates. The last action asks for explicit confirmation and PolicyKit authorization.
+
+CLI commands: mint-security-updates --check, mint-security-updates --refresh, mint-security-updates --apply.
+
+Only installed packages with newer versions from trusted Ubuntu noble-security are eligible. The planned package/version set is fingerprinted and checked again under root before APT simulation. Unexpected dependencies, removals and non-approved upgrades abort. It does not configure package holds, automatic updates, timers or reboots. Real APT installation may restart services and a failed operation is not automatically reversible.

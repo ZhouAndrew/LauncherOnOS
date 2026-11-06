@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Manual Security Updates
+Comment=Install approved Ubuntu security fixes without updating the kernel or NVIDIA drivers
+Exec=mint-security-updates --gui
+Icon=software-update-available
+Terminal=false
+Categories=System;Settings;
