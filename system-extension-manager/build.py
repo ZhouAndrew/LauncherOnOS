@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the manager and four independently installable system extensions."""
+"""Build three installable extensions plus one portable update tool."""
 import argparse
 import hashlib
 import json
@@ -26,9 +26,6 @@ def build_extensions():
         dict(id='homebackup', name='HomeBackUp', package='mint-homebackup-extension', version='0.1.3',
              launch=['/usr/bin/homebackup-ext', 'gui'],
              description='Borg recovery backups on the HomeBackUp disk: monthly scheduling, verified deduplicated archives and at most 3 retained backup dates. Existing encrypted repository is reused; configure it after enabling from the Mint application menu. The /dev/sdc7 data partition is not included.'),
-        dict(id='security-updates', name='Security Updates', package='mint-security-updates-extension', version='0.1.0',
-             launch=['/usr/bin/mint-security-updates', '--gui'],
-             description='Manually inspect, refresh and apply official Ubuntu noble-security updates. Kernel, NVIDIA, DKMS, firmware and boot packages are protected. Refuses unexpected installs/removals, requires explicit authorization, and creates no automatic update timers.')
     ]
     for item in definitions:
         source = ROOT / 'sources' / item['id']
@@ -40,6 +37,11 @@ def build_extensions():
         item['source'] = dict(kind='bundled', requires=['python3', 'dpkg-deb', 'xz'],
             files={str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in files},
             argv=['python3', f'sources/{item["id"]}/build.py', '--output-dir', '{output}'])
+    definitions.append(dict(
+        id='security-updates', kind='portable', name='Security Updates',
+        version='Built-in', script='sources/security-updates/security_updates.py',
+        description='Run one interactive command in a terminal; manually refresh and install trusted Ubuntu noble-security updates after review. No extension package or scheduled jobs. Kernel, NVIDIA, DKMS, firmware and boot packages are protected.'
+    ))
     (ROOT / 'extensions.json').write_text(json.dumps(definitions, indent=2) + '\n')
     return definitions
 
@@ -50,6 +52,11 @@ def build_manager(output_dir):
         raise ValueError('Choose an output folder outside the source tree, or use its dist folder')
     definitions = json.loads((ROOT / 'extensions.json').read_text())
     for item in definitions:
+        if item.get('kind') == 'portable':
+            path = ROOT / item['script']
+            if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(ROOT):
+                raise ValueError('Portable script is missing or unsafe: ' + item['id'])
+            continue
         path = ROOT / item['deb']
         if hashlib.sha256(path.read_bytes()).hexdigest() != item['sha256']:
             raise ValueError('Bundled extension checksum mismatch: ' + item['id'])
@@ -75,7 +82,7 @@ Maintainer: ZhouAndrew <zhouandrew@users.noreply.github.com>
 Depends: python3 (>= 3.10), python3-tk, dpkg, apt, pkexec
 Description: Manage independent system extensions through Debian packages
  Provides multiple-extension listing, install/remove controls, verified source
- builds, application launching, live logs, and bundled Anki, ZIP, HomeBackUp and Security Updates extensions.
+ builds, application launching, live logs, and three bundled installable extensions and a portable Security Updates script.
 ''')
         write('usr/bin/system-extension-manager', '#!/bin/sh\nexec /usr/bin/python3 /usr/share/system-extension-manager/manager.py "$@"\n', 0o755)
         write('usr/share/applications/system-extension-manager.desktop', (ROOT / 'system-extension-manager.desktop').read_text())

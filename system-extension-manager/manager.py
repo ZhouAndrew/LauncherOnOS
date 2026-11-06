@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Manage independent system extensions using their bundled Debian packages."""
+"""Manage installable system extensions and portable tools."""
 import argparse
 import sys
 from pathlib import Path
@@ -19,14 +19,15 @@ def main(argv=None):
     ops.add_argument('--update', metavar='ID', choices=choices, help='update an installed extension to a newer bundled version')
     ops.add_argument('--disable', metavar='ID', choices=choices, help='uninstall the extension package')
     ops.add_argument('--build', metavar='ID', choices=choices, help='build pinned sources as a regular user, then install')
-    ops.add_argument('--open', metavar='ID', choices=choices, help='open an installed extension application')
+    ops.add_argument('--open', metavar='ID', choices=choices, help='open an installed extension or a portable tool in a terminal')
     args = parser.parse_args(argv)
     try:
         if args.build_package:
             lifecycle.build_manager_package(args.output_dir)
         elif args.list:
             for row in lifecycle.plugins():
-                print(row['id'], row['name'], lifecycle.state_text(row['package']), sep='\t')
+                state = lifecycle.extension_state(row)['state'] if row.get('kind') == 'portable' else lifecycle.state_text(row['package'])
+                print(row['id'], row['name'], state, sep='\t')
         elif args.enable:
             lifecycle.change(args.enable, True)
         elif args.update:

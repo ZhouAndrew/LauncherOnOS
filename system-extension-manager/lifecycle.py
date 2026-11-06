@@ -22,10 +22,16 @@ def plugins():
     for item in rows:
         if not re.fullmatch(r'[a-z][a-z0-9-]{0,63}', item['id']) or item['id'] in ids:
             raise ValueError('Invalid or duplicate extension ID')
-        if not re.fullmatch(r'[a-z0-9][a-z0-9+.-]+', item['package']) or item['package'] in packages:
-            raise ValueError('Invalid or duplicate package name')
+        if item.get('kind') == 'portable':
+            if not isinstance(item.get('script'), str) or not item['script'].startswith('sources/'):
+                raise ValueError('Invalid portable script path')
+            if 'package' in item or 'deb' in item or 'source' in item:
+                raise ValueError('Portable tools cannot declare installable packages')
+        else:
+            if not re.fullmatch(r'[a-z0-9][a-z0-9+.-]+', item['package']) or item['package'] in packages:
+                raise ValueError('Invalid or duplicate package name')
+            packages.add(item['package'])
         ids.add(item['id'])
-        packages.add(item['package'])
     return rows
 
 
@@ -67,6 +73,14 @@ def state_text(package):
 
 
 def extension_state(item):
+    if item.get('kind') == 'portable':
+        try:
+            portable_script(item)
+            return dict(state='Ready (no installation required)', installed=None,
+                        install=False, remove=False, update=False)
+        except (OSError, ValueError) as exc:
+            return dict(state='Unknown: ' + str(exc), installed=None,
+                        install=False, remove=False, update=False)
     try:
         status, version = package_status(item['package'])
         if status == 'install ok installed':
@@ -111,6 +125,8 @@ def bundled_deb(item, log=None):
 
 def command(key, enable, deb=None, log=None):
     item = plugin(key)
+    if item.get('kind') == 'portable':
+        raise ValueError('Portable tools run directly; choose Run in Terminal (or --open).')
     if enable:
         if deb is None:
             deb = bundled_deb(item, log)
@@ -126,6 +142,8 @@ def command(key, enable, deb=None, log=None):
 
 
 def build_source(item, log):
+    if item.get('kind') == 'portable':
+        raise ValueError('Portable tools require no package build or installation.')
     if os.geteuid() == 0:
         raise ValueError('Source builds must run as a regular user. Start System Extension Manager without sudo.')
     recipe = item.get('source')
@@ -170,6 +188,8 @@ def change(key, enable, log=None, from_source=False, update=False):
     log = log or OperationLog(key)
     try:
         item = plugin(key)
+        if item.get('kind') == 'portable':
+            raise ValueError('Portable tools require no installation; use Run in Terminal.')
         log.stage(('Enable' if enable else 'Disable') + ': ' + item['name'])
         if from_source and not enable:
             raise ValueError('Source builds are only valid for enabling an extension')
@@ -224,8 +244,37 @@ def filter_plugins(items, query='', status_filter='All'):
             and (status_filter == 'All' or item['state'].startswith(status_filter))]
 
 
+def portable_script(item):
+    relative = item['script']
+    path = ROOT / relative
+    if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(ROOT):
+        raise ValueError('Portable tool source is missing, linked or escapes manager directory')
+    return path
+
+
+def terminal_command(script):
+    python = '/usr/bin/python3'
+    argv = [python, str(script), '--interactive']
+    terminal = shutil.which('x-terminal-emulator')
+    if terminal:
+        return [terminal, '-e', *argv]
+    for name, flag in [
+        ('xfce4-terminal', ['--disable-server', '--execute']),
+        ('gnome-terminal', ['--']),
+        ('mate-terminal', ['--']),
+        ('konsole', ['-e']),
+        ('xterm', ['-e']),
+    ]:
+        executable = shutil.which(name)
+        if executable:
+            return [executable, *flag, *argv]
+    raise ValueError('No compatible graphical terminal found. No changes were made.')
+
+
 def launch_command(key):
     item = plugin(key)
+    if item.get('kind') == 'portable':
+        return terminal_command(portable_script(item))
     if installed_version(item['package']) is None:
         raise ValueError('Enable / Install this extension before opening it')
     args = item.get('launch')
@@ -242,10 +291,19 @@ def open_extension(key, log=None):
     owned = log is None
     log = log or OperationLog('Open: ' + key)
     try:
+        item = plugin(key)
         args = launch_command(key)
-        log.stage('Opening ' + plugin(key)['name'])
-        log.run(args)
-        log.stage('Extension window closed')
+        if item.get('kind') == 'portable':
+            import shlex
+            log.stage('Launching terminal for ' + item['name'] + ' (no package installation)')
+            log.write('$ ' + shlex.join(args) + '\n')
+            subprocess.Popen(args, start_new_session=True, stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            log.stage('Terminal launched. Output and confirmation are in the terminal.')
+        else:
+            log.stage('Opening ' + item['name'])
+            log.run(args)
+            log.stage('Extension window closed')
     except Exception as exc:
         log.stage('FAILED: ' + str(exc))
         raise
@@ -282,13 +340,13 @@ def show_gui(parent=None):
     window.title('System Extension Manager')
     window.geometry('1100x760')
     window.minsize(820, 580)
-    ttk.Label(window, text='Enable installs a package. Disable removes it. Installation affects all users.').pack(anchor='w', padx=12, pady=10)
+    ttk.Label(window, text='Install / Uninstall affects all users. Portable tools run directly without installation.').pack(anchor='w', padx=12, pady=10)
     bar = ttk.Frame(window)
     bar.pack(fill='x', padx=12)
     ttk.Label(bar, text='Search').pack(side='left')
     query, status = tk.StringVar(), tk.StringVar(value='All')
     ttk.Entry(bar, textvariable=query).pack(side='left', fill='x', expand=True, padx=8)
-    ttk.Combobox(bar, textvariable=status, values=['All', 'Enabled', 'Disabled', 'Incomplete', 'Unknown'], state='readonly', width=16).pack(side='left')
+    ttk.Combobox(bar, textvariable=status, values=['All', 'Ready', 'Enabled', 'Disabled', 'Incomplete', 'Unknown'], state='readonly', width=16).pack(side='left')
     pane = ttk.Panedwindow(window, orient='vertical')
     pane.pack(fill='both', expand=True, padx=12, pady=10)
     upper = ttk.Frame(pane)
@@ -320,7 +378,7 @@ def show_gui(parent=None):
         old = tree.selection()
         tree.delete(*tree.get_children())
         for item in filter_plugins(rows, query.get(), status.get()):
-            tree.insert('', 'end', iid=item['id'], values=(item['name'], item['version'], item['state'], 'Available' if item.get('source') else 'Unavailable'))
+            tree.insert('', 'end', iid=item['id'], values=(item['name'], item['version'], item['state'], 'Not needed' if item.get('kind') == 'portable' else ('Available' if item.get('source') else 'Unavailable')))
         if old and tree.exists(old[0]):
             tree.selection_set(old)
         update_selection()
@@ -339,13 +397,19 @@ def show_gui(parent=None):
         remove_button.configure(state='normal' if item and item['remove'] and not busy[0] else 'disabled')
         update_button.configure(state='normal' if item and item['update'] and not busy[0] else 'disabled')
         source_button.configure(state='normal' if item and item.get('source') and item['install'] and not busy[0] else 'disabled')
-        open_button.configure(state='normal' if item and item.get('launch') and item['state'].startswith('Enabled') and not busy[0] else 'disabled')
+        portable = bool(item and item.get('kind') == 'portable')
+        open_button.configure(text='Run in Terminal' if portable else 'Open')
+        open_ready = bool(item and (
+            (portable and item['state'].startswith('Ready'))
+            or (item.get('launch') and item['state'].startswith('Enabled'))
+        ))
+        open_button.configure(state='normal' if open_ready and not busy[0] else 'disabled')
         package_button.configure(state='disabled' if busy[0] else 'normal')
     def operate(enable, from_source=False, launch=False, update=False):
         item = selected()
         if not item or busy[0]:
             return
-        label = 'Update' if update else 'Open' if launch else ('Build from source and install' if from_source else ('Enable / Install' if enable else 'Disable / Uninstall'))
+        label = 'Update' if update else ('Run in Terminal' if item.get('kind') == 'portable' else 'Open') if launch else ('Build from source and install' if from_source else ('Enable / Install' if enable else 'Disable / Uninstall'))
         if not launch and not messagebox.askyesno(label, label + ': ' + item['name'] + '\n\nCommands and output will appear below. Administrator authorization is requested only for package installation/removal.', parent=window):
             return
         busy[0] = True
