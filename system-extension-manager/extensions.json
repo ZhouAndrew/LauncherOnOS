@@ -3,10 +3,10 @@
     "id": "zip-trash",
     "name": "ZIP and Trash",
     "package": "mint-toolbox-extension-zip-trash",
-    "version": "0.4.3",
-    "description": "Nemo right-click ZIP compression, exact-content verification and GIO Trash. Preserves file, directory, dangling and circular symbolic links without following their targets.",
-    "deb": "packages/mint-toolbox-extension-zip-trash_0.4.3_all.deb",
-    "sha256": "4e1131db99129c34eba412b0e76185953135671d6969de75c6a7a5e7a6b39876",
+    "version": "0.4.4",
+    "description": "Nemo verified ZIP compression; originals are KEPT by default. WARNING: optional CLI Trash cannot exclude concurrent writers. Preserves file, directory, dangling and circular symbolic links without following their targets.",
+    "deb": "packages/mint-toolbox-extension-zip-trash_0.4.4_all.deb",
+    "sha256": "af22017d8ac47a39f713f003bd7a06ce06af9bd3cf50c8bcb1026adbb5537261",
     "source": {
       "kind": "bundled",
       "requires": [
@@ -15,11 +15,11 @@
         "xz"
       ],
       "files": {
-        "sources/zip-trash/build.py": "b089d1a5c827e7ac9111b991ce5a0207679d344b49bbb4bfccc2526d7bc31707",
+        "sources/zip-trash/build.py": "70e6d6787264cbd43599fbe4ff6b21bf76da7f3dc4ed7d95c201986236e5dbd8",
         "sources/zip-trash/execution.py": "a484432184fad07dc83e76ba26b55914f22b4e0a18208e0d3400b023c67d38ea",
         "sources/zip-trash/native_dialogs.py": "4dffb7513626b47efb5276637909fad5b4cc4d90d44df59b1e5b897cd08723a8",
-        "sources/zip-trash/zip-trash.nemo_action": "d08b84f4e80297f3baf33e22ce6f715a07eaf14b39ae43c4fa21423c8e452a99",
-        "sources/zip-trash/zip_trash.py": "1fe5d9b0509e3e9c3d66e7056fe5329732c1879afefc7d6381d0af59a34f68be"
+        "sources/zip-trash/zip-trash.nemo_action": "c43401db202ed4db91db72d895008cada1c1ffc24daf6f3c4c9592cfae3da6a8",
+        "sources/zip-trash/zip_trash.py": "e37b91fffca3eba5c9189e8d7c523447d7230c6ec53661aca95b960d5710f749"
       },
       "argv": [
         "python3",
@@ -33,14 +33,14 @@
     "id": "anki-time-travel",
     "name": "Anki Time Travel",
     "package": "anki-time-travel",
-    "version": "0.1.4",
+    "version": "0.1.5",
     "launch": [
       "/usr/bin/anki-time-travel",
       "--gui"
     ],
-    "description": "Import historical Anki PDF statistics into local WordPress, with a CLI, file chooser and live logs. Preserves historical dates and verifies imported posts, attachments and the exact post permalink. Requires WP-CLI and an accessible existing WordPress site.",
-    "deb": "packages/anki-time-travel_0.1.4_all.deb",
-    "sha256": "e4c7529465c93408f337468056dc1eaad3ed99fa34e2ef11e49c681b8a710bc6",
+    "description": "WARNING: Imports PUBLISH posts, can overwrite matching content/categories, and may reuse an old same-path attachment. Uploaded PDFs may be directly accessible. Preserves historical dates and verifies imported posts, attachments and the exact post permalink. Requires WP-CLI and an accessible existing WordPress site.",
+    "deb": "packages/anki-time-travel_0.1.5_all.deb",
+    "sha256": "e0ed20975a158aa7f6ac38700117e5bd2aa5fabcb6466e5d4a9c96d0e2f4351a",
     "source": {
       "kind": "bundled",
       "requires": [
@@ -50,9 +50,9 @@
       ],
       "files": {
         "sources/anki-time-travel/anki-time-travel.desktop": "43fbf6f7c2d1fc9e03b61f36127983d41be71d4d1ec63e87f8d613b021ce6438",
-        "sources/anki-time-travel/anki-time-travel.sh": "c65fc28291ea0f57b2508d8608eb358525620a8eb4233a8f0b7a71e9c1d64b5f",
-        "sources/anki-time-travel/app.py": "368a00375b7dd1d9230e05af183ced180350aaf81a73fb8213581d0f1f870b41",
-        "sources/anki-time-travel/build.py": "8a3c430c1eefecfd98f6a4c9f4898bd705b76887f54d76d41615cfab256e624a",
+        "sources/anki-time-travel/anki-time-travel.sh": "60cadb7a6d72b0797ef722ea9d4f3480f5971f45fb517df2077a5aa1d26eb818",
+        "sources/anki-time-travel/app.py": "3a23f4347498bbdd70f53ca229c56870a352777755d6a2b83d1e5cb4c1186def",
+        "sources/anki-time-travel/build.py": "9d2387f71387d728fefa322f5528432f6798461f4e3bb31aa3f9449b54843674",
         "sources/anki-time-travel/execution.py": "a484432184fad07dc83e76ba26b55914f22b4e0a18208e0d3400b023c67d38ea",
         "sources/anki-time-travel/native_dialogs.py": "4dffb7513626b47efb5276637909fad5b4cc4d90d44df59b1e5b897cd08723a8"
       },
@@ -68,14 +68,14 @@
     "id": "homebackup",
     "name": "HomeBackUp",
     "package": "mint-homebackup-extension",
-    "version": "0.1.3",
+    "version": "0.1.4",
     "launch": [
       "/usr/bin/homebackup-ext",
       "gui"
     ],
-    "description": "Borg recovery backups on the HomeBackUp disk: monthly scheduling, verified deduplicated archives and at most 3 retained backup dates. Existing encrypted repository is reused; configure it after enabling from the Mint application menu. The /dev/sdc7 data partition is not included.",
-    "deb": "packages/mint-homebackup-extension_0.1.3_all.deb",
-    "sha256": "a1801fee705d29b01ee9c7a354b6ae8d7dec6eed7d48a0de5a81a41aa6735277",
+    "description": "WARNING: Successful backups permanently prune older mint-* archives. Preview retention first. Borg recovery backups: monthly scheduling, verified deduplicated archives and at most 3 retained backup dates. Existing encrypted repository is reused; configure it after enabling from the Mint application menu. The /dev/sdc7 data partition is not included.",
+    "deb": "packages/mint-homebackup-extension_0.1.4_all.deb",
+    "sha256": "bfe6aa26c7522065e31dcccd593973d2cbeadf43e1161fce53052821a1553113",
     "source": {
       "kind": "bundled",
       "requires": [
@@ -84,11 +84,10 @@
         "xz"
       ],
       "files": {
-        "sources/homebackup/backup.sh": "ed9ba64971759baa2f4c7292c992a73a6aa2e7d95e7526918e9618c05e8f1bb7",
-        "sources/homebackup/build.py": "e9732bc90fc9aaa73d56de1788be91b810f4b3e3e9d8986e9131f01a0d8c4344",
-        "sources/homebackup/gui.py": "c3e4e7c7ac676b56dfc384e84bb6ab46f071af99a44b6a8a5a69502844fd7348",
-        "sources/homebackup/setup.sh": "14502ec01a40c1e624660988659596cd9f8de162596390efb0ea25197373abe8",
-        "sources/homebackup/test-check.sh": "a3ea5d472e4491b64e0694a369af2acc6dba45d71f442631e1ddcea491650993"
+        "sources/homebackup/backup.sh": "45522d906425810ce8f4a908eb7ff0afde84c05e8e3ca94917ba9ec96c0a6158",
+        "sources/homebackup/build.py": "d90ea8cefd09445ef1a5258350683028c4311ec28d0d080d3183a8e35d8bd817",
+        "sources/homebackup/gui.py": "0135ca3b94b56a6ab237de44533c9febbe8a73253513f8a2981452ab6ea80d47",
+        "sources/homebackup/setup.sh": "039b261b1f59862e7f4ad6d805e6e50757d451f246deb92bb0b28ff2a42d5dcd"
       },
       "argv": [
         "python3",
@@ -104,6 +103,7 @@
     "name": "Security Updates",
     "version": "Built-in",
     "script": "sources/security-updates/security_updates.py",
+    "sha256": "dde15e4a9017ecdb51a96f88759281751e15b68df7025eb81544db09280a1fd8",
     "description": "Run one interactive command in a terminal; manually refresh and install trusted Ubuntu noble-security updates after review. No extension package or scheduled jobs. Kernel, NVIDIA, DKMS, firmware and boot packages are protected."
   }
 ]

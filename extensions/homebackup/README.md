@@ -1,3 +1,5 @@
+> ACTIVE extension: HomeBackUp 0.1.4. See [security status](../../SECURITY_STATUS.md). Stop waits for the active service and verifies shutdown. Successful backups intentionally delete retention-expired archives; preview first.
+
 # Mint HomeBackUp Extension 0.1.3 — GTK GUI
 
 This standalone `.deb` is distributed **through System Extension Manager** in the same repository. It is a separate system package, and does not require MintBox or LauncherOnOS at runtime.

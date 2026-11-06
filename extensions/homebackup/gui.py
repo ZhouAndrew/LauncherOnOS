@@ -32,7 +32,7 @@ def main():
             title.set_xalign(0)
             title.get_style_context().add_class('title')
             root.pack_start(title, False, False, 0)
-            info = Gtk.Label(label='备份磁盘：HomeBackUp  |  每月 1 日 03:00  |  最多保留最近 3 个备份日期')
+            info = Gtk.Label(label='WARNING: Successful backups permanently prune older mint-* archives. Preview retention first.')
             info.set_xalign(0)
             root.pack_start(info, False, False, 0)
             self.status = Gtk.Label(label='正在读取定时器状态…')
@@ -47,7 +47,7 @@ def main():
                 ('刷新状态', 'status'), ('查看归档', 'list'), ('清理预览（不删除）', 'preview'),
                 ('检查归档结构', 'check'), ('深度数据校验', 'verify-data'),
                 ('立即备份', 'backup'), ('启用每月备份', 'enable'), ('停用每月备份', 'disable'),
-                ('配置 Borg 密码', 'setup'), ('复用已保存密码', 'use-existing'),
+                ('配置密码并启用计划', 'setup'), ('复用密码并启用计划', 'use-existing'),
             ]
             for i, (label, cmd) in enumerate(specs):
                 btn = Gtk.Button(label=label)
@@ -108,10 +108,12 @@ def main():
             if self.busy:
                 return
             secret = None
-            if command in ('backup', 'enable', 'disable'):
-                names = {'backup':'立即创建新备份？这可能需要较长时间。',
-                         'enable':'启用每月备份？如错过备份日期，systemd 可能立即补执行。',
-                         'disable':'停用每月自动备份？已有归档不会被删除。'}
+            if command in ('backup', 'enable', 'disable', 'setup', 'use-existing'):
+                names = {'backup':'立即备份并按策略清理旧归档？校验通过后，仅保留最近三个备份日期各一份；其余 mint-* 归档会永久删除。建议先查看清理预览。',
+                         'enable':'启用每月备份？错过日期可能立即补执行。成功校验后会永久删除保留策略外的 mint-* 归档；请先查看清理预览。',
+                         'setup':'保存密码并启用月度备份？错过日期可能立即运行并按最近三个日期策略删除旧归档。',
+                         'use-existing':'复用密码并启用月度备份？可能立即运行并删除保留策略外旧归档。',
+                         'disable':'停用每月自动备份并停止正在运行的备份服务？等待 Borg 正常停止后才会报告成功。'}
                 if not self.confirmation(names[command]):
                     return
             if command == 'verify-data' and not self.confirmation('深度校验需要读取全部备份数据，可能持续数小时，继续吗？'):

@@ -24,6 +24,10 @@ import extensions
 import system_plugins
 import anki_import
 
+# DEPRECATED: active product is ../system-extension-manager. Not fully security-reviewed.
+LEGACY_WARNING = 'DEPRECATED / NOT ACTIVE: Use System Extension Manager. Legacy utilities retain documented risks; WeChat is NOT security-fixed.'
+WECHAT_WARNING = 'WARNING - UNFIXED WECHAT RISKS: This publishes private chats and copies ALL export files to web-accessible uploads. Static files are not protected by private WordPress posts. Active HTML/PHP may be unsafe. Same-name exports use rsync --delete and can erase older archived files. Dry-run preprocessing may generate and write HTML. Use only trusted exports; back up the site first.'
+IMPORT_WARNING = 'WARNING: This import PUBLISHES WordPress posts. A matching title/date can overwrite existing content and replace categories/tags. A same-path attachment may reuse older bytes. Uploaded PDFs may be directly accessible. Back up the site first; review the result.'
 ROOT = Path(__file__).resolve().parent
 CATALOG = ROOT / 'catalog.json'
 ORIGINALS = ROOT / 'originals'
@@ -54,9 +58,9 @@ ACTION_MAP: dict[str, tuple[Action, ...]] = {
                                       Field('output', 'Output folder', 'folder', required=False),
                                       Field('duplicates', 'Keep duplicate images', 'boolean', required=False))),),
     'archive-folder-to-trash': (
-        Action('archive', 'Archive and move to Trash', (Field('source', 'Folder to archive', 'folder'),
+        Action('archive', 'Create archive (keep originals)', (Field('source', 'Folder to archive', 'folder'),
                                          Field('output', 'Archive output folder (optional)', 'folder', required=False)),
-               'high', 'Create and verify the archive, then move the original folder to Trash.'),),
+               'high', 'WARNING: Live files can change. Creates an archive and keeps originals; inspect before manual cleanup.'),),
     'andrew-lan-speed-test.sh': (
         Action('link', 'Inspect network adapter and link', (), 'medium', 'The script may install missing packages and ask for a test IP address.'),
         Action('client', 'Test connection to another device', (Field('peer', 'Peer IP address or hostname'),), 'medium',
@@ -65,7 +69,7 @@ ACTION_MAP: dict[str, tuple[Action, ...]] = {
         Action('cable', 'Test network cable', (), 'high', 'Cable diagnostics may interrupt connectivity. Do not run over SSH.')),
     'anki-time-travel.sh': (
         Action('post', 'Import historical Anki PDF into WordPress',
-               (Field('pdf', 'Historical statistics PDF', 'file'),), 'high', 'Creates or reuses WordPress posts and attachments. The filename must include a timestamp.'),),
+               (Field('pdf', 'Historical statistics PDF', 'file'),), 'high', IMPORT_WARNING),),
     'categorize-posts-by-keyword': (
         Action('preview', 'Preview matching posts', (Field('keyword', 'Search keyword'),), 'low', 'Search only; categories are not changed.'),
         Action('apply', 'Set post categories in bulk',
@@ -82,12 +86,12 @@ ACTION_MAP: dict[str, tuple[Action, ...]] = {
     'unlock_wechat_export': (
         Action('unlock', 'Generate readable chat HTML',
                (Field('source', 'WeChat export root folder', 'folder'),), 'medium',
-               'Generates messages-unlocked.html under conversations without overwriting existing files.'),),
+               WECHAT_WARNING),),
     'import_wechat_export': (
         Action('preview', 'Preview import', (Field('source', 'WeChat export root folder', 'folder'),),
-               'medium', 'The script may generate unlocked HTML before its dry-run checks. Preview can write files.'),
+               'medium', WECHAT_WARNING),
         Action('import', 'Import WeChat records into WordPress', (Field('source', 'WeChat export root folder', 'folder'),),
-               'high', 'Copies exported assets and creates or updates WordPress posts containing private chats.')),
+               'high', WECHAT_WARNING)),
     'web2menu': (
         Action('add', 'Add a website to the application menu', (Field('url', 'Website URL'),
                                                      Field('name', 'Display name (optional)', required=False)),
@@ -478,6 +482,8 @@ def _approved_gui(parent, tool, action: Action, argv: list[str]) -> bool:
     from tkinter import messagebox, simpledialog
     if action.severity == 'low': return True
     details = action.note or tool['description']
+    if tool['id'] in ('import_wechat_export', 'unlock_wechat_export'):
+        details = WECHAT_WARNING + '\n\n' + details
     description = f'{action.label}\n\n{details}\n\nOriginal script command: \n{shlex.join(argv)}'
     if action.severity in ('high', 'critical'):
         answer = simpledialog.askstring('Confirm data-changing action', description + '\n\nType RUN to confirm', parent=parent)
@@ -489,7 +495,7 @@ def launch_gui() -> int:
     import tkinter as tk
     from tkinter import ttk, messagebox
     root = tk.Tk()
-    root.title('Mint Toolbox v0.5.0')
+    root.title('DEPRECATED - Mint Toolbox (use System Extension Manager)')
     root.geometry('1100x740')
     root.minsize(900, 600)
     style = ttk.Style(root)
@@ -497,7 +503,7 @@ def launch_gui() -> int:
     holder = ttk.Frame(root, padding=18)
     holder.pack(fill='both', expand=True)
     ttk.Label(holder, text='Toolbox', font=('Sans', 19, 'bold')).pack(anchor='w')
-    ttk.Label(holder, text='Choose a task. Existing script capabilities and CLI arguments are preserved.').pack(anchor='w', pady=(0, 13))
+    ttk.Label(holder, text=LEGACY_WARNING, foreground='#9b3200', wraplength=1000).pack(anchor='w', pady=(0, 13))
     search_var = tk.StringVar()
     row = ttk.Frame(holder)
     row.pack(fill='x', pady=(0, 10))
@@ -924,6 +930,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument('--manual', metavar='ID', help='open a tool manual')
     p.add_argument('--run', metavar='ID', help='execute original tool in CLI mode')
     args = p.parse_args(argv)
+    print(LEGACY_WARNING, file=sys.stderr)
     try:
         if args.plugins:
             system_plugins.show_gui()

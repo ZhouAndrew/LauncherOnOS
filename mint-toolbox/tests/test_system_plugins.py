@@ -11,6 +11,21 @@ import system_plugins as plugins
 import zip_trash
 
 
+def require_trash_support(test, root, data):
+    probe = root / '.gio-trash-probe'
+    probe.write_text('temporary capability probe')
+    result = subprocess.run(['/usr/bin/gio', 'trash', '--', str(probe)],
+                            capture_output=True, text=True)
+    if result.returncode and 'Trashing on system internal mounts is not supported' in result.stderr:
+        test.skipTest('GIO Trash is unsupported on this container filesystem')
+    test.assertEqual(result.returncode, 0, result.stderr)
+    # The probe must not change the expected number of objects in this test's Trash.
+    for path in (data / 'Trash/files').glob('*'):
+        path.unlink()
+    for path in (data / 'Trash/info').glob('*'):
+        path.unlink()
+
+
 class ZipTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -31,7 +46,7 @@ class ZipTests(unittest.TestCase):
         (folder / 'empty').mkdir()
         other = self.root / '-option.txt'
         other.write_text('second')
-        target = zip_trash.archive_and_trash([folder, other], self.run_command)
+        target = zip_trash.archive_and_trash([folder, other], self.run_command, trash_originals=True)
         self.assertTrue(target.is_file())
         self.assertEqual(self.trashed, [folder, other])
 
@@ -54,7 +69,7 @@ class ZipTests(unittest.TestCase):
         path = self.root / 'file'
         path.write_text('original')
         (self.root / 'file.zip').write_text('keep')
-        target = zip_trash.archive_and_trash([path], self.run_command)
+        target = zip_trash.archive_and_trash([path], self.run_command, trash_originals=True)
         self.assertEqual(target.name, 'file (1).zip')
         self.assertEqual((self.root / 'file.zip').read_text(), 'keep')
 
@@ -64,7 +79,7 @@ class ZipTests(unittest.TestCase):
         def fail(args, **kwargs):
             raise subprocess.CalledProcessError(1, args)
         with self.assertRaises(subprocess.CalledProcessError):
-            zip_trash.archive_and_trash([path], fail)
+            zip_trash.archive_and_trash([path], fail, trash_originals=True)
         self.assertTrue(path.exists())
         self.assertEqual(list(self.root.iterdir()), [path])
 
@@ -76,7 +91,7 @@ class ZipTests(unittest.TestCase):
                 raise subprocess.CalledProcessError(1, args)
             return self.run_command(args, **kwargs)
         with self.assertRaises(subprocess.CalledProcessError):
-            zip_trash.archive_and_trash([path], fail)
+            zip_trash.archive_and_trash([path], fail, trash_originals=True)
         self.assertEqual(self.trashed, [])
         self.assertTrue(path.exists())
 
@@ -89,7 +104,7 @@ class ZipTests(unittest.TestCase):
                 path.write_text('changed')
             return result
         with self.assertRaises(ValueError):
-            zip_trash.archive_and_trash([path], mutate)
+            zip_trash.archive_and_trash([path], mutate, trash_originals=True)
         self.assertEqual(self.trashed, [])
 
     def test_symbolic_link_is_stored_without_reading_target(self):
@@ -100,7 +115,7 @@ class ZipTests(unittest.TestCase):
         target.write_text('target must stay intact')
         link = self.root / 'link'
         link.symlink_to('target')
-        archive = zip_trash.archive_and_trash([link], self.run_command)
+        archive = zip_trash.archive_and_trash([link], self.run_command, trash_originals=True)
         with zipfile.ZipFile(archive) as zipped:
             entry = zipped.infolist()[0]
             self.assertTrue(stat.S_ISLNK(entry.external_attr >> 16))
@@ -118,7 +133,7 @@ class ZipTests(unittest.TestCase):
         import zipfile
         link = self.root / 'missing-link'
         link.symlink_to('missing-target')
-        archive = zip_trash.archive_and_trash([link], self.run_command)
+        archive = zip_trash.archive_and_trash([link], self.run_command, trash_originals=True)
         with zipfile.ZipFile(archive) as zipped:
             self.assertEqual(zipped.read(zipped.infolist()[0]), b'missing-target')
         self.assertEqual(self.trashed, [link])
@@ -129,7 +144,7 @@ class ZipTests(unittest.TestCase):
         folder.mkdir()
         (folder / 'cycle').symlink_to('.')
         (folder / 'external').symlink_to('/etc')
-        archive = zip_trash.archive_and_trash([folder], self.run_command)
+        archive = zip_trash.archive_and_trash([folder], self.run_command, trash_originals=True)
         with zipfile.ZipFile(archive) as zipped:
             self.assertEqual(len(zipped.infolist()), 3)
             links = {entry.filename.removeprefix('./'): zipped.read(entry)
@@ -146,7 +161,7 @@ class ZipTests(unittest.TestCase):
                 link.symlink_to('second')
             return result
         with self.assertRaises(ValueError):
-            zip_trash.archive_and_trash([link], mutate)
+            zip_trash.archive_and_trash([link], mutate, trash_originals=True)
         self.assertEqual(self.trashed, [])
         self.assertEqual(str(link.readlink()), 'second')
 
@@ -161,7 +176,8 @@ class ZipTests(unittest.TestCase):
             link = self.root / 'link'
             link.symlink_to('target')
             with patch.dict(os.environ, {'XDG_DATA_HOME': str(data)}):
-                archive = zip_trash.archive_and_trash([link])
+                require_trash_support(self, link.parent, data)
+                archive = zip_trash.archive_and_trash([link], trash_originals=True)
             self.assertFalse(link.is_symlink())
             self.assertEqual(target.read_text(), 'preserved')
             self.assertTrue(archive.is_file())
@@ -178,7 +194,7 @@ class ZipTests(unittest.TestCase):
                 raise subprocess.CalledProcessError(1, args)
             return self.run_command(args, **kwargs)
         with self.assertRaisesRegex(RuntimeError, 'ZIP saved'):
-            zip_trash.archive_and_trash([path], fail)
+            zip_trash.archive_and_trash([path], fail, trash_originals=True)
         self.assertTrue((self.root / 'file.zip').is_file())
         self.assertTrue(path.exists())
 
@@ -225,7 +241,8 @@ class ManagerTests(unittest.TestCase):
             source = root / 'original.txt'
             source.write_text('recoverable')
             with patch.dict(os.environ, {'XDG_DATA_HOME': str(data)}):
-                archive = zip_trash.archive_and_trash([source])
+                require_trash_support(self, root, data)
+                archive = zip_trash.archive_and_trash([source], trash_originals=True)
             self.assertFalse(source.exists())
             self.assertTrue(archive.exists())
             trashed = list((data / 'Trash/files').iterdir())

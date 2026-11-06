@@ -1,3 +1,5 @@
+> **DEPRECATED / NOT ACTIVE:** Use the independent [System Extension Manager](../system-extension-manager/). This compatibility program is not the active product. WeChat remains security-unfixed; imports intentionally publish.
+
 # Anki Time Travel
 
 A system-installable CLI and desktop tool for importing historical Anki statistics PDFs into local WordPress.

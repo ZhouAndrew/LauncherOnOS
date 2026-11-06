@@ -1,3 +1,5 @@
 __pycache__/
 *.pyc
 dist/
+sources/homebackup/build-mint-homebackup-extension/
+sources/homebackup/BUILD-NOTES.md

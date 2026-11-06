@@ -115,6 +115,8 @@ class PageParser(HTMLParser):
 
 
 def normalize_url(value):
+    if any(ord(c) < 32 or ord(c) == 127 for c in value):
+        raise ValueError('URL contains control characters')
     value = value.strip()
 
     if not value:
@@ -511,6 +513,9 @@ def desktop_value(value):
 
 
 def exec_quote(value):
+    # Reject line injection before serializing an Exec field.
+    if any(ord(c) < 32 or ord(c) == 127 for c in value):
+        raise ValueError('Exec argument contains control characters')
     # The desktop Exec field treats percent signs as field codes.
     value = value.replace("%", "%%")
 
@@ -639,6 +644,8 @@ def main():
             f"Warning: could not read website: {error}",
             file=sys.stderr,
         )
+
+    final_url = normalize_url(final_url)
 
     hostname = (
         urlparse(final_url).hostname

@@ -1,7 +1,7 @@
 [Nemo Action]
 Active=true
-Name=Compress to ZIP and delete
-Comment=Verify ZIP contents, then move originals to Trash
+Name=Create verified ZIP (keep originals)
+Comment=Verify ZIP contents and keep originals; automatic Trash is unsafe with concurrent writes
 Exec=/usr/bin/mint-toolbox-zip-trash --gui %F
 Icon-Name=package-x-generic
 Selection=notnone

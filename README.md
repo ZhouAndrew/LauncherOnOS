@@ -1,3 +1,5 @@
+> **ACTIVE / MAINTAINED:** [System Extension Manager](system-extension-manager/) is the current product. Mint Toolbox is DEPRECATED; use it only with its security warnings.
+
 # LauncherOnOS
 
 An interactive, user-scoped command-line manager for personal Linux scripts and utility launchers. Designed for Linux Mint / Ubuntu / Debian. Python 3.10+ and the standard library only.
@@ -51,7 +53,7 @@ Running `launcheronos` without arguments displays command help.
 - A copied script can still contain hard-coded paths or missing dependencies; installation does not prove it will run.
 - State is stored in `~/.local/share/launcheronos/`; override with `LAUNCHERONOS_HOME` for testing.
 
-**Privacy**: This repository does not contain personal shell scripts, WordPress credentials, Thunderbird profiles, or any uploaded `bin.zip` content.
+**Privacy**: Bundled utilities include personal paths and disk identifiers. No backup passwords are shipped. Review import warnings before publishing sensitive content.
 
 ## Development
 

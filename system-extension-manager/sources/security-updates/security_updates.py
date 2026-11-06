@@ -7,18 +7,17 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import subprocess
 import sys
-import threading
-import queue
 
 
 LOCK = '/run/lock/mint-security-updates.lock'
 APT = '/usr/bin/apt-get'
-PKEXEC = '/usr/bin/pkexec'
-SELF = '/usr/bin/mint-security-updates'
 APT_OPTIONS = [
     '-o', 'DPkg::Lock::Timeout=0',
+    '-o', 'Acquire::http::Timeout=30', '-o', 'Acquire::https::Timeout=30',
+    '-o', 'Acquire::Retries=2',
     '-o', 'APT::Get::AllowUnauthenticated=false',
     '-o', 'Dpkg::Use-Pty=0',
     '--no-remove', '--only-upgrade', '--no-install-recommends',
@@ -29,7 +28,23 @@ class SafetyError(RuntimeError):
     pass
 
 
+def open_update_lock():
+    # /run/lock may be writable by other users: never follow a planted symlink.
+    fd = os.open(LOCK, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_nlink != 1:
+            raise SafetyError('Unsafe update lock ownership/type; no changes made.')
+        os.fchmod(fd, 0o600)
+        return os.fdopen(fd, 'a+', encoding='utf-8')
+    except BaseException:
+        os.close(fd)
+        raise
+
+
 def command(argv, *, env=None):
+    # Simulation parsing must not depend on the user's display language.
+    env = dict(os.environ if env is None else env, LC_ALL='C.UTF-8', LANG='C.UTF-8')
     result = subprocess.run(argv, text=True, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, env=env, check=False)
     if result.returncode:
@@ -42,9 +57,11 @@ def protected(name):
     name = name.lower().split(':', 1)[0]
     if 'nvidia' in name or 'cuda' in name:
         return True
+    if 'firmware' in name or 'microcode' in name:
+        return True
     return name.startswith((
         'linux-', 'nvidia-', 'libnvidia-', 'xserver-xorg-video-nvidia',
-        'cuda-', 'grub-', 'shim-', 'initramfs-', 'dracut-',
+        'cuda-', 'grub', 'shim', 'initramfs', 'dracut',
         'firmware-', 'fwupd', 'virtualbox-', 'zfs-', 'libkmod',
     )) or name in {
         'dkms', 'nvidia', 'grub', 'shim', 'mokutil', 'kmod',
@@ -134,8 +151,11 @@ def simulate(packages):
                 raise SafetyError('APT proposed an unapproved upgrade: ' + line)
             installed[name] = version
         if line.startswith('Conf '):
-            name = line.split()[1]
-            if name not in packages or protected(name):
+            match = re.match(r'^Conf\s+(\S+)\s+\((\S+)(?:\s|\))', line)
+            if not match:
+                raise SafetyError('APT proposed an unknown configuration: ' + line)
+            name, version = match.groups()
+            if packages.get(name) != version or protected(name):
                 raise SafetyError('APT proposed an unapproved configuration: ' + line)
     if installed != packages:
         raise SafetyError('APT simulation did not match the approved security updates.')
@@ -145,7 +165,7 @@ def simulate(packages):
 def apply(expected):
     if os.geteuid() != 0:
         raise SafetyError('Root authorization required for installation.')
-    with open(LOCK, 'a+', encoding='utf-8') as lock:
+    with open_update_lock() as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
@@ -196,7 +216,7 @@ def refresh():
     if os.geteuid() != 0:
         raise SafetyError('Root authorization required to refresh APT indexes.')
     ensure_host()
-    with open(LOCK, 'a+', encoding='utf-8') as lock:
+    with open_update_lock() as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
@@ -205,15 +225,10 @@ def refresh():
         check_dpkg()
         print('Refreshing APT indexes; no packages will be installed...', flush=True)
         print(command([APT, '-o', 'DPkg::Lock::Timeout=0',
-                       '-o', 'APT::Update::Error-Mode=any', 'update']), flush=True)
+                       '-o', 'APT::Update::Error-Mode=any',
+                       '-o', 'Acquire::http::Timeout=30', '-o', 'Acquire::https::Timeout=30',
+                       '-o', 'Acquire::Retries=2', 'update']), flush=True)
         print('APT index refresh completed.', flush=True)
-
-
-def privilege(action, expected=None):
-    argv = [PKEXEC, SELF, action]
-    if expected is not None:
-        argv += ['--expect', expected]
-    return subprocess.call(argv)
 
 
 def interactive():
@@ -226,6 +241,8 @@ def interactive():
     print('=== Manual security updates (Linux Mint 22.x) ===', flush=True)
     print('Kernel / NVIDIA / DKMS / firmware / boot components are protected.', flush=True)
     print('No timers, background upgrades, autoremove or reboot will be configured.', flush=True)
+    # WARNING: closing the terminal can interrupt APT; there is no automatic rollback.
+    print('Keep this terminal open until the operation finishes.', flush=True)
     print('Updates can restart services. Interrupted installs cannot be automatically rolled back.\n', flush=True)
     print('Refreshing package indexes; sudo may request your password...', flush=True)
     if subprocess.call(['sudo', '/usr/bin/python3', script, '--refresh-root']):

@@ -1,9 +1,18 @@
 # System Extension Manager
 
+**ACTIVE / MAINTAINED — 0.2.2.** Mint Toolbox is DEPRECATED / NOT ACTIVE.
+See [security status](../SECURITY_STATUS.md) for fixed and retained risks.
+ZIP 0.4.4 keeps originals by default. HomeBackUp 0.1.4 verifies service shutdown.
+Anki 0.1.5 intentionally PUBLISHES: matching title/date may overwrite body,
+categories and tags; same-path attachments may reuse older bytes; PDFs may be
+directly accessible. These are warned, not claimed fixed. Back up WordPress first.
+Before upgrading HomeBackUp from 0.1.3, stop its timer and service; its old
+maintenance scripts lack the new protections. The manager refuses unsafe upgrades.
+
 An independent manager for system extensions. Enable installs a bundled Debian package;
 Disable uninstalls that package. The interface shows multiple real extensions and actual dpkg state.
 
-## Portable test release: 0.2.1-test5
+## Portable test release: 0.2.2
 
 Extract the source ZIP, open its folder and run as your desktop user:
 
@@ -34,7 +43,7 @@ The included system-extension-manager.desktop is for the optional installed mana
 
 ## Extensions
 
-- **ZIP and Trash**: Nemo context-menu ZIP creation, content verification and moving originals to Trash.
+- **ZIP and Trash**: Nemo context-menu verified ZIP creation, keeping originals by default. Optional CLI --trash-originals warns about concurrent writers.
   Symbolic links are stored as links without following targets, including dangling and directory links.
 - **HomeBackUp**: Independent Borg recovery backup extension. Installs into the manager as a normal system package with status/readback and optional source build. After Enable, configure once from the Linux Mint applications menu using `homebackup-ext setup` or `homebackup-ext use-existing` (existing root-only Borg credentials). Reuses `/media/andrew/HomeBackUp/Mint-Recovery-Borg` without deleting existing backups on installation; monthly timer with at most three backup dates. Requires an existing Borg 1.x repo and the configured HomeBackUp disk; `/dev/sdc7` is not included. The extension opens a dedicated GTK window from the manager's Open action or Mint application menu.
 - **Security Updates**: **No installation required.** Select the row and click **Run in Terminal**.
@@ -46,7 +55,7 @@ The included system-extension-manager.desktop is for the optional installed mana
   Requires an existing accessible WordPress installation and WP-CLI. Installing or opening the application does not start an import.
 
 Select Anki Time Travel, click **Enable / Install**, then **Open**.
-An existing installed version is detected automatically. Enable upgrades it to the bundled version.
+An existing installed version is detected automatically. Use Update to upgrade it to the bundled version.
 Disable removes the extension package without deleting WordPress posts, PDFs, settings or logs.
 ZIP and Trash is used from Nemo's context menu and has no standalone application window.
 
@@ -74,7 +83,7 @@ The generated deb is checked for package identity, version and architecture befo
 Root builds are refused. Missing build tools are reported. This version does not download arbitrary source repositories
 or automatically port incompatible source code.
 
-Run the manager as your desktop user. Only installation/removal requests administrator authorization.
+Run the manager as your desktop user. Package changes and explicitly requested security updates require administrator authorization.
 Installing/removing an extension affects all users. Removing the manager itself leaves independently installed extensions intact.
 
 ## Build extension packages and test
@@ -107,11 +116,11 @@ no action. These changes apply to manager packaging, log saving and Anki file se
 
 The GitHub Actions `System Extension Manager` workflow builds a portable source ZIP **with three extension debs plus the portable security script** and an optional System Extension Manager `.deb` for download as CI artifacts. In the manager select **HomeBackUp** and choose **Enable / Install**; the system package manager requests one administrator authorization for installation. Updating an already-installed extension uses **Update**, and removing a missing package is a no-op. The Borg encryption password is a separate credential needed only for first setup or repository access. No sensitive backup data or credentials are shipped. Reinstall-and-restore and live Mint GUI installation are not yet acceptance-tested.
 
-For a raw Git checkout (rather than the CI-distributed source ZIP), run `python3 system-extension-manager/build.py --extensions-only` before `bash system-extension-manager/run.sh` so the locally built HomeBackUp extension package and catalog are available. CI releases include the ready-to-install manager and the three bundled extension packages and the portable security-update script.
+Raw Git checkouts include three matching extension packages, valid source pins and the portable updater. Run `bash system-extension-manager/run.sh` directly; no build or manager installation is needed. CI validates the committed tree before rebuilding.
 
 ### HomeBackUp GUI update
 
-The HomeBackUp v0.1.3 application uses the native GTK 3 interface by default, with archive listing, retention preview, structural and data verification, monthly timer status, enable/disable, and one-time Borg password enrollment. Administrative actions use PolicyKit; ordinary status requires no sudo. Package installation does not enable the timer, and upgrading does not change the current timer state.
+The HomeBackUp v0.1.4 application uses the native GTK 3 interface by default, with archive listing, retention preview, structural and data verification, monthly timer status, enable/disable, and one-time Borg password enrollment. Administrative actions use PolicyKit; ordinary status requires no sudo. Package installation does not enable the timer, and upgrading does not change the current timer state.
 
 ### Manual Security Updates (Linux Mint 22.x)
 
@@ -135,3 +144,5 @@ It creates no automatic updates, timers, package holds, package removals or rebo
 restart system services and interrupted installations cannot be rolled back automatically.
 Previously installed legacy `mint-security-updates-extension` packages are not used or
 uninstalled automatically.
+
+Portable updates require a trusted source copy and a terminal kept open through completion. The manager checks the source checksum before launching. Closing a terminal may interrupt APT; no automatic rollback exists.

@@ -213,12 +213,31 @@ def change(key, enable, log=None, from_source=False, update=False):
         deb = build_source(item, log) if from_source else None
         args = command(key, enable, deb, log) if from_source else command(key, enable, log=log)
         # Dependency resolution errors are displayed before the authorized install.
-        if enable:
-            log.stage('Checking dependency compatibility without changing the system')
-            start = args.index('/usr/bin/apt-get')
-            simulation = args[start:]
-            simulation.insert(1, '--simulate')
-            log.run(simulation)
+        log.stage('Checking package changes without changing the system')
+        start = args.index('/usr/bin/apt-get')
+        simulation = args[start:]
+        simulation.insert(1, '--simulate')
+        plan = log.run(simulation)
+        for line in plan.stdout.splitlines():
+            parts = line.split()
+            if len(parts) < 2 or parts[0] not in ('Inst', 'Remv'):
+                continue
+            package = parts[1].split(':')[0]
+            if parts[0] == 'Remv' and (enable or package != item['package']):
+                raise ValueError('Refusing unrelated package removal: ' + package)
+            if parts[0] == 'Inst' and re.match(r'^(linux-|nvidia-|libnvidia-)', package):
+                raise ValueError('Kernel/driver changes require separate manual review: ' + package)
+        if enable and installed and item['id'] == 'homebackup':
+            # An upgrade first executes the OLD package's maintenance scripts.
+            # Version 0.1.3 cannot enforce the new shutdown policy itself.
+            log.stage('Checking that HomeBackUp is stopped before upgrading old maintenance scripts')
+            for unit in ('mint-homebackup-extension.timer', 'mint-homebackup-extension.service'):
+                state = log.run(['/usr/bin/systemctl', 'show', '--property=ActiveState', '--value', unit]).stdout.strip()
+                if state not in ('inactive', 'failed'):
+                    raise ValueError('Stop the HomeBackUp timer and active backup service before updating: ' + unit + ' is ' + state)
+            timer = log.run(['/usr/bin/systemctl', 'is-enabled', 'mint-homebackup-extension.timer'], check=False).stdout.strip()
+            if timer not in ('disabled', 'masked'):
+                raise ValueError('Disable the HomeBackUp monthly timer before updating; current state: ' + timer)
         log.stage('Installing package' if enable else 'Removing package')
         result = log.run(args, check=False)
         log.stage('Reading package status back from dpkg')
@@ -249,6 +268,8 @@ def portable_script(item):
     path = ROOT / relative
     if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(ROOT):
         raise ValueError('Portable tool source is missing, linked or escapes manager directory')
+    if hashlib.sha256(path.read_bytes()).hexdigest() != item.get('sha256'):
+        raise ValueError('Portable tool checksum mismatch; use a trusted unchanged source copy')
     return path
 
 
@@ -340,6 +361,8 @@ def show_gui(parent=None):
     window.title('System Extension Manager')
     window.geometry('1100x760')
     window.minsize(820, 580)
+    ttk.Label(window, text='ACTIVE / MAINTAINED - System Extension Manager', foreground='#17633b').pack(anchor='w', padx=12, pady=(8, 0))
+    ttk.Label(window, text='WARNING: Installed does not mean a backup timer is running. Anki imports publish and may overwrite posts. ZIP keeps originals. Security Updates runs manually in a terminal; keep it open until completion.', foreground='#9b3200', wraplength=1050).pack(anchor='w', padx=12, pady=4)
     ttk.Label(window, text='Install / Uninstall affects all users. Portable tools run directly without installation.').pack(anchor='w', padx=12, pady=10)
     bar = ttk.Frame(window)
     bar.pack(fill='x', padx=12)

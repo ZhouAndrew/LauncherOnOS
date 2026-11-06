@@ -3,13 +3,29 @@ on:
   push:
     branches: [main, feat/system-extension-manager-anki]
   pull_request:
+permissions:
+  contents: read
 jobs:
   manager:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Test dependencies
         run: sudo apt-get update && sudo apt-get install -y python3-tk python3-gi gir1.2-gtk-3.0 xvfb desktop-file-utils zip unzip libglib2.0-bin xz-utils
+      - name: Validate committed packages and pinned sources before rebuilding
+        run: |
+          python3 - <<'PYCODE'
+          import hashlib, json
+          from pathlib import Path
+          root = Path('system-extension-manager')
+          for row in json.loads((root / 'extensions.json').read_text()):
+              if row.get('kind') == 'portable':
+                  assert hashlib.sha256((root / row['script']).read_bytes()).hexdigest() == row['sha256']
+                  continue
+              assert hashlib.sha256((root / row['deb']).read_bytes()).hexdigest() == row['sha256']
+              for path, digest in row['source']['files'].items():
+                  assert hashlib.sha256((root / path).read_bytes()).hexdigest() == digest, path
+          PYCODE
       - name: Build three installable extensions and portable security tool
         run: python3 system-extension-manager/build.py --extensions-only
       - name: Validate catalog and packaged extension source hashes
@@ -32,7 +48,7 @@ jobs:
           PYCODE
       - name: Check package reproducibility
         run: |
-          sha256sum system-extension-manager/packages/mint-homebackup-extension_0.1.3_all.deb > /tmp/homebackup-sha
+          sha256sum system-extension-manager/packages/mint-homebackup-extension_0.1.4_all.deb > /tmp/homebackup-sha
           python3 system-extension-manager/sources/homebackup/build.py --output-dir system-extension-manager/packages
           sha256sum -c /tmp/homebackup-sha
       - name: Verify portable updater has no extension package
@@ -50,13 +66,13 @@ jobs:
         run: python3 system-extension-manager/build.py --package --output-dir "$RUNNER_TEMP/manager"
       - name: Check three bundled packages and portable security script are distributed
         run: |
-          dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep 'packages/mint-homebackup-extension_0.1.3_all.deb'
+          dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep 'packages/mint-homebackup-extension_0.1.4_all.deb'
           dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep 'sources/security-updates/security_updates.py'
           ! dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep 'packages/mint-security-updates-extension'
       - name: Bundle portable manager source
         run: |
           (cd system-extension-manager && zip -q -r "$GITHUB_WORKSPACE/System-Extension-Manager-source.zip" . -x 'dist/*' '*/__pycache__/*' '*.pyc' 'sources/homebackup/build-mint-homebackup-extension/*' 'sources/homebackup/BUILD-NOTES.md')
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: System-Extension-Manager-Portable-Security-Updates
           path: |

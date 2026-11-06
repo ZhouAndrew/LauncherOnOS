@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+# SECURITY WARNING: WeChat security issues are NOT repaired in this release.
+# See the runtime warning and SECURITY_STATUS.md before using these legacy tools.
 from pathlib import Path
 import argparse
 import re
@@ -140,6 +142,7 @@ def unlock_html(src: Path, overwrite: bool = False) -> tuple[bool, str]:
 
 
 def main() -> int:
+    print('WARNING - UNFIXED WECHAT RISKS: This publishes private chats and copies ALL export files to web-accessible uploads. Static files are not protected by private WordPress posts. Active HTML/PHP may be unsafe. Same-name exports use rsync --delete and can erase older archived files. Dry-run preprocessing may generate and write HTML. Use only trusted exports; back up the site first.', file=sys.stderr)
     parser = argparse.ArgumentParser(
         description=(
             "Remove integrity gates from exported WeChatDataAnalysis HTML and "

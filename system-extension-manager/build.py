@@ -18,14 +18,14 @@ def build_extensions():
     packages = ROOT / 'packages'
     packages.mkdir(exist_ok=True)
     definitions = [
-        dict(id='zip-trash', name='ZIP and Trash', package='mint-toolbox-extension-zip-trash', version='0.4.3',
-             description='Nemo right-click ZIP compression, exact-content verification and GIO Trash. Preserves file, directory, dangling and circular symbolic links without following their targets.'),
-        dict(id='anki-time-travel', name='Anki Time Travel', package='anki-time-travel', version='0.1.4',
+        dict(id='zip-trash', name='ZIP and Trash', package='mint-toolbox-extension-zip-trash', version='0.4.4',
+             description='Nemo verified ZIP compression; originals are KEPT by default. WARNING: optional CLI Trash cannot exclude concurrent writers. Preserves file, directory, dangling and circular symbolic links without following their targets.'),
+        dict(id='anki-time-travel', name='Anki Time Travel', package='anki-time-travel', version='0.1.5',
              launch=['/usr/bin/anki-time-travel', '--gui'],
-             description='Import historical Anki PDF statistics into local WordPress, with a CLI, file chooser and live logs. Preserves historical dates and verifies imported posts, attachments and the exact post permalink. Requires WP-CLI and an accessible existing WordPress site.'),
-        dict(id='homebackup', name='HomeBackUp', package='mint-homebackup-extension', version='0.1.3',
+             description='WARNING: Imports PUBLISH posts, can overwrite matching content/categories, and may reuse an old same-path attachment. Uploaded PDFs may be directly accessible. Preserves historical dates and verifies imported posts, attachments and the exact post permalink. Requires WP-CLI and an accessible existing WordPress site.'),
+        dict(id='homebackup', name='HomeBackUp', package='mint-homebackup-extension', version='0.1.4',
              launch=['/usr/bin/homebackup-ext', 'gui'],
-             description='Borg recovery backups on the HomeBackUp disk: monthly scheduling, verified deduplicated archives and at most 3 retained backup dates. Existing encrypted repository is reused; configure it after enabling from the Mint application menu. The /dev/sdc7 data partition is not included.'),
+             description='WARNING: Successful backups permanently prune older mint-* archives. Preview retention first. Borg recovery backups: monthly scheduling, verified deduplicated archives and at most 3 retained backup dates. Existing encrypted repository is reused; configure it after enabling from the Mint application menu. The /dev/sdc7 data partition is not included.'),
     ]
     for item in definitions:
         source = ROOT / 'sources' / item['id']
@@ -40,6 +40,7 @@ def build_extensions():
     definitions.append(dict(
         id='security-updates', kind='portable', name='Security Updates',
         version='Built-in', script='sources/security-updates/security_updates.py',
+        sha256=hashlib.sha256((ROOT / 'sources/security-updates/security_updates.py').read_bytes()).hexdigest(),
         description='Run one interactive command in a terminal; manually refresh and install trusted Ubuntu noble-security updates after review. No extension package or scheduled jobs. Kernel, NVIDIA, DKMS, firmware and boot packages are protected.'
     ))
     (ROOT / 'extensions.json').write_text(json.dumps(definitions, indent=2) + '\n')
@@ -56,6 +57,8 @@ def build_manager(output_dir):
             path = ROOT / item['script']
             if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(ROOT):
                 raise ValueError('Portable script is missing or unsafe: ' + item['id'])
+            if hashlib.sha256(path.read_bytes()).hexdigest() != item['sha256']:
+                raise ValueError('Portable script checksum mismatch')
             continue
         path = ROOT / item['deb']
         if hashlib.sha256(path.read_bytes()).hexdigest() != item['sha256']:

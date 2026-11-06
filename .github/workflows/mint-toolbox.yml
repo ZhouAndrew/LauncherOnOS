@@ -3,11 +3,13 @@ on:
   push:
     branches: [main, feat/mint-toolbox-v0.4, feat/anki-time-travel-system]
   pull_request:
+permissions:
+  contents: read
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Desktop test dependencies
         run: sudo apt-get update && sudo apt-get install -y zip unzip libglib2.0-bin python3-tk xvfb desktop-file-utils
       - name: Build bundled extension
@@ -26,15 +28,15 @@ jobs:
         run: desktop-file-validate anki-time-travel/anki-time-travel.desktop
       - name: Test standalone CLI and desktop window
         run: xvfb-run -a python3 -m unittest discover -s anki-time-travel/tests -v
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: Anki-Time-Travel-deb
           path: anki-time-travel/dist/*.deb
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: Mint-Toolbox-system-deb
           path: mint-toolbox/dist/*.deb
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: Mint-Toolbox-v0.5.0
           path: mint-toolbox/
