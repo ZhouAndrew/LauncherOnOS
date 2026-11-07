@@ -1,4 +1,6 @@
-> ACTIVE extension: HomeBackUp 0.1.4. See [security status](../../SECURITY_STATUS.md). Stop waits for the active service and verifies shutdown. Successful backups intentionally delete retention-expired archives; preview first.
+> **UNFIXED LOCK WARNING:** root lock redirections may follow links and truncate targets. Do not allow untrusted writers to control the mount root or lock paths. This release adds warnings, not a fix.
+
+> ACTIVE extension: HomeBackUp 0.1.5. See [security status](../../SECURITY_STATUS.md). Stop waits for the active service and verifies shutdown. Successful backups intentionally delete retention-expired archives; preview first.
 
 # Mint HomeBackUp Extension 0.1.3 — GTK GUI
 

@@ -2,7 +2,7 @@ from pathlib import Path
 import re, shutil, os, subprocess
 root=Path(__file__).resolve().parent / 'build-mint-homebackup-extension'
 if root.exists(): shutil.rmtree(root)
-base=root/'mint-homebackup-extension_0.1.4_all'
+base=root/'mint-homebackup-extension_0.1.5_all'
 lib=base/'usr/lib/mint-homebackup-extension'
 for sub in (lib,base/'usr/bin',base/'usr/share/applications',base/'etc/systemd/system',base/'DEBIAN'):
  sub.mkdir(parents=True,exist_ok=True)
@@ -76,6 +76,7 @@ echo 'Verified: monthly timer disabled and backup service stopped.'
 
 admin='''#!/usr/bin/env bash
 # Privileged entry point. No password is requested when installing the package.
+# SECURITY WARNING: backup runner lock redirections still follow links; warning only.
 set -Eeuo pipefail
 umask 077
 REPO='/media/andrew/HomeBackUp/Mint-Recovery-Borg'
@@ -110,6 +111,7 @@ esac
 if [[ ${1:-} == disable ]]; then
   exec /usr/lib/mint-homebackup-extension/stop-scheduler
 fi
+printf '%s\\n' 'WARNING - UNFIXED BACKUP LOCK RISK: Lock-file redirections follow symbolic links and can truncate their targets with root privileges. Do not allow untrusted users or processes to modify the backup mount root or lock paths. This warning is not a fix.' >&2
 [[ $(findmnt -n -o TARGET -T "$DEST" 2>/dev/null || :) == "$DEST" ]] || fail 'HomeBackUp 未挂载。'
 [[ $(findmnt -n -o UUID -T "$DEST" 2>/dev/null || :) == "$UUID" ]] || fail '备份目标 UUID 不符。'
 [[ $(findmnt -n -o FSTYPE -T "$DEST") == btrfs ]] || fail '目标不是 Btrfs。'
@@ -254,7 +256,7 @@ Categories=System;Utility;
 Keywords=backup;borg;Mint;备份;恢复;
 ''')
 control='''Package: mint-homebackup-extension
-Version: 0.1.4
+Version: 0.1.5
 Section: admin
 Priority: optional
 Architecture: all
@@ -301,14 +303,14 @@ for f in [lib/'gui.py',lib/'backup.sh',lib/'select.py',lib/'run-backup',lib/'adm
  f.chmod(0o755)
 for f in [base/'etc/systemd/system/mint-homebackup-extension.service',base/'etc/systemd/system/mint-homebackup-extension.timer']:
  f.chmod(0o644)
-readme='''# Mint HomeBackUp Extension 0.1.4
+readme='''# Mint HomeBackUp Extension 0.1.5
 
 这是独立的 Linux Mint GTK 3 图形管理包，不依赖 MintBox。普通用户启动无需 sudo，查询定时器状态无需授权。安装不会初始化或修改已有 Borg 仓库，不主动删除任何归档，也不会自动开启定时备份。
 
 **安装（一次系统管理员授权）：**
 
 ```bash
-sudo apt install ./mint-homebackup-extension_0.1.4_all.deb
+sudo apt install ./mint-homebackup-extension_0.1.5_all.deb
 ```
 
 APT 可能因为 sudo 会话过期而要求管理员密码，但此安装包不会再次主动提示密码。它也不会在软件包安装环节要求 Borg 密码。
@@ -348,5 +350,5 @@ if __name__ == '__main__':
     for target in sorted(base.rglob('*'), reverse=True):
         os.utime(target, (epoch, epoch), follow_symlinks=False)
     os.utime(base, (epoch, epoch))
-    subprocess.run(['dpkg-deb', '-Zxz', '-z6', '--threads-max=1', '--root-owner-group', '--build', str(base), str(dest / 'mint-homebackup-extension_0.1.4_all.deb')],
+    subprocess.run(['dpkg-deb', '-Zxz', '-z6', '--threads-max=1', '--root-owner-group', '--build', str(base), str(dest / 'mint-homebackup-extension_0.1.5_all.deb')],
                    check=True, env={**os.environ, 'SOURCE_DATE_EPOCH': str(epoch)})

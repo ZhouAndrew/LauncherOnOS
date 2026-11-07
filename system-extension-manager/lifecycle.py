@@ -13,6 +13,18 @@ import threading
 
 from execution import OperationLog, LogPanel
 
+# SECURITY: the boundary risks below remain unresolved; warnings disclose them only.
+DEB_INSTALL_WARNING = 'WARNING - UNFIXED PACKAGE REPLACEMENT RISK: A local deb can change between checksum verification and privileged APT reading it. Use a private trusted package directory; do not let other users or processes replace it. This warning is not a fix.'
+PORTABLE_IMPORT_WARNING = 'WARNING - UNFIXED PRIVILEGED PYTHON IMPORT RISK: The portable updater verifies only its main file; sudo Python may load extra modules from the same directory. Use a private trusted source copy and directory. Do not authorize a modified or shared writable copy. This warning is not a fix.'
+BACKUP_LOCK_WARNING = 'WARNING - UNFIXED BACKUP LOCK RISK: Lock-file redirections follow symbolic links and can truncate their targets with root privileges. Do not allow untrusted users or processes to modify the backup mount root or lock paths. This warning is not a fix.'
+
+def security_warning(item, *, installing=False):
+    if item.get('kind') == 'portable':
+        return PORTABLE_IMPORT_WARNING
+    if item['id'] == 'homebackup':
+        return BACKUP_LOCK_WARNING + ('\n' + DEB_INSTALL_WARNING if installing else '')
+    return DEB_INSTALL_WARNING
+
 ROOT = Path(__file__).resolve().parent
 
 
@@ -210,6 +222,8 @@ def change(key, enable, log=None, from_source=False, update=False):
             return None
         elif enable and not absent:
             raise ValueError('Incomplete installation; remove the extension before installing again')
+        if enable:
+            log.stage(security_warning(item, installing=True))
         deb = build_source(item, log) if from_source else None
         args = command(key, enable, deb, log) if from_source else command(key, enable, log=log)
         # Dependency resolution errors are displayed before the authorized install.
@@ -315,6 +329,7 @@ def open_extension(key, log=None):
         item = plugin(key)
         args = launch_command(key)
         if item.get('kind') == 'portable':
+            log.stage(PORTABLE_IMPORT_WARNING)
             import shlex
             log.stage('Launching terminal for ' + item['name'] + ' (no package installation)')
             log.write('$ ' + shlex.join(args) + '\n')
@@ -387,6 +402,8 @@ def show_gui(parent=None):
     tree.pack(fill='both', expand=True)
     description = tk.StringVar(value='Select an extension to view its description.')
     ttk.Label(upper, textvariable=description, wraplength=980).pack(fill='x', pady=8)
+    warning = tk.StringVar()
+    ttk.Label(upper, textvariable=warning, foreground='#9b3200', wraplength=980, justify='left').pack(fill='x', pady=(0, 8))
     buttons = ttk.Frame(upper)
     buttons.pack(fill='x')
     panel = LogPanel(pane)
@@ -414,6 +431,7 @@ def show_gui(parent=None):
     def update_selection(*_):
         item = selected()
         description.set(item['description'] if item else 'Select an extension to view its description.')
+        warning.set(security_warning(item) if item else '')
         for control in operation_buttons:
             control.configure(state='normal' if item and not busy[0] else 'disabled')
         install_button.configure(state='normal' if item and item['install'] and not busy[0] else 'disabled')
@@ -433,7 +451,7 @@ def show_gui(parent=None):
         if not item or busy[0]:
             return
         label = 'Update' if update else ('Run in Terminal' if item.get('kind') == 'portable' else 'Open') if launch else ('Build from source and install' if from_source else ('Enable / Install' if enable else 'Disable / Uninstall'))
-        if not launch and not messagebox.askyesno(label, label + ': ' + item['name'] + '\n\nCommands and output will appear below. Administrator authorization is requested only for package installation/removal.', parent=window):
+        if not launch and not messagebox.askyesno(label, label + ': ' + item['name'] + ('\n\n' + security_warning(item, installing=True) if enable else '') + '\n\nCommands and output will appear below. Administrator authorization is requested only for package installation/removal.', parent=window):
             return
         busy[0] = True
         refresh_button.configure(state='disabled')

@@ -1,8 +1,8 @@
 # System Extension Manager
 
-**ACTIVE / MAINTAINED — 0.2.2.** Mint Toolbox is DEPRECATED / NOT ACTIVE.
+**ACTIVE / MAINTAINED — 0.2.3.** Mint Toolbox is DEPRECATED / NOT ACTIVE.
 See [security status](../SECURITY_STATUS.md) for fixed and retained risks.
-ZIP 0.4.4 keeps originals by default. HomeBackUp 0.1.4 verifies service shutdown.
+ZIP 0.4.4 keeps originals by default. HomeBackUp 0.1.5 verifies service shutdown.
 Anki 0.1.5 intentionally PUBLISHES: matching title/date may overwrite body,
 categories and tags; same-path attachments may reuse older bytes; PDFs may be
 directly accessible. These are warned, not claimed fixed. Back up WordPress first.
@@ -12,7 +12,7 @@ maintenance scripts lack the new protections. The manager refuses unsafe upgrade
 An independent manager for system extensions. Enable installs a bundled Debian package;
 Disable uninstalls that package. The interface shows multiple real extensions and actual dpkg state.
 
-## Portable test release: 0.2.2
+## Portable test release: 0.2.3
 
 Extract the source ZIP, open its folder and run as your desktop user:
 
@@ -120,7 +120,7 @@ Raw Git checkouts include three matching extension packages, valid source pins a
 
 ### HomeBackUp GUI update
 
-The HomeBackUp v0.1.4 application uses the native GTK 3 interface by default, with archive listing, retention preview, structural and data verification, monthly timer status, enable/disable, and one-time Borg password enrollment. Administrative actions use PolicyKit; ordinary status requires no sudo. Package installation does not enable the timer, and upgrading does not change the current timer state.
+The HomeBackUp v0.1.5 application uses the native GTK 3 interface by default, with archive listing, retention preview, structural and data verification, monthly timer status, enable/disable, and one-time Borg password enrollment. Administrative actions use PolicyKit; ordinary status requires no sudo. Package installation does not enable the timer, and upgrading does not change the current timer state.
 
 ### Manual Security Updates (Linux Mint 22.x)
 
@@ -146,3 +146,7 @@ Previously installed legacy `mint-security-updates-extension` packages are not u
 uninstalled automatically.
 
 Portable updates require a trusted source copy and a terminal kept open through completion. The manager checks the source checksum before launching. Closing a terminal may interrupt APT; no automatic rollback exists.
+
+### Additional warnings (not fixes)
+
+Selected tools now show the unfixed privileged Python import, root backup lock-link or package replacement risk. Existing package confirmations and CLI logs carry the same notices. HomeBackUp 0.1.5 adds the lock warning to its GTK window, operation confirmations and runtime scripts. Legacy PDF extraction and website-menu tools warn about output links and unrestricted icon resources. See SECURITY_STATUS.md. Publication remains intentional.

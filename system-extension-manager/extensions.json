@@ -68,14 +68,14 @@
     "id": "homebackup",
     "name": "HomeBackUp",
     "package": "mint-homebackup-extension",
-    "version": "0.1.4",
+    "version": "0.1.5",
     "launch": [
       "/usr/bin/homebackup-ext",
       "gui"
     ],
     "description": "WARNING: Successful backups permanently prune older mint-* archives. Preview retention first. Borg recovery backups: monthly scheduling, verified deduplicated archives and at most 3 retained backup dates. Existing encrypted repository is reused; configure it after enabling from the Mint application menu. The /dev/sdc7 data partition is not included.",
-    "deb": "packages/mint-homebackup-extension_0.1.4_all.deb",
-    "sha256": "bfe6aa26c7522065e31dcccd593973d2cbeadf43e1161fce53052821a1553113",
+    "deb": "packages/mint-homebackup-extension_0.1.5_all.deb",
+    "sha256": "997695343010a6bdfb5e123d1f703b8aa6b6c9f96f648f9f37578742d8fad9ec",
     "source": {
       "kind": "bundled",
       "requires": [
@@ -84,10 +84,10 @@
         "xz"
       ],
       "files": {
-        "sources/homebackup/backup.sh": "45522d906425810ce8f4a908eb7ff0afde84c05e8e3ca94917ba9ec96c0a6158",
-        "sources/homebackup/build.py": "d90ea8cefd09445ef1a5258350683028c4311ec28d0d080d3183a8e35d8bd817",
-        "sources/homebackup/gui.py": "0135ca3b94b56a6ab237de44533c9febbe8a73253513f8a2981452ab6ea80d47",
-        "sources/homebackup/setup.sh": "039b261b1f59862e7f4ad6d805e6e50757d451f246deb92bb0b28ff2a42d5dcd"
+        "sources/homebackup/backup.sh": "030808b248efed6a84b3fd0fbb98b722e7e0bbd98182a3d6a16a3083739397bd",
+        "sources/homebackup/build.py": "e920c863a95770229d14ee444f21c60f0cc50ae2ac0d592658c6e8fd12edd563",
+        "sources/homebackup/gui.py": "5280d8ca68a9e6e9152ceb6cb119b2cdec5db4701f8949ec655e0b19d5a95cd5",
+        "sources/homebackup/setup.sh": "06c6a0c35b1a6f8b33aeaf069ecfe1b0e2e5cb1a33c073058a9981f481d31cef"
       },
       "argv": [
         "python3",
@@ -103,7 +103,7 @@
     "name": "Security Updates",
     "version": "Built-in",
     "script": "sources/security-updates/security_updates.py",
-    "sha256": "dde15e4a9017ecdb51a96f88759281751e15b68df7025eb81544db09280a1fd8",
+    "sha256": "22446ad6e1a83be7766c9f3a72f2b7c4daa08c459ff628048f6852850c852eaf",
     "description": "Run one interactive command in a terminal; manually refresh and install trusted Ubuntu noble-security updates after review. No extension package or scheduled jobs. Kernel, NVIDIA, DKMS, firmware and boot packages are protected."
   }
 ]

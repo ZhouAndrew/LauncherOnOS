@@ -23,7 +23,7 @@ def build_extensions():
         dict(id='anki-time-travel', name='Anki Time Travel', package='anki-time-travel', version='0.1.5',
              launch=['/usr/bin/anki-time-travel', '--gui'],
              description='WARNING: Imports PUBLISH posts, can overwrite matching content/categories, and may reuse an old same-path attachment. Uploaded PDFs may be directly accessible. Preserves historical dates and verifies imported posts, attachments and the exact post permalink. Requires WP-CLI and an accessible existing WordPress site.'),
-        dict(id='homebackup', name='HomeBackUp', package='mint-homebackup-extension', version='0.1.4',
+        dict(id='homebackup', name='HomeBackUp', package='mint-homebackup-extension', version='0.1.5',
              launch=['/usr/bin/homebackup-ext', 'gui'],
              description='WARNING: Successful backups permanently prune older mint-* archives. Preview retention first. Borg recovery backups: monthly scheduling, verified deduplicated archives and at most 3 retained backup dates. Existing encrypted repository is reused; configure it after enabling from the Mint application menu. The /dev/sdc7 data partition is not included.'),
     ]

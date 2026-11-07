@@ -17,6 +17,9 @@ from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 
 
+# SECURITY WARNING: icon/manifest schemes remain unrestricted; disclosure only.
+ICON_RESOURCE_WARNING = 'WARNING - UNFIXED ICON RESOURCE RISK: Website icon/manifest references can request file:// local images or internal network resources. Local image files may be read and copied; automatic external transmission has not been established. Use trusted websites. This warning is not a fix.'
+
 USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) "
     "AppleWebKit/537.36 "
@@ -146,6 +149,7 @@ def fetch(url, max_size, accept):
         },
     )
 
+    # SECURITY WARNING: derived icon/manifest URLs can still use file://.
     with urlopen(request, timeout=TIMEOUT) as response:
         data = response.read(max_size + 1)
 
@@ -598,6 +602,7 @@ def main():
     )
 
     arguments = parser_arguments.parse_args()
+    print(ICON_RESOURCE_WARNING, file=sys.stderr, flush=True)
 
     entered_url = (
         arguments.url

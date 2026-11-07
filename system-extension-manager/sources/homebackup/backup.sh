@@ -5,6 +5,9 @@
 set -Eeuo pipefail
 umask 077
 
+# SECURITY WARNING: unresolved symlink/truncation risk at lock-file redirections.
+printf '%s\n' 'WARNING - UNFIXED BACKUP LOCK RISK: Lock-file redirections follow symbolic links and can truncate their targets with root privileges. Do not allow untrusted users or processes to modify the backup mount root or lock paths. This warning is not a fix.' >&2
+
 TARGET='/media/andrew/HomeBackUp'
 TARGET_UUID='6cb1c243-6bdb-4e82-9301-cf6231b87a66'
 SYS_UUID='72922d41-9fcd-4685-babf-ab18dce04fa8'

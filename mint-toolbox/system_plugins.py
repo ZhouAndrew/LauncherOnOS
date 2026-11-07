@@ -13,6 +13,8 @@ import threading
 
 from execution import OperationLog, LogPanel
 
+# SECURITY WARNING: package-file replacement window remains unresolved.
+DEB_INSTALL_WARNING = 'WARNING - UNFIXED PACKAGE REPLACEMENT RISK: A local deb can change between checksum verification and privileged APT reading it. Use a private trusted package directory; do not let other users or processes replace it. This warning is not a fix.'
 ROOT = Path(__file__).resolve().parent
 
 
@@ -157,6 +159,8 @@ def change(key, enable, log=None, from_source=False):
     try:
         item = plugin(key)
         log.stage(('Enable' if enable else 'Disable') + ': ' + item['name'])
+        if enable:
+            log.stage(DEB_INSTALL_WARNING)
         if from_source and not enable:
             raise ValueError('Source builds are only valid for enabling an extension')
         deb = build_source(item, log) if from_source else None
@@ -197,9 +201,10 @@ def show_gui(parent=None):
     import tkinter as tk
     from tkinter import ttk, messagebox
     window = tk.Toplevel(parent) if parent else tk.Tk()
-    window.title('Mint Toolbox - System extensions')
+    window.title('DEPRECATED - Mint Toolbox system extensions')
     window.geometry('1100x760')
     window.minsize(820, 580)
+    ttk.Label(window, text='DEPRECATED / NOT ACTIVE: Use System Extension Manager.\n' + DEB_INSTALL_WARNING, foreground='#9b3200', wraplength=1050).pack(anchor='w', padx=12, pady=8)
     ttk.Label(window, text='Enable installs a package. Disable removes it. Installation affects all users.').pack(anchor='w', padx=12, pady=10)
     bar = ttk.Frame(window)
     bar.pack(fill='x', padx=12)
@@ -263,7 +268,7 @@ def show_gui(parent=None):
         if not item or busy[0]:
             return
         label = 'Build from source and install' if from_source else ('Enable / Install' if enable else 'Disable / Uninstall')
-        if not messagebox.askyesno(label, label + ': ' + item['name'] + '\n\nCommands and output will appear below. Administrator authorization is requested only for package installation/removal.', parent=window):
+        if not messagebox.askyesno(label, label + ': ' + item['name'] + ('\n\n' + DEB_INSTALL_WARNING if enable else '') + '\n\nCommands and output will appear below. Administrator authorization is requested only for package installation/removal.', parent=window):
             return
         busy[0] = True
         refresh_button.configure(state='disabled')

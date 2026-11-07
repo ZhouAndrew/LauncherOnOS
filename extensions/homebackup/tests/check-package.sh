@@ -4,7 +4,7 @@ cd "$(dirname "$0")/.."
 python3 -m py_compile build.py gui.py
 bash -n backup.sh setup.sh
 python3 build.py --output-dir .
-pkg=build-mint-homebackup-extension/mint-homebackup-extension_0.1.4_all
+pkg=build-mint-homebackup-extension/mint-homebackup-extension_0.1.5_all
 for file in "$pkg/usr/bin/homebackup-ext" "$pkg/usr/lib/mint-homebackup-extension/backup.sh" "$pkg/usr/lib/mint-homebackup-extension/run-backup" "$pkg/usr/lib/mint-homebackup-extension/admin" "$pkg/DEBIAN/postinst" "$pkg/DEBIAN/prerm" "$pkg/usr/lib/mint-homebackup-extension/stop-scheduler"; do
   bash -n "$file"
 done
@@ -25,8 +25,8 @@ try:m.select({'archives':[a('mint-UNEXPECTED','2026-01-01')]})
 except ValueError:pass
 else:raise AssertionError('unsafe archive name accepted')
 PY
-name=$(dpkg-deb -f ./mint-homebackup-extension_0.1.4_all.deb Package)
-version=$(dpkg-deb -f ./mint-homebackup-extension_0.1.4_all.deb Version)
-[[ "$name" == mint-homebackup-extension && "$version" == 0.1.4 ]]
-dpkg-deb -c ./mint-homebackup-extension_0.1.4_all.deb | grep -q '/gui.py'
-echo 'HomeBackUp 0.1.4 package and tests passed'
+name=$(dpkg-deb -f ./mint-homebackup-extension_0.1.5_all.deb Package)
+version=$(dpkg-deb -f ./mint-homebackup-extension_0.1.5_all.deb Version)
+[[ "$name" == mint-homebackup-extension && "$version" == 0.1.5 ]]
+dpkg-deb -c ./mint-homebackup-extension_0.1.5_all.deb | grep -q '/gui.py'
+echo 'HomeBackUp 0.1.5 package and tests passed'

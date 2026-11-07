@@ -28,6 +28,8 @@ import anki_import
 LEGACY_WARNING = 'DEPRECATED / NOT ACTIVE: Use System Extension Manager. Legacy utilities retain documented risks; WeChat is NOT security-fixed.'
 WECHAT_WARNING = 'WARNING - UNFIXED WECHAT RISKS: This publishes private chats and copies ALL export files to web-accessible uploads. Static files are not protected by private WordPress posts. Active HTML/PHP may be unsafe. Same-name exports use rsync --delete and can erase older archived files. Dry-run preprocessing may generate and write HTML. Use only trusted exports; back up the site first.'
 IMPORT_WARNING = 'WARNING: This import PUBLISHES WordPress posts. A matching title/date can overwrite existing content and replace categories/tags. A same-path attachment may reuse older bytes. Uploaded PDFs may be directly accessible. Back up the site first; review the result.'
+PDF_OUTPUT_WARNING = 'WARNING - UNFIXED OUTPUT LINK RISK: Existing output folders or image files may be symbolic links; extraction can overwrite another file you can write. Choose a fresh private output folder. This warning is not a fix.'
+ICON_RESOURCE_WARNING = 'WARNING - UNFIXED ICON RESOURCE RISK: Website icon/manifest references can request file:// local images or internal network resources. Local image files may be read and copied; automatic external transmission has not been established. Use trusted websites. This warning is not a fix.'
 ROOT = Path(__file__).resolve().parent
 CATALOG = ROOT / 'catalog.json'
 ORIGINALS = ROOT / 'originals'
@@ -56,7 +58,7 @@ ACTION_MAP: dict[str, tuple[Action, ...]] = {
     'extract_pdf_images.py': (
         Action('extract', 'Extract images', (Field('source', 'PDF file or folder', 'file_or_folder'),
                                       Field('output', 'Output folder', 'folder', required=False),
-                                      Field('duplicates', 'Keep duplicate images', 'boolean', required=False))),),
+                                      Field('duplicates', 'Keep duplicate images', 'boolean', required=False)), note=PDF_OUTPUT_WARNING),),
     'archive-folder-to-trash': (
         Action('archive', 'Create archive (keep originals)', (Field('source', 'Folder to archive', 'folder'),
                                          Field('output', 'Archive output folder (optional)', 'folder', required=False)),
@@ -95,7 +97,7 @@ ACTION_MAP: dict[str, tuple[Action, ...]] = {
     'web2menu': (
         Action('add', 'Add a website to the application menu', (Field('url', 'Website URL'),
                                                      Field('name', 'Display name (optional)', required=False)),
-               'medium', 'Creates a Linux Mint/Cinnamon desktop application entry.'),),
+               'medium', ICON_RESOURCE_WARNING),),
     'complete_anki_tasks_today.py': (
         Action('preview', 'Preview matching CalDAV tasks',
                (Field('keyword', 'Title keyword', default='Anki'), Field('date', 'Target date YYYY-MM-DD (optional)', required=False)),
@@ -442,8 +444,10 @@ def _input_dialog(parent, action: Action) -> dict[str, Any] | None:
     win.transient(parent)
     win.grab_set()
     win.resizable(False, False)
+    if action.note.startswith('WARNING - UNFIXED'):
+        ttk.Label(win, text=action.note, foreground='#9b3200', wraplength=540, justify='left', padding=12).grid(row=0, column=0, sticky='ew')
     frame = ttk.Frame(win, padding=16)
-    frame.grid(sticky='nsew')
+    frame.grid(row=1 if action.note.startswith('WARNING - UNFIXED') else 0, column=0, sticky='nsew')
     values: dict[str, Any] = {}
     widgets: dict[str, Any] = {}
     for index, field in enumerate(action.fields):
