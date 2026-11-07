@@ -21,6 +21,11 @@ import venv
 from pathlib import Path
 
 
+# SECURITY WARNING: output symlinks can redirect writes; this remains unfixed.
+OUTPUT_LINK_WARNING = 'WARNING - UNFIXED OUTPUT LINK RISK: Existing output folders or image files may be symbolic links; extraction can overwrite another file you can write. Choose a fresh private output folder. This warning is not a fix.'
+if __name__ == '__main__':
+    print(OUTPUT_LINK_WARNING, file=sys.stderr, flush=True)
+
 SCRIPT_PATH = Path(__file__).resolve()
 SCRIPT_DIR = SCRIPT_PATH.parent
 VENV_DIR = SCRIPT_DIR / ".extract_pdf_images_venv"
@@ -271,6 +276,7 @@ def extract_images(
                     )
 
                     output_path = pdf_output / filename
+                    # SECURITY WARNING: follows existing links; notice is not prevention.
                     output_path.write_bytes(image_bytes)
 
                     seen_xrefs.add(xref)

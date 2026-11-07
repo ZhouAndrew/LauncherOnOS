@@ -4,6 +4,9 @@
 set -Eeuo pipefail
 umask 077
 
+# SECURITY WARNING: unresolved symlink/truncation risk at lock-file redirections.
+printf '%s\n' 'WARNING - UNFIXED BACKUP LOCK RISK: Lock-file redirections follow symbolic links and can truncate their targets with root privileges. Do not allow untrusted users or processes to modify the backup mount root or lock paths. This warning is not a fix.' >&2
+
 SRC='/home/andrew/Desktop/homebackup-borg-recovery.sh'
 BIN='/usr/local/libexec/homebackup-borg-recovery.sh'
 RUN='/usr/local/sbin/homebackup-monthly'
@@ -70,6 +73,9 @@ SECRET='/var/backups/homebackup-scheduler/passphrase'
 SCRIPT='/usr/local/libexec/homebackup-borg-recovery.sh'
 SELECTOR='/usr/local/libexec/homebackup-retention-select.py'
 LOGPREFIX='[HomeBackUp]'
+
+# SECURITY WARNING: runtime lock redirections still follow links; warning only.
+printf '%s\n' 'WARNING - UNFIXED BACKUP LOCK RISK: Lock-file redirections follow symbolic links and can truncate their targets with root privileges. Do not allow untrusted users or processes to modify the backup mount root or lock paths. This warning is not a fix.' >&2
 
 [[ $(id -u) == 0 ]] || { echo "$LOGPREFIX 必须以 root 运行" >&2; exit 1; }
 [[ -r "$SECRET" ]] || { echo "$LOGPREFIX 无法读取 Borg 密码文件；停止。" >&2; exit 1; }

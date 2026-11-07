@@ -1,5 +1,19 @@
 #!/usr/bin/python3
 """Opt-in security updates for Ubuntu Noble-based Linux Mint; no scheduler."""
+# SECURITY WARNING: show this before importing any same-directory-shadowable modules.
+import sys
+PRIVILEGED_IMPORT_WARNING = 'WARNING - UNFIXED PRIVILEGED PYTHON IMPORT RISK: The portable updater verifies only its main file; sudo Python may load extra modules from the same directory. Use a private trusted source copy and directory. Do not authorize a modified or shared writable copy. This warning is not a fix.'
+_warning_shown = False
+
+def warn_privileged_import():
+    global _warning_shown
+    if not _warning_shown:
+        print(PRIVILEGED_IMPORT_WARNING, file=sys.stderr, flush=True)
+        _warning_shown = True
+
+if __name__ == '__main__':
+    warn_privileged_import()
+
 import argparse
 import fcntl
 import hashlib
@@ -9,9 +23,10 @@ from pathlib import Path
 import re
 import stat
 import subprocess
-import sys
 
 
+# SECURITY WARNING: same-directory imports and reopening a writable script during sudo
+# are NOT isolated by the main-file checksum. The following notice is disclosure only.
 LOCK = '/run/lock/mint-security-updates.lock'
 APT = '/usr/bin/apt-get'
 APT_OPTIONS = [
@@ -237,6 +252,7 @@ def interactive():
         raise SafetyError('Run this interactive command as your normal desktop user.')
     if not sys.stdin.isatty():
         raise SafetyError('An interactive terminal is required. No background operation is allowed.')
+    warn_privileged_import()
     script = str(Path(__file__).resolve())
     print('=== Manual security updates (Linux Mint 22.x) ===', flush=True)
     print('Kernel / NVIDIA / DKMS / firmware / boot components are protected.', flush=True)
@@ -279,6 +295,7 @@ def main(argv=None):
     parser.add_argument('--json', action='store_true', help='machine-readable --check output')
     parser.add_argument('--expect', help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    warn_privileged_import()
     try:
         if args.refresh_root:
             refresh()

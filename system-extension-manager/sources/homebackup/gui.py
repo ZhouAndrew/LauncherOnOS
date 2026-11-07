@@ -6,6 +6,9 @@ import sys
 import threading
 
 
+# SECURITY WARNING: lock-path following remains unresolved in the backup scripts.
+BACKUP_LOCK_WARNING = 'WARNING - UNFIXED BACKUP LOCK RISK: Lock-file redirections follow symbolic links and can truncate their targets with root privileges. Do not allow untrusted users or processes to modify the backup mount root or lock paths. This warning is not a fix.'
+
 def main():
     try:
         import gi
@@ -34,7 +37,12 @@ def main():
             root.pack_start(title, False, False, 0)
             info = Gtk.Label(label='WARNING: Successful backups permanently prune older mint-* archives. Preview retention first.')
             info.set_xalign(0)
+            info.set_line_wrap(True)
             root.pack_start(info, False, False, 0)
+            warning = Gtk.Label(label=BACKUP_LOCK_WARNING, xalign=0)
+            warning.set_line_wrap(True)
+            warning.set_selectable(True)
+            root.pack_start(warning, False, False, 0)
             self.status = Gtk.Label(label='正在读取定时器状态…')
             self.status.set_xalign(0)
             self.status.set_line_wrap(True)
@@ -114,7 +122,7 @@ def main():
                          'setup':'保存密码并启用月度备份？错过日期可能立即运行并按最近三个日期策略删除旧归档。',
                          'use-existing':'复用密码并启用月度备份？可能立即运行并删除保留策略外旧归档。',
                          'disable':'停用每月自动备份并停止正在运行的备份服务？等待 Borg 正常停止后才会报告成功。'}
-                if not self.confirmation(names[command]):
+                if not self.confirmation(names[command] + ('\n\n' + BACKUP_LOCK_WARNING if command != 'disable' else '')):
                     return
             if command == 'verify-data' and not self.confirmation('深度校验需要读取全部备份数据，可能持续数小时，继续吗？'):
                 return
@@ -129,7 +137,7 @@ def main():
             for b in self.buttons:
                 b.set_sensitive(False)
             if not silent:
-                self.show_text('正在执行 %s …\n' % command)
+                self.show_text(BACKUP_LOCK_WARNING + '\n\n正在执行 %s …\n' % command)
             def worker():
                 argv = ['/usr/bin/homebackup-ext', command]
                 try:
@@ -153,7 +161,7 @@ def main():
             if command == 'status':
                 self.status.set_text(output.strip() if ok else '状态读取失败：' + output.strip())
             if not silent:
-                self.show_text(('完成\n' if ok else '失败\n') + output)
+                self.show_text(BACKUP_LOCK_WARNING + '\n\n' + ('完成\n' if ok else '失败\n') + output)
             return False
 
     window = Window()

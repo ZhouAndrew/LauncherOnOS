@@ -211,6 +211,8 @@ class ManagerGuiTests(unittest.TestCase):
             parent.update()
             buttons = {w.cget('text'): w for w in descendants(window) if isinstance(w, ttk.Button)}
             self.assertEqual(str(buttons['Run in Terminal'].cget('state')), 'normal')
+            labels = [str(w.cget('text')) for w in descendants(window) if isinstance(w, ttk.Label)]
+            self.assertTrue(any('UNFIXED PRIVILEGED PYTHON IMPORT RISK' in text for text in labels))
             for label in ('Enable / Install', 'Disable / Uninstall', 'Update', 'Build from source...'):
                 self.assertEqual(str(buttons[label].cget('state')), 'disabled', label)
             buttons['Run in Terminal'].invoke()
@@ -245,6 +247,8 @@ class ManagerGuiTests(unittest.TestCase):
                 buttons['Build Package...'].invoke()
                 build.assert_not_called()
             self.assertEqual(str(buttons['Open'].cget('state')), 'normal')
+            labels = [str(w.cget('text')) for w in descendants(window) if isinstance(w, ttk.Label)]
+            self.assertTrue(any('UNFIXED PACKAGE REPLACEMENT RISK' in text for text in labels))
             buttons['Open'].invoke()
             def check():
                 try:

@@ -13,7 +13,7 @@ import toolbox
 
 class UnifiedInstallTests(unittest.TestCase):
     def test_complete_deb_contains_working_main_and_anki_entries(self):
-        deb = ROOT / 'dist/mint-toolbox_0.5.0_all.deb'
+        deb = ROOT / 'dist/mint-toolbox_0.5.1_all.deb'
         with tempfile.TemporaryDirectory() as tmp:
             subprocess.run(['dpkg-deb', '-x', str(deb), tmp], check=True)
             stage = Path(tmp)

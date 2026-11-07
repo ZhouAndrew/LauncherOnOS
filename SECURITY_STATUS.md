@@ -2,9 +2,9 @@
 
 ## Active product
 
-**ACTIVE / MAINTAINED: System Extension Manager 0.2.2**, under
+**ACTIVE / MAINTAINED: System Extension Manager 0.2.3**, under
 `system-extension-manager/`. Its independently installed extensions are
-ZIP and Trash 0.4.4, Anki Time Travel 0.1.5, HomeBackUp 0.1.4 plus the built-in terminal-only Security Updates tool.
+ZIP and Trash 0.4.4, Anki Time Travel 0.1.5, HomeBackUp 0.1.5 plus the built-in terminal-only Security Updates tool.
 
 **DEPRECATED / NOT ACTIVE: Mint Toolbox**, under `mint-toolbox/`.
 Its GUI, CLI and README display this warning. Merging its history does not
@@ -50,6 +50,24 @@ The terminal warns about service restarts, partial failures and keeping it open.
 No cron/systemd updater is created; actual APT upgrades were not run here.
 
 ## Operational limits
+
+### Additional boundary warnings — 2026-11-07
+
+The following five risks are **WARNED, NOT FIXED** in this release. The notices
+do not change publication, privilege, locking, package installation or output
+semantics, and do not establish that a user's computer has been compromised.
+
+| Unfixed boundary | Visible warning locations |
+| --- | --- |
+| Portable updater's unlisted same-directory Python modules may run during sudo | Selected tool warning in the active manager, launch log, terminal CLI and source comments. Use a private trusted source copy. |
+| Root backup lock-file redirections follow links and can truncate their targets | Selected HomeBackUp warning, GTK window, existing backup/setup/enable confirmations, operation output, standalone/setup/generated runner/admin stderr and source comments. Keep untrusted writers away from the mount root and lock paths. |
+| A deb can be replaced between verification and privileged APT reading it | Active manager selected package warning, existing install/update/source-build confirmation, CLI operation log and code comments. The deprecated extension manager also displays it. Use a private trusted package directory. |
+| PDF image output may follow existing links and overwrite other writable files | Legacy tool description and action dialog, CLI startup and code comments. Choose a fresh private output directory. |
+| Website icon/manifest references can read file:// images or access internal resources | Legacy tool description and confirmation, CLI startup and fetch-path comments. Only local reading/copying was established; automatic external transmission was not demonstrated. |
+
+Anki and WeChat publication remains intentional and retains its existing warning.
+The user requested disclosure for these additional findings, not remediation.
+
 
 - “Enabled” in the manager describes the Debian extension installation. It does
   not mean HomeBackUp's timer is enabled. Open HomeBackUp to inspect the scheduler.

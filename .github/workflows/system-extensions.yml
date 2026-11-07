@@ -48,7 +48,7 @@ jobs:
           PYCODE
       - name: Check package reproducibility
         run: |
-          sha256sum system-extension-manager/packages/mint-homebackup-extension_0.1.4_all.deb > /tmp/homebackup-sha
+          sha256sum system-extension-manager/packages/mint-homebackup-extension_0.1.5_all.deb > /tmp/homebackup-sha
           python3 system-extension-manager/sources/homebackup/build.py --output-dir system-extension-manager/packages
           sha256sum -c /tmp/homebackup-sha
       - name: Verify portable updater has no extension package
@@ -66,7 +66,7 @@ jobs:
         run: python3 system-extension-manager/build.py --package --output-dir "$RUNNER_TEMP/manager"
       - name: Check three bundled packages and portable security script are distributed
         run: |
-          dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep 'packages/mint-homebackup-extension_0.1.4_all.deb'
+          dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep 'packages/mint-homebackup-extension_0.1.5_all.deb'
           dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep 'sources/security-updates/security_updates.py'
           ! dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep 'packages/mint-security-updates-extension'
       - name: Bundle portable manager source
