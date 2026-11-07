@@ -58,7 +58,7 @@ ACTION_MAP: dict[str, tuple[Action, ...]] = {
     'extract_pdf_images.py': (
         Action('extract', 'Extract images', (Field('source', 'PDF file or folder', 'file_or_folder'),
                                       Field('output', 'Output folder', 'folder', required=False),
-                                      Field('duplicates', 'Keep duplicate images', 'boolean', required=False)), severity='medium', note=PDF_OUTPUT_WARNING),),
+                                      Field('duplicates', 'Keep duplicate images', 'boolean', required=False)), note=PDF_OUTPUT_WARNING),),
     'archive-folder-to-trash': (
         Action('archive', 'Create archive (keep originals)', (Field('source', 'Folder to archive', 'folder'),
                                          Field('output', 'Archive output folder (optional)', 'folder', required=False)),
@@ -444,8 +444,10 @@ def _input_dialog(parent, action: Action) -> dict[str, Any] | None:
     win.transient(parent)
     win.grab_set()
     win.resizable(False, False)
+    if action.note.startswith('WARNING - UNFIXED'):
+        ttk.Label(win, text=action.note, foreground='#9b3200', wraplength=540, justify='left', padding=12).grid(row=0, column=0, sticky='ew')
     frame = ttk.Frame(win, padding=16)
-    frame.grid(sticky='nsew')
+    frame.grid(row=1 if action.note.startswith('WARNING - UNFIXED') else 0, column=0, sticky='nsew')
     values: dict[str, Any] = {}
     widgets: dict[str, Any] = {}
     for index, field in enumerate(action.fields):
