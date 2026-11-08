@@ -2,7 +2,7 @@
 """Opt-in security updates for Ubuntu Noble-based Linux Mint; no scheduler."""
 # SECURITY WARNING: show this before importing any same-directory-shadowable modules.
 import sys
-PRIVILEGED_IMPORT_WARNING = 'WARNING - UNFIXED PRIVILEGED PYTHON IMPORT RISK: The portable updater verifies only its main file; sudo Python may load extra modules from the same directory. Use a private trusted source copy and directory. Do not authorize a modified or shared writable copy. This warning is not a fix.'
+PRIVILEGED_IMPORT_WARNING = 'SECURITY: Privileged updates use a root-owned checksum-verified snapshot and isolated Python (-I). A modified checkout or failed verification stops execution. Use only a trusted source copy.'
 _warning_shown = False
 
 def warn_privileged_import():
@@ -25,8 +25,92 @@ import stat
 import subprocess
 
 
-# SECURITY WARNING: same-directory imports and reopening a writable script during sudo
-# are NOT isolated by the main-file checksum. The following notice is disclosure only.
+# The root entry point is fixed in argv; it never imports sibling modules or
+# executes the original user-writable script after authorization. The expected
+# checksum comes from the interpreter's already-loaded unprivileged source.
+ROOT_BOOTSTRAP = r"""
+import hashlib
+import os
+from pathlib import Path
+import re
+import stat
+import subprocess
+import sys
+import tempfile
+
+def stop(message):
+    print('SECURITY ERROR: ' + message, file=sys.stderr, flush=True)
+    raise SystemExit(1)
+
+if os.geteuid() != 0 or not sys.flags.isolated:
+    stop('Use sudo with isolated Python for the root bootstrap.')
+if len(sys.argv) not in (4, 6):
+    stop('Invalid root update request.')
+expected, source = sys.argv[1:3]
+args = sys.argv[3:]
+if not re.fullmatch('[0-9a-f]{64}', expected):
+    stop('Invalid approved source checksum.')
+if args != ['--refresh-root'] and not (
+        len(args) == 3 and args[:2] == ['--apply-root', '--expect']
+        and re.fullmatch('[0-9a-f]{64}', args[2])):
+    stop('Root launcher accepts only approved refresh/apply actions.')
+try:
+    with tempfile.TemporaryDirectory(prefix='mint-security-verified-') as directory:
+        target = Path(directory) / 'security_updates.py'
+        fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        checksum = hashlib.sha256()
+        with os.fdopen(fd, 'rb') as input_file, target.open('xb') as output:
+            stat_data = os.fstat(input_file.fileno())
+            if not stat.S_ISREG(stat_data.st_mode):
+                stop('Refusing a nonregular updater source.')
+            while True:
+                data = input_file.read(1024 * 1024)
+                if not data:
+                    break
+                checksum.update(data)
+                output.write(data)
+            output.flush()
+            os.fsync(output.fileno())
+        if checksum.hexdigest() != expected:
+            stop('Updater changed after approval; no root update executed.')
+        # Python -I isolates module imports from the script directory and
+        # PYTHONPATH; the private directory is root-owned and mode 0700.
+        env = {
+            'PATH': '/usr/sbin:/usr/bin:/sbin:/bin',
+            'LANG': 'C.UTF-8', 'LC_ALL': 'C.UTF-8',
+            'DEBIAN_FRONTEND': 'noninteractive',
+        }
+        result = subprocess.run(['/usr/bin/python3', '-I', str(target), *args],
+                                env=env, check=False)
+        raise SystemExit(result.returncode)
+except (OSError, ValueError, subprocess.SubprocessError) as exc:
+    stop(str(exc))
+"""
+
+
+def privileged_action(*args):
+    source = Path(__file__).resolve()
+    # The root helper will compare these approved bytes with an fd-opened
+    # snapshot and refuses replacements before invoking privileged code.
+    approved = hashlib.sha256(source.read_bytes()).hexdigest()
+    return subprocess.call([
+        'sudo', '/usr/bin/python3', '-I', '-c', ROOT_BOOTSTRAP,
+        approved, str(source), *args,
+    ])
+
+
+def require_isolated_root_copy():
+    if os.geteuid() != 0:
+        raise SafetyError('Root privileges required.')
+    path = Path(__file__).resolve()
+    parent = path.parent.stat()
+    script = path.stat()
+    if (not sys.flags.isolated or parent.st_uid != 0
+            or parent.st_mode & 0o022 or script.st_uid != 0
+            or script.st_mode & 0o022):
+        raise SafetyError('Root actions require a root-owned isolated source snapshot.')
+
+
 LOCK = '/run/lock/mint-security-updates.lock'
 APT = '/usr/bin/apt-get'
 APT_OPTIONS = [
@@ -261,7 +345,7 @@ def interactive():
     print('Keep this terminal open until the operation finishes.', flush=True)
     print('Updates can restart services. Interrupted installs cannot be automatically rolled back.\n', flush=True)
     print('Refreshing package indexes; sudo may request your password...', flush=True)
-    if subprocess.call(['sudo', '/usr/bin/python3', script, '--refresh-root']):
+    if privileged_action('--refresh-root'):
         raise SafetyError('APT index refresh failed or was cancelled; nothing was installed.')
     wanted, frozen = scan()
     print('Eligible security updates: {} (protected packages: {})'.format(len(wanted), len(frozen)), flush=True)
@@ -277,8 +361,7 @@ def interactive():
     if input('Confirm [UPDATE]: ').strip() != 'UPDATE':
         print('Cancelled; no packages installed.', flush=True)
         return
-    if subprocess.call(['sudo', '/usr/bin/python3', script,
-                        '--apply-root', '--expect', digest(wanted)]):
+    if privileged_action('--apply-root', '--expect', digest(wanted)):
         raise SafetyError('Update failed or was cancelled. A partial installation may exist; inspect the output.')
     print('Update completed and verified.', flush=True)
 
@@ -298,13 +381,15 @@ def main(argv=None):
     warn_privileged_import()
     try:
         if args.refresh_root:
+            require_isolated_root_copy()
             refresh()
         elif args.apply_root:
+            require_isolated_root_copy()
             if not args.expect or not re.fullmatch('[0-9a-f]{64}', args.expect):
                 raise SafetyError('Missing or invalid approved update fingerprint.')
             apply(args.expect)
         elif args.refresh:
-            return subprocess.call(['sudo', '/usr/bin/python3', str(Path(__file__).resolve()), '--refresh-root'])
+            return privileged_action('--refresh-root')
         elif args.interactive:
             interactive()
         elif args.apply:
@@ -319,8 +404,7 @@ def main(argv=None):
             if not sys.stdin.isatty() or input('Type UPDATE to install: ').strip() != 'UPDATE':
                 print('Cancelled; no packages installed.')
                 return 0
-            return subprocess.call(['sudo', '/usr/bin/python3', str(Path(__file__).resolve()),
-                                    '--apply-root', '--expect', digest(wanted)])
+            return privileged_action('--apply-root', '--expect', digest(wanted))
         elif args.check:
             wanted, frozen = scan()
             data = {'packages': wanted, 'digest': digest(wanted), 'protected_count': len(frozen)}

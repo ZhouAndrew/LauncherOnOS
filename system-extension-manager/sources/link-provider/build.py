@@ -10,7 +10,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parent
 PACKAGE = "mint-link-provider-extension"
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 EPOCH = 1793404800
 
 

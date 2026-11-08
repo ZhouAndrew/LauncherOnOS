@@ -10,7 +10,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parent
 PACKAGE = 'mint-toolbox-extension-zip-trash'
-VERSION = '0.4.4'
+VERSION = '0.4.5'
 SOURCES = ['zip_trash.py', 'execution.py', 'native_dialogs.py', 'build.py', 'zip-trash.nemo_action']
 
 

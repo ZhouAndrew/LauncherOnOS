@@ -97,6 +97,7 @@ need_cmd basename
 need_cmd mktemp
 need_cmd cp
 need_cmd touch
+need_cmd sha256sum
 
 [ -d "$WP_PATH" ] || die "WordPress directory not found: $WP_PATH"
 [ -f "$WP_PATH/wp-config.php" ] || die "Not a WordPress root directory: $WP_PATH"
@@ -198,7 +199,18 @@ Required: anki-stats-YYYY-MM-DD@HH-MM-SS.pdf (optional numeric suffix, e.g. -1)"
     )"
 
     if [ -n "$POST_ID" ]; then
-        ok "Reusing existing post ID=$POST_ID"
+        # Never overwrite an unrelated post just because its date/title
+        # happen to match. Legacy imports are accepted only when their
+        # Gutenberg file block explicitly names the same source PDF.
+        local SOURCE_MARKER LEGACY_CONTENT
+        SOURCE_MARKER="$(wp post meta get "$POST_ID" _anki_time_travel_source_filename 2>/dev/null || true)"
+        if [ "$SOURCE_MARKER" != "$BASE" ]; then
+            LEGACY_CONTENT="$(wp post get "$POST_ID" --field=post_content)"
+            if [[ "$LEGACY_CONTENT" != *'<!-- wp:file '* || "$LEGACY_CONTENT" != *">$BASE</a>"* ]]; then
+                die "Existing post ID=$POST_ID has a matching title/date but different content. Refusing to overwrite it."
+            fi
+        fi
+        ok "Verified prior Anki import; reusing post ID=$POST_ID"
     else
         POST_ID="$(
             wp post create \
@@ -250,6 +262,16 @@ Required: anki-stats-YYYY-MM-DD@HH-MM-SS.pdf (optional numeric suffix, e.g. -1)"
     fi
 
     [ -n "$ATTACH_ID" ] || die "No attachment ID was returned."
+    [[ "$ATTACH_ID" =~ ^[1-9][0-9]*$ ]] || die "Invalid attachment ID returned by WordPress."
+
+    # Existing same-path media can contain bytes from an old PDF. Compare
+    # actual WordPress media bytes with the input before publishing anything.
+    # A mismatch aborts instead of silently reusing an older attachment.
+    local EXPECTED_SHA MEDIA_SHA
+    EXPECTED_SHA="$(sha256sum -- "$PDF")"
+    EXPECTED_SHA="${EXPECTED_SHA%% *}"
+    MEDIA_SHA="$(wp eval "echo hash_file('sha256', get_attached_file($ATTACH_ID));")"
+    [ "$EXPECTED_SHA" = "$MEDIA_SHA" ] || die "Attachment bytes differ from source PDF (ID=$ATTACH_ID). Refusing to publish stale media."
 
     wp post update "$ATTACH_ID" --post_parent="$POST_ID" >/dev/null
 
@@ -282,6 +304,9 @@ EOF
 
     wp post term set "$POST_ID" category anki --by=slug >/dev/null
     wp post term set "$POST_ID" post_tag anki --by=slug >/dev/null
+    wp post meta update "$POST_ID" _anki_time_travel_source_filename "$BASE" >/dev/null
+    [ "$(wp post meta get "$POST_ID" _anki_time_travel_source_filename)" = "$BASE" ] ||
+        die "Failed to verify the Anki source marker."
 
     info "Setting historical timestamps on the post and attachment"
 

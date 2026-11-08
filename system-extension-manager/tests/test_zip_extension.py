@@ -1,4 +1,5 @@
 import hashlib
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -36,7 +37,11 @@ class ZipTests(unittest.TestCase):
 
     def run_command(self, args, **kwargs):
         if args[:2] == ['/usr/bin/gio', 'trash']:
-            self.trashed.append(Path(args[-1]))
+            source = Path(args[-1])
+            self.trashed.append(source)
+            mock_trash = self.root / '.mock-trash'
+            mock_trash.mkdir(exist_ok=True)
+            shutil.move(str(source), str(mock_trash / source.name))
             return subprocess.CompletedProcess(args, 0)
         return subprocess.run(args, **kwargs)
 
@@ -152,6 +157,23 @@ class ZipTests(unittest.TestCase):
                      for entry in zipped.infolist() if not entry.is_dir()}
             self.assertEqual(links, {'folder/cycle': b'.', 'folder/external': b'/etc'})
 
+    def test_change_after_first_trash_preserves_remaining_file(self):
+        first = self.root / 'one'
+        second = self.root / 'two'
+        first.write_text('first')
+        second.write_text('second')
+        def write_late(args, **kwargs):
+            result = self.run_command(args, **kwargs)
+            if args[:2] == ['/usr/bin/gio', 'trash'] and Path(args[-1]) == first:
+                second.write_text('newer data')
+            return result
+        with self.assertRaisesRegex(RuntimeError, 'partially complete'):
+            zip_trash.archive_and_trash([first, second], write_late, trash_originals=True)
+        self.assertFalse(first.exists())
+        self.assertEqual(second.read_text(), 'newer data')
+        self.assertEqual(self.trashed, [first])
+        self.assertTrue((self.root / 'Archive.zip').exists())
+
     def test_changed_link_is_not_trashed(self):
         link = self.root / 'link'
         link.symlink_to('first')
@@ -203,7 +225,9 @@ class ZipTests(unittest.TestCase):
 class ManagerTests(unittest.TestCase):
     def test_real_bundled_deb_metadata_and_hash(self):
         args = plugins.command('zip-trash', True)
-        self.assertIn('/usr/bin/apt-get', args)
+        self.assertIn('/usr/bin/python3', args)
+        self.assertIn('-I', args)
+        self.assertIn('O_NOFOLLOW', args[args.index('-c') + 1])
         self.assertTrue(args[-1].endswith('.deb'))
         self.assertEqual(plugins.command('zip-trash', False)[-1], 'mint-toolbox-extension-zip-trash')
 

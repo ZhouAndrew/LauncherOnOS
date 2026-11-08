@@ -69,6 +69,7 @@ class SecurityTests(unittest.TestCase):
             messages = []
             def run(args, **kwargs):
                 if args[0] == '/usr/bin/gio':
+                    Path(args[-1]).rename(Path(temp) / 'mock-trash')
                     return subprocess.CompletedProcess(args, 0)
                 return subprocess.run(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **kwargs)
             zip_trash.archive_and_trash([source], run, messages.append, trash_originals=True)

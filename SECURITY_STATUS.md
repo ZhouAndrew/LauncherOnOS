@@ -2,16 +2,20 @@
 
 ## Active product
 
-**ACTIVE / MAINTAINED: System Extension Manager 0.2.4**, under
+**ACTIVE / MAINTAINED: System Extension Manager 0.2.5**, under
 `system-extension-manager/`. Its independently installed extensions are
-ZIP and Trash 0.4.4, Anki Time Travel 0.1.5, HomeBackUp 0.1.5,
-Link Provider 0.2.1, plus the built-in terminal-only Security Updates tool.
+ZIP and Trash 0.4.5, Anki Time Travel 0.1.6, HomeBackUp 0.1.6,
+Link Provider 0.2.2, plus the built-in terminal-only Security Updates tool.
 
 The 2026-11-08 source audit in
 [`system-extension-manager/SECURITY_AUDIT_2026-11-08.md`](system-extension-manager/SECURITY_AUDIT_2026-11-08.md)
-records a repaired manager-package untracked-file disclosure path and
-outstanding APT/package replacement, Python import, backup-lock, and runtime
-readiness limitations. Those outstanding risks are **not claimed fixed**.
+contains the initial review and the version 0.2.5 critical-remediation follow-up.
+APT now installs from a checked root-owned copy; manual updater root imports use
+isolated Python and verified root-owned code; backup root locks use safe no-follow
+opens. Link Provider distinguishes dispatch from application readiness.
+These fixes require **explicit installation of the new extension versions**.
+Live APT repository changes, concurrent writers and application-specific backend
+readiness are still not fully controlled.
 
 **DEPRECATED / NOT ACTIVE: Mint Toolbox**, under `mint-toolbox/`.
 Its GUI, CLI and README display this warning. Merging its history does not
@@ -24,11 +28,12 @@ extension-management GUI.
 
 The user explicitly requires imports to **publish**, not create drafts.
 This release preserves their existing output and publication behavior.
-Warnings are disclosure, not a claim that import collision/privacy risks are fixed.
+New Anki imports check title/date collisions and PDF bytes; publication and
+potential public access remain intentional and explicitly warned.
 
 | Area | Status and behavior |
 | --- | --- |
-| Anki imports | **PUBLICATION RETAINED; RESIDUAL RISK.** GUI banner, confirmation dialog, operation log, Bash runtime and code warn that matching title/date may replace existing body/categories/tags, same-path attachments may reuse older bytes, and PDFs can be directly accessible. Back up WordPress and inspect results. |
+| Anki imports | **PUBLICATION RETAINED; COLLISION/STALE-BYTE GUARDS.** Anki 0.1.6 refuses unrelated matching title/date posts and aborts before publication when attachment bytes mismatch. Existing verified Anki imports may be updated; PDFs can still be directly accessible. Back up WordPress and inspect results. |
 | WeChat imports/unlocking | **NOT SECURITY-FIXED.** Legacy GUI descriptions/confirmations, catalog, direct CLI and source comments warn about public chats/static files, active HTML/PHP, `rsync --delete` collisions and preprocessing writes even during preview. Publication remains intentional. Do not assume private posts protect uploads. |
 | ZIP default / Nemo action | **NON-DESTRUCTIVE DEFAULT.** Create and verify ZIP; KEEP originals. A writer can still change files while archiving. A verified ZIP is not a filesystem snapshot. |
 | ZIP `--trash-originals` | **EXPLICIT RESIDUAL RISK.** CLI warning / GUI confirmation and source comments explain that validation and Trash are not atomic. Close writers and inspect before choosing this opt-in. No fallback to permanent deletion. |
@@ -60,15 +65,16 @@ No cron/systemd updater is created; actual APT upgrades were not run here.
 
 ### Additional boundary warnings — 2026-11-07
 
-The following five risks are **WARNED, NOT FIXED** in this release. The notices
-do not change publication, privilege, locking, package installation or output
-semantics, and do not establish that a user's computer has been compromised.
+The following five risks were disclosed in the 2026-11-07 release.
+The first three are **remediated in the 2026-11-08 versions**, not in older
+packages already installed on a workstation. The last two are legacy tool
+risks outside the active manager. No warning is evidence of exploitation.
 
 | Unfixed boundary | Visible warning locations |
 | --- | --- |
-| Portable updater's unlisted same-directory Python modules may run during sudo | Selected tool warning in the active manager, launch log, terminal CLI and source comments. Use a private trusted source copy. |
-| Root backup lock-file redirections follow links and can truncate their targets | Selected HomeBackUp warning, GTK window, existing backup/setup/enable confirmations, operation output, standalone/setup/generated runner/admin stderr and source comments. Keep untrusted writers away from the mount root and lock paths. |
-| A deb can be replaced between verification and privileged APT reading it | Active manager selected package warning, existing install/update/source-build confirmation, CLI operation log and code comments. The deprecated extension manager also displays it. Use a private trusted package directory. |
+| Portable updater's same-directory Python modules during sudo | **Fixed in current source:** sudo uses -I on a root-owned SHA-256-verified copy; older local checkout copies may retain the risk. |
+| Root backup lock-file redirections | **Fixed in HomeBackUp 0.1.6:** guarded dirfd, O_NOFOLLOW and owner/type checks, no truncating redirection. Older installed packages are not automatically upgraded. |
+| Local .deb can be replaced after user-level checksum | **Fixed in manager 0.2.5:** privileged root-owned snapshot, SHA-256 revalidation, APT simulation and installation from the same copy. Actual APT repository plan races remain possible. |
 | PDF image output may follow existing links and overwrite other writable files | Legacy tool description and action dialog, CLI startup and code comments. Choose a fresh private output directory. |
 | Website icon/manifest references can read file:// images or access internal resources | Legacy tool description and confirmation, CLI startup and fetch-path comments. Only local reading/copying was established; automatic external transmission was not demonstrated. |
 

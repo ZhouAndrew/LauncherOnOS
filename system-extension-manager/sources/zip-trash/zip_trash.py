@@ -112,10 +112,26 @@ def archive_and_trash(inputs, run=subprocess.run, report=lambda text: None, *, t
             if snapshot(paths) != original:
                 raise ValueError('Originals changed after compression. Originals retained.')
             report('Moving originals to the system Trash')
-            for path in paths:
+            remaining = list(paths)
+            while remaining:
+                path = remaining[0]
+                # A later input may change while an earlier one is being
+                # moved. Re-read each remaining input before every move.
+                for candidate in remaining:
+                    current = snapshot([candidate])
+                    expected = {
+                        key: value for key, value in original.items()
+                        if key == candidate.name or key.startswith(candidate.name + '/')
+                    }
+                    if current != expected:
+                        raise ValueError('Source changed during Trash operation: ' + str(candidate))
                 run(['/usr/bin/gio', 'trash', '--', str(path)], check=True)
+                if os.path.lexists(path):
+                    raise RuntimeError('Trash reported success but the source still exists: ' + str(path))
+                report('Verified source removed from original location: ' + str(path))
+                remaining.pop(0)
         except Exception as exc:
-            raise RuntimeError(f'ZIP saved to {target}; moving originals to Trash did not fully complete: {exc}') from exc
+            raise RuntimeError(f'ZIP saved to {target}; Trash may be partially complete: {exc}') from exc
         return target
 
 
