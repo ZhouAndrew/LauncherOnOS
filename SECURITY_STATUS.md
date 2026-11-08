@@ -1,10 +1,17 @@
-# Security status — 2026-11-06
+# Security status — 2026-11-08
 
 ## Active product
 
-**ACTIVE / MAINTAINED: System Extension Manager 0.2.3**, under
+**ACTIVE / MAINTAINED: System Extension Manager 0.2.4**, under
 `system-extension-manager/`. Its independently installed extensions are
-ZIP and Trash 0.4.4, Anki Time Travel 0.1.5, HomeBackUp 0.1.5 plus the built-in terminal-only Security Updates tool.
+ZIP and Trash 0.4.4, Anki Time Travel 0.1.5, HomeBackUp 0.1.5,
+Link Provider 0.2.1, plus the built-in terminal-only Security Updates tool.
+
+The 2026-11-08 source audit in
+[`system-extension-manager/SECURITY_AUDIT_2026-11-08.md`](system-extension-manager/SECURITY_AUDIT_2026-11-08.md)
+records a repaired manager-package untracked-file disclosure path and
+outstanding APT/package replacement, Python import, backup-lock, and runtime
+readiness limitations. Those outstanding risks are **not claimed fixed**.
 
 **DEPRECATED / NOT ACTIVE: Mint Toolbox**, under `mint-toolbox/`.
 Its GUI, CLI and README display this warning. Merging its history does not

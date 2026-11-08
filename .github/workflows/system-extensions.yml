@@ -105,9 +105,10 @@ jobs:
           dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep 'packages/mint-link-provider-extension_0.2.1_all.deb'
           dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep 'sources/security-updates/security_updates.py'
           ! dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep 'packages/mint-security-updates-extension'
-      - name: Bundle portable manager source
+      - name: Bundle tracked portable manager source only
         run: |
-          (cd system-extension-manager && zip -q -r "$GITHUB_WORKSPACE/System-Extension-Manager-source.zip" . -x 'dist/*' '*/__pycache__/*' '*.pyc' 'sources/homebackup/build-mint-homebackup-extension/*' 'sources/homebackup/BUILD-NOTES.md')
+          # Never publish untracked workspace files or generated credentials.
+          git archive --format=zip --output="$GITHUB_WORKSPACE/System-Extension-Manager-source.zip" HEAD:system-extension-manager
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: System-Extension-Manager-Portable-Security-Updates
