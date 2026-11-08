@@ -6,8 +6,8 @@ import sys
 import threading
 
 
-# SECURITY WARNING: lock-path following remains unresolved in the backup scripts.
-BACKUP_LOCK_WARNING = 'WARNING - UNFIXED BACKUP LOCK RISK: Lock-file redirections follow symbolic links and can truncate their targets with root privileges. Do not allow untrusted users or processes to modify the backup mount root or lock paths. This warning is not a fix.'
+# Direct backup and generated runner now use no-follow root-verified locks.
+BACKUP_LOCK_WARNING = 'SECURITY: HomeBackUp lock files require root ownership and safe directory permissions. If checks fail, backup stops without truncating any lock target. Lock changes do not make backups atomic with live writers.'
 
 def main():
     try:
