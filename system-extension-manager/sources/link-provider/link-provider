@@ -1,0 +1,490 @@
+#!/usr/bin/python3
+"""Standalone Link Provider for a Linux desktop session."""
+
+import argparse
+from contextlib import contextmanager
+import ctypes
+import fcntl
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
+from urllib.request import HTTPRedirectHandler, Request, build_opener
+
+VERSION = "0.2.1"
+SCHEME = "caldav-run"
+MIME_TYPE = f"x-scheme-handler/{SCHEME}"
+DESKTOP_ID = "local.link-provider.desktop"
+LINK_ID = re.compile(r"[a-z0-9][a-z0-9-]{0,62}")
+ALIAS = re.compile(rf"{SCHEME}://({LINK_ID.pattern})")
+SCHEME_PATTERN = re.compile(r"[a-zA-Z][a-zA-Z0-9+.-]*")
+WEB_SCHEMES = {"http", "https"}
+PR_SET_NO_NEW_PRIVS = 38
+ELEVATION_TOOLS = {
+    "sudo", "sudoedit", "su", "runuser", "doas", "pkexec", "run0", "systemd-run",
+    "gksu", "gksudo", "kdesu", "kdesudo", "gsudo", "please", "pleaseedit",
+}
+
+
+class LinkError(Exception):
+    pass
+
+
+def xdg_path(variable, fallback):
+    path = Path(os.environ.get(variable, ""))
+    return path if path.is_absolute() else Path.home() / fallback
+
+
+def registry_path():
+    return xdg_path("XDG_CONFIG_HOME", ".config") / "link-provider" / "links.json"
+
+
+def handler_path():
+    return xdg_path("XDG_DATA_HOME", ".local/share") / "applications" / DESKTOP_ID
+
+
+def parse_id(value):
+    alias = ALIAS.fullmatch(value)
+    name = alias[1] if alias else value
+    if not LINK_ID.fullmatch(name):
+        raise LinkError("Use a lowercase link ID or an exact caldav-run://ID URI.")
+    return name
+
+
+def validate_uri(uri):
+    if any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in uri):
+        raise LinkError("The URI contains spaces or control characters. Percent-encode them.")
+    scheme, separator, target = uri.partition(":")
+    if not separator or not SCHEME_PATTERN.fullmatch(scheme) or not target:
+        raise LinkError("Enter an absolute URI with a scheme and a destination.")
+    scheme = scheme.lower()
+    if scheme in {SCHEME, "file", "data", "javascript"}:
+        raise LinkError(f"Unsupported target scheme: {scheme}. Use add-app for a local program.")
+    if scheme in WEB_SCHEMES:
+        try:
+            parts = urlsplit(uri)
+            hostname = parts.hostname
+            parts.port  # Accessing the port checks its syntax and range.
+        except ValueError as exc:
+            raise LinkError("Invalid HTTP(S) host or port.") from exc
+        if not hostname or "\\" in uri or parts.username is not None:
+            raise LinkError("Use an HTTP(S) URI with a hostname and no embedded credentials.")
+    return scheme
+
+
+def executable(command):
+    if not command or "\0" in command or ("/" in command and not Path(command).is_absolute()):
+        raise LinkError("Use a program name from PATH or an absolute executable path.")
+    resolved = shutil.which(command)
+    if not resolved:
+        raise LinkError(f"Executable unavailable: {command}")
+    return os.path.abspath(resolved)
+
+
+def command_target(command, arguments):
+    if Path(command).name in ELEVATION_TOOLS:
+        raise LinkError("Privilege elevation tools such as sudo are blocked.")
+    program = executable(command)
+    real_path = Path(program).resolve(strict=True)
+    if (real_path.name in ELEVATION_TOOLS
+            or real_path.stat().st_mode & (stat.S_ISUID | stat.S_ISGID)):
+        raise LinkError("Privilege elevation tools and set-ID executables are blocked.")
+    if any("\0" in argument for argument in arguments):
+        raise LinkError("Command arguments cannot contain NUL characters.")
+    return [program, *arguments]
+
+
+def require_desktop_user():
+    if 0 in {os.getuid(), os.geteuid()} or os.getuid() != os.geteuid():
+        raise LinkError("Run Link Provider as your regular desktop user.")
+
+
+def lock_privileges():
+    require_desktop_user()
+    libc = ctypes.CDLL(None, use_errno=True)
+    prctl = libc.prctl
+    prctl.argtypes = [ctypes.c_int, *([ctypes.c_ulong] * 4)]
+    prctl.restype = ctypes.c_int
+    if prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0:
+        raise LinkError(f"Could not prevent privilege elevation: {os.strerror(ctypes.get_errno())}")
+
+
+@contextmanager
+def write_lock():
+    directory = registry_path().parent
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with (directory / "write.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+
+
+def read_links():
+    try:
+        links = json.loads(registry_path().read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    except ValueError as exc:
+        raise LinkError("The link registry could not be decoded.") from exc
+    if not isinstance(links, dict):
+        raise LinkError("Invalid link registry.")
+    for name, entry in links.items():
+        if not LINK_ID.fullmatch(name) or not isinstance(entry, dict):
+            raise LinkError("Invalid entry in the link registry.")
+        target = entry.get("target")
+        kind = entry.get("kind")
+        valid_target = (
+            (kind == "uri" and isinstance(target, str))
+            or (kind == "app" and isinstance(target, list) and target
+                and all(isinstance(arg, str) for arg in target))
+        )
+        if not valid_target or not isinstance(entry.get("enabled"), bool):
+            raise LinkError(f"Invalid entry in the link registry: {name}")
+    return links
+
+
+def atomic_write(path, content):
+    with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as temporary:
+        staged = Path(temporary.name)
+        try:
+            temporary.write(content)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+            temporary.close()
+            os.replace(staged, path)
+        finally:
+            staged.unlink(missing_ok=True)
+
+
+def get_entry(links, name):
+    if name not in links:
+        raise LinkError(f"Unknown link: {name}")
+    return links[name]
+
+
+def change_link(args):
+    name = parse_id(args.id)
+    action = args.action
+    with write_lock():
+        links = read_links()
+        if action in {"add", "add-app"}:
+            if name in links:
+                raise LinkError(f"Link already exists: {name}")
+            enabled = True
+        else:
+            enabled = get_entry(links, name)["enabled"]
+
+        if action == "remove":
+            del links[name]
+        elif action in {"enable", "disable"}:
+            links[name]["enabled"] = action == "enable"
+        elif action in {"add-app", "edit-app"}:
+            target = command_target(args.program, args.arguments)
+            links[name] = {"kind": "app", "target": target, "enabled": enabled}
+        else:
+            validate_uri(args.uri)
+            links[name] = {"kind": "uri", "target": args.uri, "enabled": enabled}
+
+        content = json.dumps(links, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
+        atomic_write(registry_path(), content.encode("utf-8"))
+        if read_links() != links:
+            raise LinkError("The saved registry did not match the requested change.")
+    print(f"{action}: {name} (verified)")
+
+
+def system_command(*command, stable_locale=False):
+    result = subprocess.run(
+        [executable(command[0]), *command[1:]],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env={**os.environ, "LC_ALL": "C"} if stable_locale else None,
+        timeout=10,
+    )
+    if result.returncode:
+        error = result.stderr.decode(errors="replace").strip()
+        raise LinkError(error or f"{command[0]} exited with status {result.returncode}.")
+    return result.stdout.decode(errors="replace")
+
+
+def default_handler(mime_type):
+    output = system_command("gio", "mime", mime_type, stable_locale=True)
+    for line in output.splitlines():
+        if line.startswith("Default application "):
+            return line.rpartition(": ")[2]
+    return None
+
+
+def require_handler(scheme):
+    handler = default_handler(f"x-scheme-handler/{scheme}")
+    if not handler:
+        raise LinkError(f"No desktop application handles {scheme}: URIs.")
+    return handler
+
+
+class WebRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if validate_uri(newurl) not in WEB_SCHEMES:
+            raise LinkError("The service redirected outside HTTP(S).")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def check_web(uri):
+    opener = build_opener(WebRedirectHandler())
+    try:
+        with opener.open(Request(uri, headers={"User-Agent": f"LinkProvider/{VERSION}"}), timeout=5) as response:
+            return f"HTTP {response.status}"
+    except HTTPError as exc:
+        exc.close()
+        raise LinkError(f"The service returned HTTP {exc.code}.") from exc
+    except (URLError, UnicodeError) as exc:
+        raise LinkError(f"The service could not be reached: {exc}") from exc
+
+
+def use_link(args):
+    name = parse_id(args.id)
+    entry = get_entry(read_links(), name)
+    if not entry["enabled"]:
+        raise LinkError(f"Link is disabled: {name}")
+    target = entry["target"]
+    opening = args.action in {"open", "test"}
+    if entry["kind"] == "app":
+        command = command_target(target[0], target[1:])
+        if opening:
+            lock_privileges()
+            subprocess.Popen(
+                command,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            print(f"Started: {name}")
+        else:
+            print(f"Executable available: {command[0]}")
+        return
+    scheme = validate_uri(target)
+    if opening:
+        require_desktop_user()
+        require_handler(scheme)
+        system_command("gio", "open", scheme + target[target.index(":"):])
+        print(f"Sent to desktop handler: {name}")
+    elif scheme in WEB_SCHEMES:
+        print(f"Service responded: {name} ({check_web(target)})")
+    else:
+        print(f"Desktop handler available: {require_handler(scheme)}")
+
+
+def copy_to_clipboard(value):
+    if os.environ.get("WAYLAND_DISPLAY") and shutil.which("wl-copy"):
+        command = ["wl-copy", "--type", "text/plain;charset=utf-8"]
+    elif os.environ.get("DISPLAY") and shutil.which("xclip"):
+        command = ["xclip", "-selection", "clipboard"]
+    elif os.environ.get("DISPLAY") and shutil.which("xsel"):
+        command = ["xsel", "--clipboard", "--input"]
+    else:
+        raise LinkError("No clipboard tool available. Use 'link' to print the URI, or use wl-copy, xclip or xsel.")
+    result = subprocess.run(
+        command, input=value.encode("utf-8"), stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL, timeout=5,
+    )
+    if result.returncode:
+        raise LinkError(f"Clipboard write failed: {command[0]}")
+
+
+def share_link(args):
+    name = parse_id(args.id)
+    entry = get_entry(read_links(), name)
+    if not entry["enabled"]:
+        raise LinkError(f"Link is disabled: {name}")
+    if args.target:
+        if entry["kind"] != "uri":
+            raise LinkError("A local program has no public target URI. Use its caldav-run alias.")
+        value = entry["target"]
+    else:
+        value = f"{SCHEME}://{name}"
+    if args.marker:
+        value = f"CALDAV-OPEN:{value}"
+    if args.action == "copy":
+        copy_to_clipboard(value)
+        print("Copied to clipboard.")
+    else:
+        print(value)
+
+
+def desktop_exec_argument(value):
+    if any(ord(char) < 32 or ord(char) == 127 for char in value):
+        raise LinkError("The desktop launcher path contains a control character.")
+    quoted = re.sub(r'(["`$\\])', r'\\\1', value.replace("%", "%%"))
+    return '"' + quoted.replace("\\", "\\\\") + '"'
+
+
+def desktop_exec_line():
+    script = desktop_exec_argument(str(Path(__file__).resolve()))
+    return f"Exec={script} desktop %u"
+
+
+def change_handler(args):
+    require_desktop_user()
+    path = handler_path()
+    with write_lock():
+        removing = args.action == "unregister-handler"
+        current = default_handler(MIME_TYPE)
+        if not removing and current and current != DESKTOP_ID:
+            raise LinkError(f"Another desktop handler is already active: {current}")
+        previous = path.read_bytes() if path.exists() else None
+        if removing and previous is None:
+            if current == DESKTOP_ID:
+                raise LinkError("The active Link Provider handler is outside the current user's applications directory.")
+            print("Desktop handler already absent (verified).")
+            return
+
+        executable("update-desktop-database")
+        if removing:
+            path.unlink()
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            try_exec = str(Path(__file__).resolve()).replace("\\", "\\\\")
+            content = (
+                "[Desktop Entry]\nType=Application\nName=Link Provider\n"
+                "Comment=Manage and open your registered links\n"
+                f"{desktop_exec_line()}\n"
+                f"TryExec={try_exec}\nNoDisplay=true\n"
+                f"MimeType={MIME_TYPE};\n"
+            ).encode("utf-8")
+            atomic_write(path, content)
+        try:
+            system_command("update-desktop-database", str(path.parent))
+            active = default_handler(MIME_TYPE) == DESKTOP_ID
+            saved = not path.exists() if removing else path.read_bytes() == content
+            if active == removing or not saved:
+                raise LinkError("The desktop handler change could not be verified.")
+        except (LinkError, OSError, subprocess.TimeoutExpired):
+            if previous is None:
+                path.unlink(missing_ok=True)
+            else:
+                atomic_write(path, previous)
+            system_command("update-desktop-database", str(path.parent))
+            raise
+    if removing:
+        print("Desktop handler removed (verified).")
+    else:
+        print(f"Desktop handler active (verified): {SCHEME}://ID")
+
+
+def list_links(args):
+    links = read_links()
+    if args.json:
+        print(json.dumps(links, ensure_ascii=False, sort_keys=True))
+        return
+    for name, entry in sorted(links.items()):
+        state = "enabled" if entry["enabled"] else "disabled"
+        print(f"{name}\t{state}\t{entry['kind']}\t{entry['target']}")
+
+
+def show_handler(args):
+    handler = default_handler(MIME_TYPE)
+    if not args.details:
+        print(handler or "No desktop handler registered.")
+        return
+    current = False
+    if handler == DESKTOP_ID:
+        try:
+            current = desktop_exec_line() in handler_path().read_text(encoding="utf-8").splitlines()
+        except FileNotFoundError:
+            pass
+    print(json.dumps({"handler": handler, "current": current}))
+
+
+def show_gui(_args):
+    require_desktop_user()
+    try:
+        from link_provider_gui import show_window
+    except (ImportError, ValueError) as exc:
+        system_python = Path("/usr/bin/python3")
+        if system_python.is_file() and Path(sys.executable).resolve() != system_python.resolve():
+            os.execv(system_python, [str(system_python), str(Path(__file__).resolve()), "gui"])
+        raise LinkError("The graphical interface requires python3-gi and GTK 3 (gir1.2-gtk-3.0).") from exc
+    show_window(Path(__file__).resolve(), read_links, LinkError, DESKTOP_ID)
+
+
+def desktop_launch(args):
+    if args.id is None:
+        show_gui(args)
+    else:
+        if not ALIAS.fullmatch(args.id):
+            raise LinkError("The desktop handler requires an exact caldav-run://ID URI.")
+        args.action = "open"
+        use_link(args)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--version", action="version", version=f"Link Provider {VERSION}")
+    commands = parser.add_subparsers(dest="action", required=True)
+    commands.add_parser("gui", help="open the graphical link manager").set_defaults(run=show_gui)
+    desktop = commands.add_parser("desktop", help="open the manager or a desktop command link")
+    desktop.add_argument("id", nargs="?")
+    desktop.set_defaults(run=desktop_launch)
+    for action, help_text in (
+        ("add", "register a URI"), ("edit", "replace a target with a URI"),
+        ("add-app", "register a local executable"), ("edit-app", "replace a target with an executable"),
+        ("enable", "enable a link"), ("disable", "disable a link"), ("remove", "delete a link"),
+    ):
+        command = commands.add_parser(action, help=help_text)
+        command.add_argument("id")
+        if action in {"add", "edit"}:
+            command.add_argument("uri")
+        if action in {"add-app", "edit-app"}:
+            command.add_argument("program")
+            command.add_argument("arguments", nargs=argparse.REMAINDER)
+        command.set_defaults(run=change_link)
+
+    command = commands.add_parser("list", help="list saved links")
+    command.add_argument("--json", action="store_true")
+    command.set_defaults(run=list_links)
+
+    for action, help_text in (
+        ("check", "check HTTP response, desktop handler or executable"),
+        ("open", "open a registered link"), ("test", "perform a real launch"),
+    ):
+        command = commands.add_parser(action, help=help_text)
+        command.add_argument("id", help="link ID or caldav-run://ID URI")
+        command.set_defaults(run=use_link)
+
+    for action, help_text in (("link", "print a shareable URI"), ("copy", "copy a shareable URI")):
+        command = commands.add_parser(action, help=help_text)
+        command.add_argument("id")
+        command.add_argument("--target", action="store_true", help="use the underlying URI")
+        command.add_argument("--marker", action="store_true", help="prefix with CALDAV-OPEN:")
+        command.set_defaults(run=share_link)
+
+    for action, help_text in (
+        ("register-handler", "register caldav-run with the current desktop user"),
+        ("unregister-handler", "remove the current user's Link Provider desktop handler"),
+        ("handler-status", "show the current caldav-run desktop handler"),
+    ):
+        command = commands.add_parser(action, help=help_text)
+        if action == "handler-status":
+            command.add_argument("--details", action="store_true", help="include current launcher status as JSON")
+            command.set_defaults(run=show_handler)
+        else:
+            command.set_defaults(run=change_handler)
+
+    args = parser.parse_args(sys.argv[1:] or ["gui"])
+    try:
+        args.run(args)
+    except (LinkError, OSError, ValueError, subprocess.TimeoutExpired) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

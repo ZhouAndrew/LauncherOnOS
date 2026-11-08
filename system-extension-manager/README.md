@@ -1,6 +1,6 @@
 # System Extension Manager
 
-**ACTIVE / MAINTAINED — 0.2.3.** Mint Toolbox is DEPRECATED / NOT ACTIVE.
+**ACTIVE / MAINTAINED — 0.2.4.** Mint Toolbox is DEPRECATED / NOT ACTIVE.
 See [security status](../SECURITY_STATUS.md) for fixed and retained risks.
 ZIP 0.4.4 keeps originals by default. HomeBackUp 0.1.5 verifies service shutdown.
 Anki 0.1.5 intentionally PUBLISHES: matching title/date may overwrite body,
@@ -12,7 +12,7 @@ maintenance scripts lack the new protections. The manager refuses unsafe upgrade
 An independent manager for system extensions. Enable installs a bundled Debian package;
 Disable uninstalls that package. The interface shows multiple real extensions and actual dpkg state.
 
-## Portable test release: 0.2.3
+## Portable test release: 0.2.4
 
 Extract the source ZIP, open its folder and run as your desktop user:
 
@@ -24,7 +24,7 @@ No manager installation or package build runs at startup. Requires Linux Mint / 
 Python 3.10+ and python3-tk for the desktop window. CLI listing does not require Tk.
 The source folder can be moved; run.sh resolves its own location.
 
-The manager includes **three installable extension debs** and one **portable Security Updates tool**.
+The manager includes **four installable extension debs** and one **portable Security Updates tool**.
 Package extensions use administrator authorization for installation/removal. The Security Updates
 tool never requires an extension installation.
 
@@ -46,6 +46,7 @@ The included system-extension-manager.desktop is for the optional installed mana
 - **ZIP and Trash**: Nemo context-menu verified ZIP creation, keeping originals by default. Optional CLI --trash-originals warns about concurrent writers.
   Symbolic links are stored as links without following targets, including dangling and directory links.
 - **HomeBackUp**: Independent Borg recovery backup extension. Installs into the manager as a normal system package with status/readback and optional source build. After Enable, configure once from the Linux Mint applications menu using `homebackup-ext setup` or `homebackup-ext use-existing` (existing root-only Borg credentials). Reuses `/media/andrew/HomeBackUp/Mint-Recovery-Borg` without deleting existing backups on installation; monthly timer with at most three backup dates. Requires an existing Borg 1.x repo and the configured HomeBackUp disk; `/dev/sdc7` is not included. The extension opens a dedicated GTK window from the manager's Open action or Mint application menu.
+- **Link Provider**: Select **Enable / Install** and then **Open** to launch the standalone English GTK window. The desktop application menu and the `link-provider` command also open it. Choose **Enable Desktop Links** for `caldav-run://` integration, or **Update Desktop Links** to switch an existing portable registration to the installed application. Existing link records are kept. Local commands run as the desktop user with privilege elevation blocked within the launched process tree.
 - **Security Updates**: **No installation required.** Select the row and click **Run in Terminal**.
   A terminal launches the bundled Python script, refreshes indexes with sudo, lists the eligible Ubuntu
   noble-security upgrades, simulates the exact transaction and requires typing UPDATE to install.
@@ -70,6 +71,8 @@ bash run.sh --build anki-time-travel
 bash run.sh --enable zip-trash
 bash run.sh --enable homebackup
 bash run.sh --build homebackup
+bash run.sh --enable link-provider
+bash run.sh --open link-provider
 bash run.sh --open security-updates  # runs one terminal command, without installing a .deb
 ```
 
@@ -114,9 +117,9 @@ no action. These changes apply to manager packaging, log saving and Anki file se
 
 ## Distribution
 
-The GitHub Actions `System Extension Manager` workflow builds a portable source ZIP **with three extension debs plus the portable security script** and an optional System Extension Manager `.deb` for download as CI artifacts. In the manager select **HomeBackUp** and choose **Enable / Install**; the system package manager requests one administrator authorization for installation. Updating an already-installed extension uses **Update**, and removing a missing package is a no-op. The Borg encryption password is a separate credential needed only for first setup or repository access. No sensitive backup data or credentials are shipped. Reinstall-and-restore and live Mint GUI installation are not yet acceptance-tested.
+The GitHub Actions `System Extension Manager` workflow builds a portable source ZIP **with four extension debs plus the portable security script** and an optional System Extension Manager `.deb` for download as CI artifacts. In the manager select **HomeBackUp** and choose **Enable / Install**; the system package manager requests one administrator authorization for installation. Updating an already-installed extension uses **Update**, and removing a missing package is a no-op. The Borg encryption password is a separate credential needed only for first setup or repository access. No sensitive backup data or credentials are shipped. Reinstall-and-restore and live Mint GUI installation are not yet acceptance-tested.
 
-Raw Git checkouts include three matching extension packages, valid source pins and the portable updater. Run `bash system-extension-manager/run.sh` directly; no build or manager installation is needed. CI validates the committed tree before rebuilding.
+Raw Git checkouts include four matching extension packages, valid source pins and the portable updater. Run `bash system-extension-manager/run.sh` directly; no build or manager installation is needed. CI validates the committed tree before rebuilding.
 
 ### HomeBackUp GUI update
 

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Link Provider
+Comment=Manage links and local commands
+Exec=/usr/bin/link-provider
+TryExec=/usr/bin/link-provider
+Icon=insert-link
+Terminal=false
+Categories=Utility;

@@ -98,6 +98,39 @@
     }
   },
   {
+    "id": "link-provider",
+    "name": "Link Provider",
+    "package": "mint-link-provider-extension",
+    "version": "0.2.1",
+    "launch": [
+      "/usr/bin/link-provider"
+    ],
+    "description": "Manage and test caldav-run links to URLs or fixed local commands. Opens a standalone window. Command links run as your desktop user and block sudo.",
+    "deb": "packages/mint-link-provider-extension_0.2.1_all.deb",
+    "sha256": "8b82a3a6cd0d4c07bddb42b02f2d11a8e43a25beea03f241cebbd475230bce1a",
+    "source": {
+      "kind": "bundled",
+      "requires": [
+        "python3",
+        "dpkg-deb",
+        "xz"
+      ],
+      "files": {
+        "sources/link-provider/README.md": "7e95334499a64190fe1b827504a4062a5592a51a1aa1f42bc3147a584a850910",
+        "sources/link-provider/build.py": "00a057732da5b8779c7e493467071aaa7b1c52c66a3b04117826122fdc1f69bf",
+        "sources/link-provider/link-provider": "f47da95693514d1187b6bd77511a4f2f1a0d08f4d0e8bfc5288d151bc9e87390",
+        "sources/link-provider/link_provider_gui.py": "363400fa4f31ff205a814793994f323a3a0b2a8ae36a4bf41add754ca8280eea",
+        "sources/link-provider/mint-link-provider.desktop": "cd8929555de6bbb5a189bc108154940cccec08308487967f2c901fa178dd0823"
+      },
+      "argv": [
+        "python3",
+        "sources/link-provider/build.py",
+        "--output-dir",
+        "{output}"
+      ]
+    }
+  },
+  {
     "id": "security-updates",
     "kind": "portable",
     "name": "Security Updates",

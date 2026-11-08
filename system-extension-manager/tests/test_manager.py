@@ -14,10 +14,10 @@ import manager
 
 
 class CatalogTests(unittest.TestCase):
-    def test_three_debs_plus_portable_updater(self):
+    def test_four_debs_plus_portable_updater(self):
         import hashlib
         rows = lifecycle.plugins()
-        self.assertEqual({row['id'] for row in rows}, {'zip-trash', 'anki-time-travel', 'homebackup', 'security-updates'})
+        self.assertEqual({row['id'] for row in rows}, {'zip-trash', 'anki-time-travel', 'homebackup', 'link-provider', 'security-updates'})
         for row in rows:
             if row.get('kind') == 'portable':
                 self.assertEqual(row['id'], 'security-updates')
@@ -87,6 +87,27 @@ class CatalogTests(unittest.TestCase):
         with patch.object(lifecycle.subprocess, 'run', return_value=result):
             self.assertEqual(lifecycle.state_text('anki-time-travel'), 'Enabled: 0.1.3')
 
+    def test_link_provider_has_independent_window_and_opt_in_protocol(self):
+        item = lifecycle.plugin('link-provider')
+        self.assertEqual(item['launch'], ['/usr/bin/link-provider'])
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            deb = lifecycle.bundled_deb(item)
+            subprocess.run(['dpkg-deb', '-x', str(deb), str(base)], check=True)
+            launcher = base / 'usr/bin/link-provider'
+            menu = (base / 'usr/share/applications/mint-link-provider.desktop').read_text()
+            self.assertIn('Exec=/usr/bin/link-provider\n', menu)
+            self.assertIn('Terminal=false\n', menu)
+            self.assertNotIn('MimeType=', menu)
+            self.assertTrue((launcher.resolve().parent / 'link_provider_gui.py').is_file())
+            self.assertEqual(subprocess.check_output([launcher, '--version'], text=True).strip(),
+                             'Link Provider ' + item['version'])
+            rejected = subprocess.run([launcher, 'add-app', 'admin', 'sudo', 'id'],
+                                      env={**os.environ, 'XDG_CONFIG_HOME': str(base / 'config')},
+                                      text=True, capture_output=True)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn('sudo are blocked', rejected.stderr)
+
     def test_install_and_remove_only_selected_extension_with_readback(self):
         args = lifecycle.command('anki-time-travel', True)
         self.assertTrue(args[-1].endswith('anki-time-travel_0.1.5_all.deb'))
@@ -122,7 +143,7 @@ class CatalogTests(unittest.TestCase):
         with patch.object(lifecycle, 'change', side_effect=subprocess.CalledProcessError(100, ['apt-get'])):
             self.assertEqual(manager.main(['--enable', 'anki-time-travel']), 1)
 
-    def test_cli_lists_four_extensions(self):
+    def test_cli_lists_five_tools(self):
         result = subprocess.run([sys.executable, str(ROOT / 'manager.py'), '--list'],
                                 text=True, capture_output=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -130,6 +151,7 @@ class CatalogTests(unittest.TestCase):
         self.assertIn('zip-trash\tZIP and Trash', result.stdout)
         self.assertIn('homebackup\tHomeBackUp', result.stdout)
         self.assertIn('security-updates\tSecurity Updates', result.stdout)
+        self.assertIn('link-provider\tLink Provider', result.stdout)
 
     def test_source_runs_without_installing_or_packaging_manager(self):
         import shutil
@@ -142,7 +164,7 @@ class CatalogTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
             self.assertFalse((app / 'dist').exists())
             self.assertFalse(list(app.glob('system-extension-manager*.deb')))
-            self.assertEqual(len(list((app / 'packages').glob('*.deb'))), 3)
+            self.assertEqual(len(list((app / 'packages').glob('*.deb'))), 4)
 
     def test_manager_packaging_requires_explicit_cli_request(self):
         with patch.object(lifecycle, 'build_manager_package') as build:
@@ -236,7 +258,7 @@ class ManagerGuiTests(unittest.TestCase):
                     yield child
                     yield from descendants(child)
             tree = next(w for w in descendants(window) if isinstance(w, ttk.Treeview))
-            self.assertEqual(set(tree.get_children()), {'zip-trash', 'anki-time-travel', 'homebackup', 'security-updates'})
+            self.assertEqual(set(tree.get_children()), {'zip-trash', 'anki-time-travel', 'homebackup', 'link-provider', 'security-updates'})
             tree.selection_set('anki-time-travel')
             tree.event_generate('<<TreeviewSelect>>')
             parent.update()
