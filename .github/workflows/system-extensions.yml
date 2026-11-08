@@ -48,10 +48,10 @@ jobs:
           PYCODE
       - name: Check package reproducibility
         run: |
-          sha256sum system-extension-manager/packages/mint-homebackup-extension_0.1.5_all.deb > /tmp/homebackup-sha
+          sha256sum system-extension-manager/packages/mint-homebackup-extension_0.1.6_all.deb > /tmp/homebackup-sha
           python3 system-extension-manager/sources/homebackup/build.py --output-dir system-extension-manager/packages
           sha256sum -c /tmp/homebackup-sha
-          sha256sum system-extension-manager/packages/mint-link-provider-extension_0.2.1_all.deb > /tmp/link-provider-sha
+          sha256sum system-extension-manager/packages/mint-link-provider-extension_0.2.2_all.deb > /tmp/link-provider-sha
           python3 system-extension-manager/sources/link-provider/build.py --output-dir system-extension-manager/packages
           sha256sum -c /tmp/link-provider-sha
       - name: Verify portable updater has no extension package
@@ -67,9 +67,9 @@ jobs:
         run: xvfb-run -a /usr/bin/python3 system-extension-manager/sources/homebackup/gui.py --smoke-test
       - name: Verify installed Link Provider entry points and removal
         run: |
-          sudo apt-get install -y ./system-extension-manager/packages/mint-link-provider-extension_0.2.1_all.deb
+          sudo apt-get install -y ./system-extension-manager/packages/mint-link-provider-extension_0.2.2_all.deb
           export XDG_CONFIG_HOME="$RUNNER_TEMP/link-provider-config" XDG_DATA_HOME="$RUNNER_TEMP/link-provider-data"
-          bash system-extension-manager/run.sh --list | grep -F $'link-provider\tLink Provider\tEnabled: 0.2.1'
+          bash system-extension-manager/run.sh --list | grep -F $'link-provider\tLink Provider\tEnabled: 0.2.2'
           for entry in direct menu manager; do
             xvfb-run -a bash -eu -c '
               case "$1" in
@@ -101,8 +101,8 @@ jobs:
         run: python3 system-extension-manager/build.py --package --output-dir "$RUNNER_TEMP/manager"
       - name: Check bundled packages and portable security script are distributed
         run: |
-          dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep 'packages/mint-homebackup-extension_0.1.5_all.deb'
-          dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep 'packages/mint-link-provider-extension_0.2.1_all.deb'
+          dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep 'packages/mint-homebackup-extension_0.1.6_all.deb'
+          dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep 'packages/mint-link-provider-extension_0.2.2_all.deb'
           dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep 'sources/security-updates/security_updates.py'
           ! dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep 'packages/mint-security-updates-extension'
       - name: Bundle tracked portable manager source only
@@ -114,5 +114,5 @@ jobs:
           name: System-Extension-Manager-Portable-Security-Updates
           path: |
             System-Extension-Manager-source.zip
-            system-extension-manager/packages/mint-link-provider-extension_0.2.1_all.deb
+            system-extension-manager/packages/mint-link-provider-extension_0.2.2_all.deb
             ${{ runner.temp }}/manager/system-extension-manager_*.deb
