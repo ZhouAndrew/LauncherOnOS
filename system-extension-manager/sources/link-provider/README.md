@@ -1,4 +1,4 @@
-# Link Provider 0.2.1
+# Link Provider 0.2.2
 
 Link Provider is a Linux desktop tool for websites, app links and fixed local commands.
 
@@ -21,7 +21,7 @@ The link carries only the ID. Link Provider looks up the executable and fixed ar
 
 Register only commands you trust. Other applications can trigger enabled links after desktop registration. The launch restriction applies to the command's process tree. Services contacted separately through the desktop session or system bus enforce their own permissions.
 
-**Test Launch** confirms the command was started or the URL was handed to the desktop handler. The launched application controls its subsequent behavior.
+**Test Launch** confirms dispatch, not application or backend readiness. A rapid nonzero exit is reported as an error. A command that exits with code zero or remains running may still rely on an unavailable backend; inspect its logs and verify the target opened.
 
 ## Terminal and application integration
 
