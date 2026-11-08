@@ -27,6 +27,101 @@ def security_warning(item, *, installing=False):
 
 ROOT = Path(__file__).resolve().parent
 
+# The privileged process opens the source package ONCE with O_NOFOLLOW,
+# copies those exact bytes into a root-owned private directory, checks the
+# approved SHA-256 against that copy, simulates APT again and installs ONLY
+# the staged copy. A user/attacker changing the original pathname after
+# verification cannot change the bytes handed to privileged APT.
+SECURE_INSTALL_CODE = r"""
+import hashlib
+import os
+from pathlib import Path
+import re
+import stat
+import subprocess
+import sys
+import tempfile
+
+def fail(message):
+    print('SECURITY ERROR: ' + message, file=sys.stderr, flush=True)
+    raise SystemExit(1)
+
+if len(sys.argv) != 5:
+    fail('Expected approved SHA-256, package name, version and source path.')
+expected, package, version, source = sys.argv[1:]
+if not re.fullmatch(r'[0-9a-f]{64}', expected):
+    fail('Invalid approved package checksum.')
+if not re.fullmatch(r'[a-z0-9][a-z0-9+.-]+', package):
+    fail('Invalid package name.')
+if not version or any(ord(c) < 33 or ord(c) > 126 for c in version):
+    fail('Invalid package version.')
+if os.geteuid() != 0:
+    fail('This transaction requires explicit administrator authorization.')
+environment = {
+    'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LANG': 'C.UTF-8',
+    'LC_ALL': 'C.UTF-8', 'DEBIAN_FRONTEND': 'noninteractive',
+}
+try:
+    with tempfile.TemporaryDirectory(prefix='mint-extension-install-') as directory:
+        target = Path(directory) / 'verified.deb'
+        fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        digest = hashlib.sha256()
+        with os.fdopen(fd, 'rb') as original, target.open('xb') as staged:
+            meta = os.fstat(original.fileno())
+            if not stat.S_ISREG(meta.st_mode):
+                fail('Approved package is not a regular file.')
+            while True:
+                block = original.read(1024 * 1024)
+                if not block:
+                    break
+                digest.update(block)
+                staged.write(block)
+            staged.flush()
+            os.fsync(staged.fileno())
+        if digest.hexdigest() != expected:
+            fail('Package changed since approval; aborted before APT.')
+        metadata = subprocess.check_output(
+            ['/usr/bin/dpkg-deb', '-f', str(target), 'Package', 'Version', 'Architecture'],
+            env=environment, text=True, timeout=20,
+        )
+        fields = dict(line.split(': ', 1) for line in metadata.splitlines())
+        arch = subprocess.check_output(
+            ['/usr/bin/dpkg', '--print-architecture'],
+            text=True, env=environment, timeout=10,
+        ).strip()
+        if (fields.get('Package') != package or fields.get('Version') != version
+                or fields.get('Architecture') not in ('all', arch)):
+            fail('Verified package identity / architecture mismatch.')
+        args = [
+            '/usr/bin/apt-get', '-o', 'Dpkg::Use-Pty=0', '-o', 'APT::Color=0',
+            'install', '--no-install-recommends', '--no-remove', '-y', str(target),
+        ]
+        trial = subprocess.run(
+            [args[0], '--simulate', *args[1:]], env=environment,
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            timeout=120, check=True,
+        )
+        print(trial.stdout, end='', flush=True)
+        for line in trial.stdout.splitlines():
+            parts = line.split()
+            if not parts:
+                continue
+            if parts[0] in ('Remv', 'Purg'):
+                fail('APT proposed a removal: ' + line)
+            if parts[0] == 'Inst' and len(parts) > 1:
+                name = parts[1].lower().split(':')[0]
+                if (name.startswith(('linux-', 'nvidia-', 'libnvidia-',
+                                      'grub', 'shim', 'initramfs', 'dkms'))
+                        or 'nvidia' in name or 'firmware' in name):
+                    fail('Kernel/driver/firmware changes require separate review: ' + name)
+        print('Verified staged package: ' + package + ' ' + version, flush=True)
+        result = subprocess.run(args, env=environment, check=False)
+        if result.returncode:
+            fail('APT install failed; the system state may be partial.')
+except (OSError, ValueError, subprocess.SubprocessError) as exc:
+    fail(str(exc))
+"""
+
 
 def plugins():
     rows = json.loads((ROOT / 'extensions.json').read_text('utf-8'))
@@ -142,11 +237,13 @@ def command(key, enable, deb=None, log=None):
     if enable:
         if deb is None:
             deb = bundled_deb(item, log)
+            approved_hash = item['sha256']
         else:
             deb = Path(deb)
             verify_deb(item, deb, log=log)
-        args = ['/usr/bin/apt-get', '-o', 'Dpkg::Use-Pty=0', '-o', 'APT::Color=0',
-                'install', '--no-install-recommends', '--no-remove', '-y', str(deb)]
+            approved_hash = hashlib.sha256(deb.read_bytes()).hexdigest()
+        args = ['/usr/bin/python3', '-I', '-c', SECURE_INSTALL_CODE,
+                approved_hash, item['package'], item['version'], str(deb)]
     else:
         args = ['/usr/bin/apt-get', '-o', 'Dpkg::Use-Pty=0', '-o', 'APT::Color=0',
                 'remove', '-y', item['package']]
@@ -228,9 +325,18 @@ def change(key, enable, log=None, from_source=False, update=False):
         args = command(key, enable, deb, log) if from_source else command(key, enable, log=log)
         # Dependency resolution errors are displayed before the authorized install.
         log.stage('Checking package changes without changing the system')
-        start = args.index('/usr/bin/apt-get')
-        simulation = args[start:]
-        simulation.insert(1, '--simulate')
+        # Preflight before administrator authorization. The privileged
+        # installation helper repeats the same check on the root-owned copy.
+        if enable:
+            simulated_deb = str(deb if from_source else ROOT / item['deb'])
+            simulation = [
+                '/usr/bin/apt-get', '--simulate', '-o', 'Dpkg::Use-Pty=0',
+                '-o', 'APT::Color=0', 'install', '--no-install-recommends',
+                '--no-remove', '-y', simulated_deb,
+            ]
+        else:
+            simulation = ['/usr/bin/apt-get', '--simulate', '-o', 'Dpkg::Use-Pty=0',
+                          '-o', 'APT::Color=0', 'remove', '-y', item['package']]
         plan = log.run(simulation)
         for line in plan.stdout.splitlines():
             parts = line.split()
