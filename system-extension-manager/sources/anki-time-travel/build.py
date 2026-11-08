@@ -8,7 +8,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parent
 PACKAGE = 'anki-time-travel'
-VERSION = '0.1.5'
+VERSION = '0.1.6'
 
 
 def main():
