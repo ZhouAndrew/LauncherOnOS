@@ -3,6 +3,9 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import hashlib
+import sys
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -80,6 +83,29 @@ class SafetyTests(unittest.TestCase):
     def test_digest_ignores_dict_order_but_changes_on_new_version(self):
         self.assertEqual(security.digest({'b':'2','a':'1'}), security.digest({'a':'1','b':'2'}))
         self.assertNotEqual(security.digest({'a':'1'}), security.digest({'a':'2'}))
+
+    def test_sudo_uses_isolated_root_verified_bootstrap(self):
+        with patch.object(security.subprocess, 'call', return_value=0) as call:
+            self.assertEqual(security.privileged_action('--refresh-root'), 0)
+        args = call.call_args.args[0]
+        self.assertEqual(args[:5], ['sudo', '/usr/bin/python3', '-I', '-c', security.ROOT_BOOTSTRAP])
+        self.assertEqual(args[-1], '--refresh-root')
+        self.assertIn('O_NOFOLLOW', security.ROOT_BOOTSTRAP)
+        self.assertIn('mint-security-verified-', security.ROOT_BOOTSTRAP)
+
+    def test_root_bootstrap_rejects_source_replacement(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp) / 'updater.py'
+            source.write_bytes(b'altered contents')
+            approved = hashlib.sha256(b'known approved bytes').hexdigest()
+            with patch.object(sys, 'argv', ['-c', approved, str(source), '--refresh-root']), \
+                 patch.object(sys, 'flags', SimpleNamespace(isolated=1)), \
+                 patch.object(os, 'geteuid', return_value=0), \
+                 patch.object(subprocess, 'run', side_effect=AssertionError('root must not run changed source')):
+                with self.assertRaises(SystemExit) as exit_code:
+                    exec(compile(security.ROOT_BOOTSTRAP, '<root-bootstrap>', 'exec'),
+                         {'__name__': '__main__'})
+                self.assertEqual(exit_code.exception.code, 1)
 
     def test_no_automatic_package_operations(self):
         text = SOURCE.read_text()
