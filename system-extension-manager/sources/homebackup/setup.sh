@@ -60,7 +60,7 @@ chmod 600 "$SECRET"
 
 install -d -m 755 /usr/local/libexec
 install -m 700 -o root -g root "$SRC" "$BIN"
-install -m 700 -o root -g root "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/safe_lock.py" /usr/local/libexec/homebackup-safe-lock.py
+install -m 700 -o root -g root "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/safe_lock.py" /usr/local/libexec/safe_lock.py
 
 cat > "$RUN" <<'RUNNER'
 #!/usr/bin/env bash
@@ -83,7 +83,7 @@ LOGPREFIX='[HomeBackUp]'
 export BORG_PASSCOMMAND="/usr/bin/cat $SECRET"
 
 # Avoid simultaneous scheduled runs, even before the backup disk is mounted.
-SAFELOCK='/usr/local/libexec/homebackup-safe-lock.py'
+SAFELOCK='/usr/local/libexec/safe_lock.py'
 if [[ $(readlink /proc/self/fd/8 2>/dev/null || :) != /run/lock/homebackup-monthly.lock ]]; then
   exec /usr/bin/python3 -I "$SAFELOCK" 8 /run/lock/homebackup-monthly.lock /usr/bin/bash "$0" "$@"
 fi
