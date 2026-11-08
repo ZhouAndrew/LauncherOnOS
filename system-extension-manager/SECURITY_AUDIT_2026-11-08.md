@@ -54,6 +54,29 @@ with the specified preconditions, not proof of exploitation.
   Linux Mint 22.x acceptance. Sensitive root operations and backup pruning were
   deliberately **not** run in this review.
 
+## Critical remediation follow-up (System Extension Manager 0.2.5)
+
+The table above records the **initial review**; the following is the newer
+implementation status in PR #13. Do not mistake this source change for an
+upgrade of already installed Linux Mint extensions.
+
+| Finding | Security release status | Remaining limitation |
+| --- | --- | --- |
+| MGR-02 privileged extension APT path | **Fixed the local-package replacement window**: root opens the approved .deb without following final symlinks, copies the exact opened bytes to a root-owned temporary directory, rechecks SHA-256 and package metadata, reruns APT simulation, and installs from that same staged file. | APT dependency metadata/repositories can still change between separate simulation and actual transaction; live authorization and signed repository trust remain necessary. |
+| MGR-03 root HomeBackUp lock-file truncation | **Fixed in HomeBackUp 0.1.6 source and rebuilt .deb**: safe_lock.py uses dirfd, O_NOFOLLOW, no O_TRUNC, uid/type/hardlink and directory-mode verification, then passes a locked fd to bash (runner and direct backup). | Earlier installed HomeBackUp builds must be explicitly updated; backups of actively modified application data may be inconsistent. |
+| MGR-04 portable updater root imports / writable-script race | **Fixed**: every sudo operation uses Python -I and an isolated, SHA-256-verified root-owned snapshot of the approved script; root actions reject unisolated/non-root-owned entry. | Linux Mint APT can still restart services; manual review and failed-install recovery are required. No updater service is installed. |
+| MGR-05 Link Provider false success | **Fixed misleading success** in Link Provider 0.2.2: immediate nonzero exit reports failure; long-running or fast-zero exits explicitly say readiness not verified. | Application-specific backend liveness still cannot be inferred generically; no automatic backend startup without an explicitly defined backend. |
+| MGR-06 Anki WordPress collision/stale bytes | **Partial data-integrity fix**, Anki Time Travel 0.1.6: refuse unrelated same-title/date posts; verify local PDF SHA-256 against actual WordPress attachment bytes before publication; write/read back source marker. | Intentionally published prior Anki posts can still be updated; WordPress media URLs may be public. No change to required publish behavior. |
+| MGR-07 opt-in ZIP Trash non-atomicity | **Mitigated** in ZIP 0.4.5: reread remaining source snapshots before each Trash move, read back source disappearance, and report partial completion. Default still retains originals. | Moving multiple files to system Trash cannot be an atomic multi-file transaction. A concurrent writer can still race after a validation. |
+
+Rebuilt packages and checksum catalog are tracked in the PR; the temporary
+privileged CI rebuild workflow was removed after use. All new packages are
+versioned separately from the older binaries. Test coverage includes real
+package building/metadata checks, source hash pinning, a simulated adversarial
+package replacement, backup lock symlinks/hardlinks, updater replacement,
+Link Provider failure, PDF collision/stale attachment, and ZIP concurrent
+writes. This is **not** a claim of live Mint backup or real APT acceptance.
+
 ## Suggested next hardening sequence
 
 1. Fix the HomeBackUp root lock paths with no-follow, ownership and file-type
