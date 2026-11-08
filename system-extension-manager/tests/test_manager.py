@@ -81,6 +81,14 @@ class CatalogTests(unittest.TestCase):
             self.assertIn('Terminal=false', desktop)
             self.assertIn('Exec=homebackup-ext gui', desktop)
             self.assertTrue((base/'usr/lib/mint-homebackup-extension/gui.py').exists())
+            safe = base/'usr/lib/mint-homebackup-extension/safe_lock.py'
+            self.assertTrue(safe.is_file(), 'Released HomeBackUp deb must include safe root lock helper')
+            self.assertIn('os.O_NOFOLLOW', safe.read_text())
+            runner = (base/'usr/lib/mint-homebackup-extension/run-backup').read_text()
+            self.assertIn('/usr/lib/mint-homebackup-extension/safe_lock.py', runner)
+            self.assertNotIn('exec 8>/run/lock/homebackup-monthly.lock', runner)
+            backup = (base/'usr/lib/mint-homebackup-extension/backup.sh').read_text()
+            self.assertNotIn('exec 9>"$TARGET/.mint-recovery.lock"', backup)
 
     def test_anki_enabled_by_its_actual_package_state(self):
         result = subprocess.CompletedProcess([], 0, 'install ok installed\n0.1.3', '')
