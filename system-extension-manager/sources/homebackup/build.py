@@ -2,7 +2,7 @@ from pathlib import Path
 import re, shutil, os, subprocess
 root=Path(__file__).resolve().parent / 'build-mint-homebackup-extension'
 if root.exists(): shutil.rmtree(root)
-base=root/'mint-homebackup-extension_0.1.5_all'
+base=root/'mint-homebackup-extension_0.1.6_all'
 lib=base/'usr/lib/mint-homebackup-extension'
 for sub in (lib,base/'usr/bin',base/'usr/share/applications',base/'etc/systemd/system',base/'DEBIAN'):
  sub.mkdir(parents=True,exist_ok=True)
@@ -11,6 +11,7 @@ source=(Path(__file__).resolve().parent / 'setup.sh').read_text()
 backup=(Path(__file__).resolve().parent / 'backup.sh').read_text()
 (lib/'backup.sh').write_text(backup)
 (lib/'gui.py').write_text((Path(__file__).resolve().parent / 'gui.py').read_text())
+(lib/'safe_lock.py').write_bytes((Path(__file__).resolve().parent / 'safe_lock.py').read_bytes())
 
 # Reuse the field-tested source's 3-archive selector and runner, with new paths.
 def heredoc(mark):
@@ -19,7 +20,7 @@ def heredoc(mark):
  return match.group(1)+'\n'
 selector=heredoc('PYSELECT')
 runner=heredoc('RUNNER')
-runner=runner.replace('/usr/local/libexec/homebackup-borg-recovery.sh','/usr/lib/mint-homebackup-extension/backup.sh').replace('/usr/local/libexec/homebackup-retention-select.py','/usr/lib/mint-homebackup-extension/select.py')
+runner=runner.replace('/usr/local/libexec/homebackup-borg-recovery.sh','/usr/lib/mint-homebackup-extension/backup.sh').replace('/usr/local/libexec/homebackup-retention-select.py','/usr/lib/mint-homebackup-extension/select.py').replace('/usr/local/libexec/safe_lock.py','/usr/lib/mint-homebackup-extension/safe_lock.py')
 (lib/'select.py').write_text(selector)
 (lib/'run-backup').write_text(runner)
 service='''[Unit]
@@ -76,7 +77,7 @@ echo 'Verified: monthly timer disabled and backup service stopped.'
 
 admin='''#!/usr/bin/env bash
 # Privileged entry point. No password is requested when installing the package.
-# SECURITY WARNING: backup runner lock redirections still follow links; warning only.
+# HomeBackUp root locks are opened by safe_lock.py with O_NOFOLLOW.
 set -Eeuo pipefail
 umask 077
 REPO='/media/andrew/HomeBackUp/Mint-Recovery-Borg'
@@ -111,7 +112,7 @@ esac
 if [[ ${1:-} == disable ]]; then
   exec /usr/lib/mint-homebackup-extension/stop-scheduler
 fi
-printf '%s\\n' 'WARNING - UNFIXED BACKUP LOCK RISK: Lock-file redirections follow symbolic links and can truncate their targets with root privileges. Do not allow untrusted users or processes to modify the backup mount root or lock paths. This warning is not a fix.' >&2
+printf '%s\\n' 'SECURITY: Root backup locks use no-follow, root-owned, regular-file checks. If lock verification fails, backup will stop.' >&2
 [[ $(findmnt -n -o TARGET -T "$DEST" 2>/dev/null || :) == "$DEST" ]] || fail 'HomeBackUp 未挂载。'
 [[ $(findmnt -n -o UUID -T "$DEST" 2>/dev/null || :) == "$UUID" ]] || fail '备份目标 UUID 不符。'
 [[ $(findmnt -n -o FSTYPE -T "$DEST") == btrfs ]] || fail '目标不是 Btrfs。'
@@ -256,7 +257,7 @@ Categories=System;Utility;
 Keywords=backup;borg;Mint;备份;恢复;
 ''')
 control='''Package: mint-homebackup-extension
-Version: 0.1.5
+Version: 0.1.6
 Section: admin
 Priority: optional
 Architecture: all
@@ -299,18 +300,18 @@ exit 0
 '''
 (base/'DEBIAN/prerm').write_text(prerm)
 # remove package files only on uninstall; root secret and Borg backup are never removed by package.
-for f in [lib/'gui.py',lib/'backup.sh',lib/'select.py',lib/'run-backup',lib/'admin',lib/'stop-scheduler',base/'usr/bin/homebackup-ext',base/'DEBIAN/postinst',base/'DEBIAN/prerm']:
+for f in [lib/'gui.py',lib/'backup.sh',lib/'safe_lock.py',lib/'select.py',lib/'run-backup',lib/'admin',lib/'stop-scheduler',base/'usr/bin/homebackup-ext',base/'DEBIAN/postinst',base/'DEBIAN/prerm']:
  f.chmod(0o755)
 for f in [base/'etc/systemd/system/mint-homebackup-extension.service',base/'etc/systemd/system/mint-homebackup-extension.timer']:
  f.chmod(0o644)
-readme='''# Mint HomeBackUp Extension 0.1.5
+readme='''# Mint HomeBackUp Extension 0.1.6
 
 这是独立的 Linux Mint GTK 3 图形管理包，不依赖 MintBox。普通用户启动无需 sudo，查询定时器状态无需授权。安装不会初始化或修改已有 Borg 仓库，不主动删除任何归档，也不会自动开启定时备份。
 
 **安装（一次系统管理员授权）：**
 
 ```bash
-sudo apt install ./mint-homebackup-extension_0.1.5_all.deb
+sudo apt install ./mint-homebackup-extension_0.1.6_all.deb
 ```
 
 APT 可能因为 sudo 会话过期而要求管理员密码，但此安装包不会再次主动提示密码。它也不会在软件包安装环节要求 Borg 密码。
@@ -350,5 +351,5 @@ if __name__ == '__main__':
     for target in sorted(base.rglob('*'), reverse=True):
         os.utime(target, (epoch, epoch), follow_symlinks=False)
     os.utime(base, (epoch, epoch))
-    subprocess.run(['dpkg-deb', '-Zxz', '-z6', '--threads-max=1', '--root-owner-group', '--build', str(base), str(dest / 'mint-homebackup-extension_0.1.5_all.deb')],
+    subprocess.run(['dpkg-deb', '-Zxz', '-z6', '--threads-max=1', '--root-owner-group', '--build', str(base), str(dest / 'mint-homebackup-extension_0.1.6_all.deb')],
                    check=True, env={**os.environ, 'SOURCE_DATE_EPOCH': str(epoch)})
