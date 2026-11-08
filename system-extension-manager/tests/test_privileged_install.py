@@ -37,7 +37,7 @@ class PrivilegedPackageTests(unittest.TestCase):
                 staged = Path(args[-1])
                 self.assertNotEqual(staged, original)
                 self.assertEqual(staged.read_bytes(), original.read_bytes())
-                self.assertEqual(staged.stat().st_uid, os.geteuid())
+                self.assertEqual(staged.stat().st_uid, os.getuid())
                 self.assertFalse(staged.stat().st_mode & 0o022)
                 seen.append(tuple(args))
                 return subprocess.CompletedProcess(args, 0, '', '')
