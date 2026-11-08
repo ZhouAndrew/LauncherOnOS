@@ -30,6 +30,10 @@ def locked_exec(argv):
     path = Path(location)
     parent_fd = os.open(str(path.parent), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
     try:
+        parent_info = os.fstat(parent_fd)
+        if (parent_info.st_uid != 0 or
+                ((parent_info.st_mode & 0o022) and not (parent_info.st_mode & stat.S_ISVTX))):
+            raise PermissionError('Lock directory is writable by untrusted users.')
         fd = os.open(path.name, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC,
                      0o600, dir_fd=parent_fd)
     finally:
