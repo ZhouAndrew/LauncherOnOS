@@ -1,9 +1,9 @@
 # System Extension Manager
 
-**ACTIVE / MAINTAINED — 0.2.4.** Mint Toolbox is DEPRECATED / NOT ACTIVE.
+**ACTIVE / MAINTAINED — 0.2.5.** Mint Toolbox is DEPRECATED / NOT ACTIVE.
 See [security status](../SECURITY_STATUS.md) for fixed and retained risks.
-ZIP 0.4.4 keeps originals by default. HomeBackUp 0.1.5 verifies service shutdown.
-Anki 0.1.5 intentionally PUBLISHES: matching title/date may overwrite body,
+ZIP 0.4.5 keeps originals by default and rechecks each remaining input before opt-in Trash. HomeBackUp 0.1.6 uses guarded no-follow root locks and verifies service shutdown.
+Anki 0.1.6 intentionally PUBLISHES: validated same-import updates may overwrite body,
 categories and tags; same-path attachments may reuse older bytes; PDFs may be
 directly accessible. These are warned, not claimed fixed. Back up WordPress first.
 Before upgrading HomeBackUp from 0.1.3, stop its timer and service; its old
@@ -12,7 +12,7 @@ maintenance scripts lack the new protections. The manager refuses unsafe upgrade
 An independent manager for system extensions. Enable installs a bundled Debian package;
 Disable uninstalls that package. The interface shows multiple real extensions and actual dpkg state.
 
-## Portable test release: 0.2.4
+## Portable test release: 0.2.5
 
 Extract the source ZIP, open its folder and run as your desktop user:
 
@@ -123,7 +123,7 @@ Raw Git checkouts include four matching extension packages, valid source pins an
 
 ### HomeBackUp GUI update
 
-The HomeBackUp v0.1.5 application uses the native GTK 3 interface by default, with archive listing, retention preview, structural and data verification, monthly timer status, enable/disable, and one-time Borg password enrollment. Administrative actions use PolicyKit; ordinary status requires no sudo. Package installation does not enable the timer, and upgrading does not change the current timer state.
+The HomeBackUp v0.1.6 application uses the native GTK 3 interface by default, with archive listing, retention preview, structural and data verification, monthly timer status, enable/disable, and one-time Borg password enrollment. Administrative actions use PolicyKit; ordinary status requires no sudo. Package installation does not enable the timer, and upgrading does not change the current timer state.
 
 ### Manual Security Updates (Linux Mint 22.x)
 
@@ -152,4 +152,4 @@ Portable updates require a trusted source copy and a terminal kept open through 
 
 ### Additional warnings (not fixes)
 
-Selected tools now show the unfixed privileged Python import, root backup lock-link or package replacement risk. Existing package confirmations and CLI logs carry the same notices. HomeBackUp 0.1.5 adds the lock warning to its GTK window, operation confirmations and runtime scripts. Legacy PDF extraction and website-menu tools warn about output links and unrestricted icon resources. See SECURITY_STATUS.md. Publication remains intentional.
+Selected tools describe the root-owned APT install staging, isolated updater source staging and guarded backup locks, while identifying residual plan/backup consistency risks. The package confirmation and CLI logs retain these notices. HomeBackUp 0.1.6 includes the lock notice in its GTK window and runtime scripts. Legacy PDF extraction and website-menu tools warn about output links and unrestricted icon resources. See SECURITY_STATUS.md. Publication remains intentional.
