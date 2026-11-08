@@ -13,10 +13,11 @@ import threading
 
 from execution import OperationLog, LogPanel
 
-# SECURITY: the boundary risks below remain unresolved; warnings disclose them only.
-DEB_INSTALL_WARNING = 'WARNING - UNFIXED PACKAGE REPLACEMENT RISK: A local deb can change between checksum verification and privileged APT reading it. Use a private trusted package directory; do not let other users or processes replace it. This warning is not a fix.'
-PORTABLE_IMPORT_WARNING = 'WARNING - UNFIXED PRIVILEGED PYTHON IMPORT RISK: The portable updater verifies only its main file; sudo Python may load extra modules from the same directory. Use a private trusted source copy and directory. Do not authorize a modified or shared writable copy. This warning is not a fix.'
-BACKUP_LOCK_WARNING = 'WARNING - UNFIXED BACKUP LOCK RISK: Lock-file redirections follow symbolic links and can truncate their targets with root privileges. Do not allow untrusted users or processes to modify the backup mount root or lock paths. This warning is not a fix.'
+# Security status reflects the hardened source; installed old packages are
+# NOT upgraded until the user explicitly installs the corresponding release.
+DEB_INSTALL_WARNING = 'SECURITY: Verified extension bytes are copied into a root-owned temporary directory, rehashed, resimulated and installed from that private copy. APT repository/plan changes and package maintainer scripts still require review.'
+PORTABLE_IMPORT_WARNING = 'SECURITY: The portable updater requires explicit approval and uses a root-owned SHA-256-verified source copy with isolated Python imports (-I). Kernel/NVIDIA/firmware/boot upgrades remain excluded. No updater service is installed.'
+BACKUP_LOCK_WARNING = 'SECURITY: HomeBackUp 0.1.6 uses no-follow root-owned lock files and guarded lock directories; unsafe locks stop execution. Backup retention remains destructive after successful verification. Older installed versions are not automatically changed.'
 
 def security_warning(item, *, installing=False):
     if item.get('kind') == 'portable':
