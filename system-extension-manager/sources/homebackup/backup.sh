@@ -5,8 +5,9 @@
 set -Eeuo pipefail
 umask 077
 
-# SECURITY WARNING: unresolved symlink/truncation risk at lock-file redirections.
-printf '%s\n' 'WARNING - UNFIXED BACKUP LOCK RISK: Lock-file redirections follow symbolic links and can truncate their targets with root privileges. Do not allow untrusted users or processes to modify the backup mount root or lock paths. This warning is not a fix.' >&2
+# Root lock files are opened with O_NOFOLLOW and checked for root ownership,
+# regular-file type and unique link count before acquiring the lock.
+
 
 TARGET='/media/andrew/HomeBackUp'
 TARGET_UUID='6cb1c243-6bdb-4e82-9301-cf6231b87a66'
@@ -36,13 +37,16 @@ done
 # The runner passes inherited fd 8; direct invocations acquire the same lock.
 # Retain it across inventory, create and verification. The runner retains it
 # through its later retention phase as well.
+SAFELOCK="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/safe_lock.py"
 if [[ $(readlink /proc/self/fd/8 2>/dev/null || :) != /run/lock/homebackup-monthly.lock ]]; then
-  exec 8>/run/lock/homebackup-monthly.lock
+  exec /usr/bin/python3 -I "$SAFELOCK" 8 /run/lock/homebackup-monthly.lock /usr/bin/bash "$0" "$@"
 fi
 flock -n 8 || err 'Another HomeBackUp transaction is running.'
 
 mkdir -p "$TARGET"
-exec 9>"$TARGET/.mint-recovery.lock"
+if [[ $(readlink /proc/self/fd/9 2>/dev/null || :) != "$TARGET/.mint-recovery.lock" ]]; then
+  exec /usr/bin/python3 -I "$SAFELOCK" 9 "$TARGET/.mint-recovery.lock" /usr/bin/bash "$0" "$@"
+fi
 flock -n 9 || err '已有另一项备份正在进行。'
 
 if [[ "$MODE" == 'list' ]]; then
