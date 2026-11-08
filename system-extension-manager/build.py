@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build three installable extensions plus one portable update tool."""
+"""Build the installable extensions and catalog the portable update tool."""
 import argparse
 import hashlib
 import json
@@ -26,6 +26,9 @@ def build_extensions():
         dict(id='homebackup', name='HomeBackUp', package='mint-homebackup-extension', version='0.1.5',
              launch=['/usr/bin/homebackup-ext', 'gui'],
              description='WARNING: Successful backups permanently prune older mint-* archives. Preview retention first. Borg recovery backups: monthly scheduling, verified deduplicated archives and at most 3 retained backup dates. Existing encrypted repository is reused; configure it after enabling from the Mint application menu. The /dev/sdc7 data partition is not included.'),
+        dict(id='link-provider', name='Link Provider', package='mint-link-provider-extension', version='0.2.1',
+             launch=['/usr/bin/link-provider'],
+             description='Manage and test caldav-run links to URLs or fixed local commands. Opens a standalone window. Command links run as your desktop user and block sudo.'),
     ]
     for item in definitions:
         source = ROOT / 'sources' / item['id']
@@ -85,7 +88,7 @@ Maintainer: ZhouAndrew <zhouandrew@users.noreply.github.com>
 Depends: python3 (>= 3.10), python3-tk, dpkg, apt, pkexec
 Description: Manage independent system extensions through Debian packages
  Provides multiple-extension listing, install/remove controls, verified source
- builds, application launching, live logs, and three bundled installable extensions and a portable Security Updates script.
+ builds, application launching, live logs, bundled installable extensions and a portable Security Updates script.
 ''')
         write('usr/bin/system-extension-manager', '#!/bin/sh\nexec /usr/bin/python3 /usr/share/system-extension-manager/manager.py "$@"\n', 0o755)
         write('usr/share/applications/system-extension-manager.desktop', (ROOT / 'system-extension-manager.desktop').read_text())
