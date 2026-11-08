@@ -110,12 +110,12 @@ class CatalogTests(unittest.TestCase):
 
     def test_install_and_remove_only_selected_extension_with_readback(self):
         args = lifecycle.command('anki-time-travel', True)
-        self.assertTrue(args[-1].endswith('anki-time-travel_0.1.5_all.deb'))
+        self.assertTrue(args[-1].endswith('anki-time-travel_0.1.6_all.deb'))
         log = Mock()
         log.run.return_value = subprocess.CompletedProcess([], 0, '', '')
         with patch.object(lifecycle, 'command', return_value=args), \
-             patch.object(lifecycle, 'package_status', side_effect=[('absent', None), ('install ok installed', '0.1.5')]):
-            self.assertEqual(lifecycle.change('anki-time-travel', True, log), '0.1.5')
+             patch.object(lifecycle, 'package_status', side_effect=[('absent', None), ('install ok installed', '0.1.6')]):
+            self.assertEqual(lifecycle.change('anki-time-travel', True, log), '0.1.6')
         self.assertEqual(log.run.call_count, 2)
         removal = lifecycle.command('anki-time-travel', False)
         self.assertEqual(removal[-1], 'anki-time-travel')
@@ -234,7 +234,7 @@ class ManagerGuiTests(unittest.TestCase):
             buttons = {w.cget('text'): w for w in descendants(window) if isinstance(w, ttk.Button)}
             self.assertEqual(str(buttons['Run in Terminal'].cget('state')), 'normal')
             labels = [str(w.cget('text')) for w in descendants(window) if isinstance(w, ttk.Label)]
-            self.assertTrue(any('UNFIXED PRIVILEGED PYTHON IMPORT RISK' in text for text in labels))
+            self.assertTrue(any('root-owned SHA-256-verified source copy' in text for text in labels))
             for label in ('Enable / Install', 'Disable / Uninstall', 'Update', 'Build from source...'):
                 self.assertEqual(str(buttons[label].cget('state')), 'disabled', label)
             buttons['Run in Terminal'].invoke()
@@ -270,7 +270,7 @@ class ManagerGuiTests(unittest.TestCase):
                 build.assert_not_called()
             self.assertEqual(str(buttons['Open'].cget('state')), 'normal')
             labels = [str(w.cget('text')) for w in descendants(window) if isinstance(w, ttk.Label)]
-            self.assertTrue(any('UNFIXED PACKAGE REPLACEMENT RISK' in text for text in labels))
+            self.assertTrue(any('root-owned temporary directory' in text for text in labels))
             buttons['Open'].invoke()
             def check():
                 try:
