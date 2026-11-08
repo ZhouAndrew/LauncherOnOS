@@ -13,6 +13,33 @@ import tempfile
 ROOT = Path(__file__).resolve().parent
 from version import VERSION
 
+# Ship only known manager code and checksum-pinned extension resources. Never
+# copy arbitrary checkout contents (e.g. untracked credentials, .git or logs).
+MANAGER_FILES = (
+    'README.md', 'build.py', 'execution.py', 'extensions.json',
+    'lifecycle.py', 'manager.py', 'native_dialogs.py',
+    'run.sh', 'system-extension-manager.desktop', 'version.py',
+)
+
+
+def checked_source(relative):
+    if not isinstance(relative, str) or not relative:
+        raise ValueError('Invalid manager package input path')
+    name = Path(relative)
+    if name.is_absolute() or '..' in name.parts:
+        raise ValueError('Manager package input escapes the source tree: ' + relative)
+    path = ROOT / name
+    if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(ROOT):
+        raise ValueError('Manager package input is missing or linked: ' + relative)
+    return path
+
+
+def checked_pinned(relative, checksum):
+    path = checked_source(relative)
+    if hashlib.sha256(path.read_bytes()).hexdigest() != checksum:
+        raise ValueError('Manager package input checksum mismatch: ' + relative)
+    return path
+
 
 def build_extensions():
     packages = ROOT / 'packages'
@@ -54,26 +81,35 @@ def build_manager(output_dir):
     output_dir = Path(output_dir).expanduser().resolve()
     if output_dir.is_relative_to(ROOT) and output_dir != ROOT / 'dist':
         raise ValueError('Choose an output folder outside the source tree, or use its dist folder')
-    definitions = json.loads((ROOT / 'extensions.json').read_text())
+    definitions = json.loads(checked_source('extensions.json').read_text())
+    included = set(MANAGER_FILES)
+    for relative in MANAGER_FILES:
+        checked_source(relative)
     for item in definitions:
         if item.get('kind') == 'portable':
-            path = ROOT / item['script']
-            if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(ROOT):
-                raise ValueError('Portable script is missing or unsafe: ' + item['id'])
-            if hashlib.sha256(path.read_bytes()).hexdigest() != item['sha256']:
-                raise ValueError('Portable script checksum mismatch')
+            checked_pinned(item['script'], item['sha256'])
+            included.add(item['script'])
             continue
-        path = ROOT / item['deb']
-        if hashlib.sha256(path.read_bytes()).hexdigest() != item['sha256']:
-            raise ValueError('Bundled extension checksum mismatch: ' + item['id'])
+        checked_pinned(item['deb'], item['sha256'])
+        included.add(item['deb'])
+        recipe = item.get('source', {})
+        pinned_files = recipe.get('files') if isinstance(recipe, dict) else None
+        if not isinstance(pinned_files, dict) or not pinned_files:
+            raise ValueError('Extension has no pinned source files: ' + item['id'])
+        for relative, checksum in pinned_files.items():
+            checked_pinned(relative, checksum)
+            included.add(relative)
     output = output_dir / f'system-extension-manager_{VERSION}_all.deb'
 
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
         stage = Path(tmp)
         stage.chmod(0o755)
-        shutil.copytree(ROOT, stage / 'usr/share/system-extension-manager',
-                        ignore=shutil.ignore_patterns('dist', 'tests', '__pycache__', '*.pyc', 'build-mint-homebackup-extension', 'BUILD-NOTES.md'))
+        app = stage / 'usr/share/system-extension-manager'
+        for relative in sorted(included):
+            target = app / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(checked_source(relative), target)
         def write(path, text, mode=0o644):
             path = stage / path
             path.parent.mkdir(parents=True, exist_ok=True)
