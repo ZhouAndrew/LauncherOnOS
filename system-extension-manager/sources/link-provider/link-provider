@@ -18,7 +18,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 SCHEME = "caldav-run"
 MIME_TYPE = f"x-scheme-handler/{SCHEME}"
 DESKTOP_ID = "local.link-provider.desktop"
@@ -258,14 +258,24 @@ def use_link(args):
         command = command_target(target[0], target[1:])
         if opening:
             lock_privileges()
-            subprocess.Popen(
+            process = subprocess.Popen(
                 command,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 start_new_session=True,
             )
-            print(f"Started: {name}")
+            # Process creation is not application readiness. Catch early
+            # nonzero exits, especially missing local backends, but do not
+            # block the desktop for long-running GUI applications.
+            try:
+                code = process.wait(timeout=0.35)
+            except subprocess.TimeoutExpired:
+                print(f"Dispatched: {name} (PID {process.pid}); application/backend readiness not verified.")
+            else:
+                if code:
+                    raise LinkError(f"Application exited immediately with code {code}: {name}. Check its backend and logs.")
+                print(f"Command exited with code 0: {name}; application/backend readiness not verified.")
         else:
             print(f"Executable available: {command[0]}")
         return
