@@ -4,13 +4,27 @@
 See [security status](../SECURITY_STATUS.md) for fixed and retained risks.
 ZIP 0.4.5 keeps originals by default and rechecks each remaining input before opt-in Trash. HomeBackUp 0.1.6 uses guarded no-follow root locks and verifies service shutdown.
 Anki 0.1.6 intentionally PUBLISHES: validated same-import updates may overwrite body,
-categories and tags; same-path attachments may reuse older bytes; PDFs may be
+categories and tags; conflicting same-path PDF bytes are blocked; PDFs may be
 directly accessible. These are warned, not claimed fixed. Back up WordPress first.
 Before upgrading HomeBackUp from 0.1.3, stop its timer and service; its old
 maintenance scripts lack the new protections. The manager refuses unsafe upgrades.
 
 An independent manager for system extensions. Enable installs a bundled Debian package;
 Disable uninstalls that package. The interface shows multiple real extensions and actual dpkg state.
+
+## Security hardening in 0.2.5
+
+- Privileged local Debian installation stages the approved package under root ownership, verifies the exact SHA-256 there, simulates APT and installs that same copy. The application's own package readback remains enforced.
+- The portable manual Security Updates tool uses isolated Python (`-I`) and a root-owned SHA-256-verified source snapshot; it installs nothing without explicit user approval.
+- HomeBackUp 0.1.6 uses no-follow root locks with owner/type/link and directory permission checks. Upgrade the independent package explicitly; the manager does not start any timer automatically.
+- Link Provider 0.2.2 detects immediate nonzero exits and reports that process dispatch does not establish backend readiness.
+- ZIP and Trash 0.4.5 checks each remaining input before moving it to Trash, checks its disappearance and reports partial moves; multi-file Trash is not atomic, and keeping originals remains the default.
+- Anki Time Travel 0.1.6 retains publication but refuses unrelated WordPress title/date collisions and mismatched PDF attachment bytes.
+
+**The changes in this Git repository do not upgrade existing installed extension packages.**
+Review the new versions and explicitly use the manager's Update action. Actual
+Linux Mint 22.x root APT, Borg retention/restore and live WordPress acceptance
+remain separate. Do not upgrade the kernel/NVIDIA driver as part of this review.
 
 ## Portable test release: 0.2.5
 
@@ -101,7 +115,7 @@ python3 -m unittest discover -s tests -v
 GUI tests require a graphical session (or xvfb-run). Running build.py without arguments
 prints help and builds nothing. Tests do not build the main manager deb.
 Source builds require dpkg-deb and xz; ZIP and Trash requires Nemo, zip, unzip and GIO. HomeBackUp requires BorgBackup 1.x, GTK 3 and a separately enrolled encryption passphrase. Launching `homebackup-ext` as the ordinary desktop user now opens a GTK window. Status requires no administrator privileges; privileged buttons invoke a standard PolicyKit prompt. The scheduler may genuinely be disabled and the UI reports this state rather than silently re-enabling it. Package installation does not request a Borg password; use the extension setup command afterwards.
-Anki Time Travel requires the existing WP-CLI and WordPress environment.
+Anki Time Travel requires the existing WP-CLI and WordPress environment. The 0.1.6 import refuses unrelated matching-title/date posts, hashes WordPress media against the source PDF before publishing, and stores a read-back-verified source marker. Existing verified import posts may still be updated; published attachments can be publicly accessible.
 
 ## State-aware actions
 
