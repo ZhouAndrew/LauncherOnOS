@@ -100,6 +100,19 @@ An existing installed version is detected automatically. Use Update to upgrade i
 Disable removes the extension package without deleting WordPress posts, PDFs, settings or logs.
 ZIP and Trash is used from Nemo's context menu and has no standalone application window.
 
+## Log history
+
+Open **Log History...** in the manager to view saved operation logs and Security Updates
+terminal transcripts, including logs from earlier versions. The list shows the most
+recently written files first. Select a log to preview it, use **Refresh logs** to read new
+terminal output, or use **Open log folder** to find the originals in your file manager.
+**Save log...** exports the full selected file, including output outside the preview.
+
+The history includes ZIP and Trash and Anki import logs written to the shared directory.
+It uses the current user's `$XDG_STATE_HOME/system-extension-manager/logs`
+(default `~/.local/state/system-extension-manager/logs`). System journal entries
+and output from scripts run outside the manager are stored by those tools separately.
+
 ## CLI
 
 ```bash
