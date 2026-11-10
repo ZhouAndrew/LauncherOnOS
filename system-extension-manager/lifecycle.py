@@ -802,7 +802,10 @@ def show_gui(parent=None):
                 events.put(('done', error))
         threading.Thread(target=worker, daemon=False).start()
 
+    poll_job = None
+
     def poll():
+        nonlocal poll_job
         try:
             for _ in range(200):
                 kind, value = events.get_nowait()
@@ -816,7 +819,7 @@ def show_gui(parent=None):
                         panel.append('Operation failed: ' + value + '\n')
         except queue.Empty:
             pass
-        window.after(75, poll)
+        poll_job = window.after(75, poll)
     install_button = ttk.Button(buttons, text='Enable / Install', command=lambda: operate(True))
     remove_button = ttk.Button(buttons, text='Disable / Uninstall', command=lambda: operate(False))
     source_button = ttk.Button(buttons, text='Build from source...', command=lambda: operate(True, True))
@@ -881,9 +884,16 @@ def show_gui(parent=None):
             messagebox.showinfo('Operation running', 'Wait for the current operation to finish. Its log is saved automatically.', parent=window)
         else:
             window.destroy()
+    def cancel_callbacks(event):
+        if event.widget is window:
+            for callback in (poll_job, minimum_update):
+                if callback is not None:
+                    window.after_cancel(callback)
+
+    window.bind('<Destroy>', cancel_callbacks)
     window.protocol('WM_DELETE_WINDOW', close)
     refresh()
-    window.after(75, poll)
+    poll_job = window.after(75, poll)
     if parent is None:
         window.mainloop()
     return window
