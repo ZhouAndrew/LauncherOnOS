@@ -394,9 +394,45 @@ def portable_script(item):
     return path
 
 
-def terminal_command(script):
-    python = '/usr/bin/python3'
-    argv = [python, str(script), '--interactive']
+# The terminal process has its own transcript. The GUI's launch log must
+# not claim that starting a terminal means that the update succeeded.
+PORTABLE_TERMINAL_WRAPPER = r"""
+logfile=$1
+shift
+printf 'Security Updates terminal session started.\n' | /usr/bin/tee -a -- "$logfile"
+"$@" 2>&1 | /usr/bin/tee -a -- "$logfile"
+statuses=("${PIPESTATUS[@]}")
+code=${statuses[0]}
+if (( statuses[1] != 0 )); then
+    printf 'ERROR: Could not save all terminal output (tee exit code %s).\n' "${statuses[1]}" >&2
+    if (( code == 0 )); then code=${statuses[1]}; fi
+fi
+printf 'Exit code: %s\n' "$code" | /usr/bin/tee -a -- "$logfile"
+printf '\nFull output log: %s\n' "$logfile"
+if [[ -t 0 ]]; then
+    printf 'Press Enter to close this terminal... '
+    IFS= read -r _ || true
+fi
+exit "$code"
+"""
+
+
+def new_terminal_transcript():
+    base = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state'))
+    folder = base / 'system-extension-manager/logs'
+    folder.mkdir(parents=True, exist_ok=True, mode=0o700)
+    fd, name = tempfile.mkstemp(prefix='security-updates-terminal-', suffix='.log', dir=folder)
+    os.close(fd)
+    return Path(name)
+
+
+def terminal_command(script, transcript=None):
+    # Bash preserves the Python exit status through tee and waits for Enter.
+    # Positional arguments prevent shell injection through file paths.
+    transcript = Path(transcript) if transcript is not None else new_terminal_transcript()
+    argv = ['/bin/bash', '-c', PORTABLE_TERMINAL_WRAPPER,
+            'portable-security-updates', str(transcript),
+            '/usr/bin/python3', str(script), '--interactive']
     terminal = shutil.which('x-terminal-emulator')
     if terminal:
         return [terminal, '-e', *argv]
@@ -413,10 +449,10 @@ def terminal_command(script):
     raise ValueError('No compatible graphical terminal found. No changes were made.')
 
 
-def launch_command(key):
+def launch_command(key, *, transcript=None):
     item = plugin(key)
     if item.get('kind') == 'portable':
-        return terminal_command(portable_script(item))
+        return terminal_command(portable_script(item), transcript=transcript)
     if installed_version(item['package']) is None:
         raise ValueError('Enable / Install this extension before opening it')
     args = item.get('launch')
@@ -428,21 +464,25 @@ def launch_command(key):
         raise ValueError('The installed extension executable is missing; reinstall the extension')
     return args
 
-
 def open_extension(key, log=None):
     owned = log is None
     log = log or OperationLog('Open: ' + key)
     try:
         item = plugin(key)
-        args = launch_command(key)
-        if item.get('kind') == 'portable':
+        portable = item.get('kind') == 'portable'
+        transcript = new_terminal_transcript() if portable else None
+        args = launch_command(key, transcript=transcript)
+        if portable:
             log.stage(PORTABLE_IMPORT_WARNING)
             import shlex
             log.stage('Launching terminal for ' + item['name'] + ' (no package installation)')
+            log.stage('Terminal stdout/stderr and exit status: ' + str(transcript))
             log.write('$ ' + shlex.join(args) + '\n')
-            subprocess.Popen(args, start_new_session=True, stdin=subprocess.DEVNULL,
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            log.stage('Terminal launched. Output and confirmation are in the terminal.')
+            # The terminal emulator's own startup errors are also saved.
+            with transcript.open('a', encoding='utf-8') as terminal_output:
+                subprocess.Popen(args, start_new_session=True, stdin=subprocess.DEVNULL,
+                                 stdout=terminal_output, stderr=subprocess.STDOUT)
+            log.stage('Terminal launch requested. Check the transcript for the actual result.')
         else:
             log.stage('Opening ' + item['name'])
             log.run(args)
