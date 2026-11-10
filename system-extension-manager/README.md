@@ -1,6 +1,6 @@
 # System Extension Manager
 
-**ACTIVE / MAINTAINED — 0.2.7.** Mint Toolbox is DEPRECATED / NOT ACTIVE.
+**ACTIVE / MAINTAINED — 0.2.8.** The legacy Mint Toolbox application is RETIRED and UNSAFE: **DO NOT USE, RUN, INSTALL, UPGRADE, BUILD, OR TEST IT.** Do not change files under `mint-toolbox/`. Its automatic GitHub Actions workflow is disabled. System Extension Manager is a separate maintained application; a catalog entry attempting to revive Mint Toolbox is rejected.
 See [security status](../SECURITY_STATUS.md) for fixed and retained risks.
 ZIP 0.4.5 keeps originals by default and rechecks each remaining input before opt-in Trash. HomeBackUp 0.1.6 uses guarded no-follow root locks and verifies service shutdown.
 Anki 0.1.6 intentionally PUBLISHES: validated same-import updates may overwrite body,
@@ -12,7 +12,7 @@ maintenance scripts lack the new protections. The manager refuses unsafe upgrade
 An independent manager for system extensions. Enable installs a bundled Debian package;
 Disable uninstalls that package. The interface shows multiple real extensions and actual dpkg state.
 
-## Security hardening in 0.2.7
+## Security hardening in 0.2.8
 
 - Privileged local Debian installation stages the approved package under root ownership, verifies the exact SHA-256 there, simulates APT and installs that same copy. The application's own package readback remains enforced.
 - The portable manual Security Updates tool uses isolated Python (`-I`) and a root-owned SHA-256-verified source snapshot; it installs nothing without explicit user approval.
@@ -26,7 +26,7 @@ Review the new versions and explicitly use the manager's Update action. Actual
 Linux Mint 22.x root APT, Borg retention/restore and live WordPress acceptance
 remain separate. Do not upgrade the kernel/NVIDIA driver as part of this review.
 
-## Portable test release: 0.2.7
+## Portable test release: 0.2.8
 
 Extract the source ZIP, open its folder and run as your desktop user:
 
