@@ -11,7 +11,7 @@ import sys
 import tempfile
 import threading
 
-from execution import OperationLog, LogPanel
+from execution import OperationLog, LogPanel, new_log_file, scrollable_tree, show_log_history
 
 # Security status reflects the hardened source; installed old packages are
 # NOT upgraded until the user explicitly installs the corresponding release.
@@ -519,12 +519,9 @@ exit "$code"
 
 
 def new_terminal_transcript():
-    base = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state'))
-    folder = base / 'system-extension-manager/logs'
-    folder.mkdir(parents=True, exist_ok=True, mode=0o700)
-    fd, name = tempfile.mkstemp(prefix='security-updates-terminal-', suffix='.log', dir=folder)
+    fd, path = new_log_file('security-updates-terminal-')
     os.close(fd)
-    return Path(name)
+    return path
 
 
 def terminal_command(script, transcript=None):
@@ -623,40 +620,57 @@ def show_gui(parent=None):
     window = tk.Toplevel(parent) if parent else tk.Tk()
     window.title('System Extension Manager')
     window.geometry('1100x760')
-    window.minsize(820, 580)
-    ttk.Label(window, text='ACTIVE / MAINTAINED - System Extension Manager', foreground='#17633b').pack(anchor='w', padx=12, pady=(8, 0))
-    ttk.Label(window, text=MINT_TOOLBOX_RETIRED_WARNING, foreground='#9b3200', wraplength=1050).pack(anchor='w', padx=12, pady=(2, 4))
-    ttk.Label(window, text='WARNING: Installed does not mean a backup timer is running. Anki imports publish and may overwrite posts. ZIP keeps originals. Security Updates runs manually in a terminal; keep it open until completion.', foreground='#9b3200', wraplength=1050).pack(anchor='w', padx=12, pady=4)
-    ttk.Label(window, text='Install / Uninstall affects all users. Portable tools run directly without installation.').pack(anchor='w', padx=12, pady=10)
+    window.columnconfigure(0, weight=1)
+    window.rowconfigure(4, weight=1)
+    window.rowconfigure(7, weight=1)
+    header = ttk.Frame(window)
+    header.grid(row=0, sticky='ew', padx=12, pady=(8, 0))
+    ttk.Label(header, text='ACTIVE / MAINTAINED - System Extension Manager', foreground='#17633b').pack(fill='x')
+    retired = ttk.Label(header, text=MINT_TOOLBOX_RETIRED_WARNING, foreground='#9b3200', justify='left')
+    retired.pack(fill='x', pady=(2, 0))
+    notice = ttk.Label(window, text='WARNING: Installed does not mean a backup timer is running. Anki imports publish and may overwrite posts. ZIP keeps originals. Security Updates runs manually in a terminal; keep it open until completion.', foreground='#9b3200', justify='left')
+    notice.grid(row=1, sticky='ew', padx=12, pady=4)
+    scope = ttk.Label(window, text='Install / Uninstall affects all users. Portable tools run directly without installation.', justify='left')
+    scope.grid(row=2, sticky='ew', padx=12, pady=(0, 8))
     bar = ttk.Frame(window)
-    bar.pack(fill='x', padx=12)
+    bar.grid(row=3, sticky='ew', padx=12)
     ttk.Label(bar, text='Search').pack(side='left')
     query, status = tk.StringVar(), tk.StringVar(value='All')
-    ttk.Entry(bar, textvariable=query).pack(side='left', fill='x', expand=True, padx=8)
-    ttk.Combobox(bar, textvariable=status, values=['All', 'Ready', 'Enabled', 'Disabled', 'Incomplete', 'Unknown'], state='readonly', width=16).pack(side='left')
-    pane = ttk.Panedwindow(window, orient='vertical')
-    pane.pack(fill='both', expand=True, padx=12, pady=10)
-    upper = ttk.Frame(pane)
-    pane.add(upper, weight=3)
-    listing = ttk.Frame(upper)
-    listing.pack(fill='both', expand=True)
+    ttk.Entry(bar, textvariable=query, width=1).pack(side='left', fill='x', expand=True, padx=8)
+    ttk.Combobox(bar, textvariable=status, values=['All', 'Ready', 'Enabled', 'Disabled', 'Incomplete', 'Unknown'], state='readonly', width=12).pack(side='left')
+    def open_history():
+        if 'log_history' in window.children:
+            history = window.children['log_history']
+            history.deiconify()
+            history.lift()
+            history.focus_set()
+        else:
+            show_log_history(window)
+
+    ttk.Button(bar, text='Log History...', command=open_history).pack(side='left', padx=(8, 0))
+    listing = ttk.Frame(window)
+    listing.grid(row=4, sticky='nsew', padx=12, pady=(8, 0))
     columns = ('name', 'version', 'state', 'source')
-    tree = ttk.Treeview(listing, columns=columns, show='headings', selectmode='browse', height=7)
-    for col, title, width in [('name', 'Tool', 280), ('version', 'Bundled version', 120), ('state', 'System status', 220), ('source', 'Source build', 110)]:
+    tree = ttk.Treeview(listing, columns=columns, show='headings', selectmode='browse', height=2)
+    for col, title, width in [('name', 'Tool', 180), ('version', 'Bundled version', 125), ('state', 'System status', 290), ('source', 'Source build', 110)]:
         tree.heading(col, text=title)
-        tree.column(col, width=width, minwidth=90)
-    scroll = ttk.Scrollbar(listing, command=tree.yview)
-    tree.configure(yscrollcommand=scroll.set)
-    scroll.pack(side='right', fill='y')
-    tree.pack(fill='both', expand=True)
+        tree.column(col, width=width, minwidth=width)
+    scrollable_tree(listing, tree)
+
+    details = ttk.Frame(window)
+    details.grid(row=5, sticky='ew', padx=12, pady=(6, 4))
     description = tk.StringVar(value='Select an extension to view its description.')
-    ttk.Label(upper, textvariable=description, wraplength=980).pack(fill='x', pady=8)
+    description_label = ttk.Label(details, textvariable=description, justify='left')
+    description_label.pack(fill='x')
     warning = tk.StringVar()
-    ttk.Label(upper, textvariable=warning, foreground='#9b3200', wraplength=980, justify='left').pack(fill='x', pady=(0, 8))
-    buttons = ttk.Frame(upper)
-    buttons.pack(fill='x')
-    panel = LogPanel(pane)
-    pane.add(panel.frame, weight=3)
+    warning_label = ttk.Label(details, textvariable=warning, foreground='#9b3200', justify='left')
+    warning_label.pack(fill='x')
+
+    buttons = ttk.Frame(window)
+    buttons.grid(row=6, sticky='ew', padx=12)
+    panel = LogPanel(window)
+    panel.text.configure(width=1, height=2)
+    panel.frame.grid(row=7, sticky='nsew', padx=12, pady=(8, 10))
     events = queue.Queue()
     busy = [False]
     rows = []
@@ -681,6 +695,7 @@ def show_gui(parent=None):
         item = selected()
         description.set(item['description'] if item else 'Select an extension to view its description.')
         warning.set(security_warning(item) if item else '')
+        schedule_minimum_height()
         for control in operation_buttons:
             control.configure(state='normal' if item and not busy[0] else 'disabled')
         install_button.configure(state='normal' if item and item['install'] and not busy[0] else 'disabled')
@@ -787,7 +802,10 @@ def show_gui(parent=None):
                 events.put(('done', error))
         threading.Thread(target=worker, daemon=False).start()
 
+    poll_job = None
+
     def poll():
+        nonlocal poll_job
         try:
             for _ in range(200):
                 kind, value = events.get_nowait()
@@ -801,21 +819,63 @@ def show_gui(parent=None):
                         panel.append('Operation failed: ' + value + '\n')
         except queue.Empty:
             pass
-        window.after(75, poll)
+        poll_job = window.after(75, poll)
     install_button = ttk.Button(buttons, text='Enable / Install', command=lambda: operate(True))
     remove_button = ttk.Button(buttons, text='Disable / Uninstall', command=lambda: operate(False))
     source_button = ttk.Button(buttons, text='Build from source...', command=lambda: operate(True, True))
-    open_button = ttk.Button(buttons, text='Open', command=lambda: operate(True, launch=True))
+    open_button = ttk.Button(buttons, text='Open', width=17, command=lambda: operate(True, launch=True))
     update_button = ttk.Button(buttons, text='Update', command=lambda: operate(True, update=True))
     update_all_button = ttk.Button(buttons, text='Update All', command=update_everything)
     operation_buttons = [install_button, remove_button, update_button, source_button, open_button]
-    for button in operation_buttons:
-        button.pack(side='left', padx=(0, 8))
-    update_all_button.pack(side='left', padx=(12, 8))
     refresh_button = ttk.Button(buttons, text='Refresh status', command=refresh)
-    refresh_button.pack(side='left')
     package_button = ttk.Button(buttons, text='Build Package...', command=package_manager)
-    package_button.pack(side='right')
+    actions = [*operation_buttons, update_all_button, refresh_button, package_button]
+    gap = 6
+    action_widths = [button.winfo_reqwidth() + gap for button in actions]
+    columns = len(actions) // 2
+    compact_width = sum(max(a, b) for a, b in zip(action_widths[:columns], action_widths[columns:]))
+    min_width = max(560, compact_width + 24)
+    action_columns = None
+    layout_width = None
+    minimum_update = None
+
+    def schedule_minimum_height():
+        nonlocal minimum_update
+        if minimum_update is not None:
+            window.after_cancel(minimum_update)
+
+        def update_minimum_height():
+            nonlocal minimum_update
+            minimum_update = None
+            height = max(520, window.winfo_reqheight())
+            if window.minsize() != (min_width, height):
+                window.minsize(min_width, height)
+
+        minimum_update = window.after_idle(update_minimum_height)
+
+    def resize(_event=None):
+        nonlocal action_columns, layout_width
+        if _event is not None and _event.widget is not window:
+            if _event.widget.master is window:
+                schedule_minimum_height()
+            return
+        available = max(min_width, window.winfo_width()) - 24
+        if available == layout_width:
+            return
+        layout_width = available
+        for label in (retired, notice, scope, description_label, warning_label):
+            label.configure(wraplength=available)
+        count = len(actions) if sum(action_widths) <= available else columns
+        if count != action_columns:
+            action_columns = count
+            for index, button in enumerate(actions):
+                row, column = divmod(index, count)
+                button.grid(row=row, column=column, sticky='ew', padx=(0, gap), pady=(0, 4))
+        schedule_minimum_height()
+
+    window.minsize(min_width, 520)
+    window.bind('<Configure>', resize)
+    resize()
     tree.bind('<<TreeviewSelect>>', update_selection)
     query.trace_add('write', render)
     status.trace_add('write', render)
@@ -824,9 +884,16 @@ def show_gui(parent=None):
             messagebox.showinfo('Operation running', 'Wait for the current operation to finish. Its log is saved automatically.', parent=window)
         else:
             window.destroy()
+    def cancel_callbacks(event):
+        if event.widget is window:
+            for callback in (poll_job, minimum_update):
+                if callback is not None:
+                    window.after_cancel(callback)
+
+    window.bind('<Destroy>', cancel_callbacks)
     window.protocol('WM_DELETE_WINDOW', close)
     refresh()
-    window.after(75, poll)
+    poll_job = window.after(75, poll)
     if parent is None:
         window.mainloop()
     return window
