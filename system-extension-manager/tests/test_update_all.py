@@ -27,7 +27,7 @@ class UpdateAllTests(unittest.TestCase):
         with patch.object(lifecycle, 'plugins', return_value=[self.one, self.two, self.disabled, self.portable]), \
              patch.object(lifecycle, 'package_status', side_effect=results) as status, \
              patch.object(lifecycle, 'bundled_deb') as verified, \
-             patch.object(lifecycle.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, '', '')) as compare:
+             patch.object(lifecycle.subprocess, 'run', side_effect=[subprocess.CompletedProcess([], 0, '', ''), subprocess.CompletedProcess([], 1, '', '')]) as compare:
             plan = lifecycle.update_all_plan()
         self.assertEqual(plan, [(self.one, '1.0')])
         self.assertEqual(status.call_count, 3)
