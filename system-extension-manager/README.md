@@ -1,6 +1,6 @@
 # System Extension Manager
 
-**ACTIVE / MAINTAINED — 0.2.6.** Mint Toolbox is DEPRECATED / NOT ACTIVE.
+**ACTIVE / MAINTAINED — 0.2.7.** Mint Toolbox is DEPRECATED / NOT ACTIVE.
 See [security status](../SECURITY_STATUS.md) for fixed and retained risks.
 ZIP 0.4.5 keeps originals by default and rechecks each remaining input before opt-in Trash. HomeBackUp 0.1.6 uses guarded no-follow root locks and verifies service shutdown.
 Anki 0.1.6 intentionally PUBLISHES: validated same-import updates may overwrite body,
@@ -12,7 +12,7 @@ maintenance scripts lack the new protections. The manager refuses unsafe upgrade
 An independent manager for system extensions. Enable installs a bundled Debian package;
 Disable uninstalls that package. The interface shows multiple real extensions and actual dpkg state.
 
-## Security hardening in 0.2.6
+## Security hardening in 0.2.7
 
 - Privileged local Debian installation stages the approved package under root ownership, verifies the exact SHA-256 there, simulates APT and installs that same copy. The application's own package readback remains enforced.
 - The portable manual Security Updates tool uses isolated Python (`-I`) and a root-owned SHA-256-verified source snapshot; it installs nothing without explicit user approval.
@@ -26,7 +26,7 @@ Review the new versions and explicitly use the manager's Update action. Actual
 Linux Mint 22.x root APT, Borg retention/restore and live WordPress acceptance
 remain separate. Do not upgrade the kernel/NVIDIA driver as part of this review.
 
-## Portable test release: 0.2.6
+## Portable test release: 0.2.7
 
 Extract the source ZIP, open its folder and run as your desktop user:
 
@@ -54,6 +54,32 @@ bash run.sh --build-package --output-dir /tmp/manager-package
 
 Only if you later want system installation, install that deb with apt.
 The included system-extension-manager.desktop is for the optional installed manager.
+
+## One-time Update All (0.2.7)
+
+Select **Update All** in the manager window or, from a desktop terminal, run:
+
+```bash
+bash run.sh --update-all
+```
+
+The manager checks real dpkg status and compares installed versions with bundled
+releases. It previews *only* extensions that are already installed **and older** than
+the verified release. Disabled/uninstalled extensions stay disabled, current or newer
+versions are never downgraded, and partially installed extensions block the batch.
+The update plan and each package are checked before modifications, and every package
+update uses the existing simulation, root-owned hash-verified stage, and post-install
+dpkg readback. A failed upgrade stops the batch; earlier completed upgrades are not
+rolled back. Individual packages may still request administrator authorization.
+
+After installed extensions are handled, Update All launches the portable **Security
+Updates** terminal, where APT security candidates are separately reviewed and require
+typing `UPDATE` to authorize package installation. The terminal stays open and writes
+its own full transcript. This is a single manually triggered workflow, **not an
+unattended upgrade**. No scheduler, missing extension installation, kernel/NVIDIA/DKMS/
+firmware/boot upgrade, or manager self-update is performed. Update All uses the releases
+bundled in this manager version; it does not automatically download new releases from
+GitHub.
 
 ## Extensions
 
