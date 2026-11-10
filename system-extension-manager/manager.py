@@ -17,6 +17,7 @@ def main(argv=None):
     choices = [row['id'] for row in lifecycle.plugins()]
     ops.add_argument('--enable', metavar='ID', choices=choices, help='install the bundled extension deb')
     ops.add_argument('--update', metavar='ID', choices=choices, help='update an installed extension to a newer bundled version')
+    ops.add_argument('--update-all', action='store_true', help='one-time upgrade installed outdated extensions, then manually review security updates')
     ops.add_argument('--disable', metavar='ID', choices=choices, help='uninstall the extension package')
     ops.add_argument('--build', metavar='ID', choices=choices, help='build pinned sources as a regular user, then install')
     ops.add_argument('--open', metavar='ID', choices=choices, help='open an installed extension or a portable tool in a terminal')
@@ -32,6 +33,21 @@ def main(argv=None):
             lifecycle.change(args.enable, True)
         elif args.update:
             lifecycle.change(args.update, True, update=True)
+        elif args.update_all:
+            planned = lifecycle.update_all_plan()
+            print('Installed extension updates:')
+            for item, installed in planned:
+                print('  {}: {} -> {}'.format(item['name'], installed, item['version']))
+            if not planned:
+                print('  None (disabled extensions stay disabled).')
+            print('After these upgrades, a separate terminal will review security-only APT updates.')
+            print('Kernel/NVIDIA/DKMS/firmware/boot packages remain protected; no scheduler is installed.')
+            if not sys.stdin.isatty():
+                raise ValueError('Update All requires an interactive terminal for explicit authorization.')
+            if input('Type UPDATE ALL to proceed (anything else cancels): ').strip() == 'UPDATE ALL':
+                lifecycle.update_all(include_security=True)
+            else:
+                print('Cancelled; no updates performed.')
         elif args.disable:
             lifecycle.change(args.disable, False)
         elif args.build:
