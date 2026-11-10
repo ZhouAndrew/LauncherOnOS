@@ -18,6 +18,11 @@ from execution import OperationLog, LogPanel
 DEB_INSTALL_WARNING = 'SECURITY: Verified extension bytes are copied into a root-owned temporary directory, rehashed, resimulated and installed from that private copy. APT repository/plan changes and package maintainer scripts still require review.'
 PORTABLE_IMPORT_WARNING = 'SECURITY: The portable updater requires explicit approval and uses a root-owned SHA-256-verified source copy with isolated Python imports (-I). Kernel/NVIDIA/firmware/boot upgrades remain excluded. No updater service is installed.'
 BACKUP_LOCK_WARNING = 'SECURITY: HomeBackUp 0.1.6 uses no-follow root-owned lock files and guarded lock directories; unsafe locks stop execution. Backup retention remains destructive after successful verification. Older installed versions are not automatically changed.'
+MINT_TOOLBOX_RETIRED_WARNING = ('DO NOT USE MINT TOOLBOX: retired/unsafe legacy project. '
+                                'Never run, install, upgrade, rebuild, or restore Mint Toolbox. '
+                                'The legacy mint-toolbox/ source tree must remain untouched. '
+                                'System Extension Manager is a separate maintained application.')
+
 
 def security_warning(item, *, installing=False):
     if item.get('kind') == 'portable':
@@ -124,10 +129,31 @@ except (OSError, ValueError, subprocess.SubprocessError) as exc:
 """
 
 
+def reject_retired_mint_toolbox(item):
+    """Fail closed if a catalog entry tries to revive the abandoned app.
+
+    Standalone extensions (e.g. ZIP and Trash) are not the Mint Toolbox app.
+    Do not inspect or modify the preserved legacy project directory.
+    """
+    if item.get('id', '').casefold() == 'mint-toolbox' or (
+        item.get('name', '').strip().casefold() == 'mint toolbox'
+    ) or item.get('package', '').casefold() == 'mint-toolbox':
+        raise ValueError(MINT_TOOLBOX_RETIRED_WARNING)
+    launch = item.get('launch', [])
+    if isinstance(launch, list) and launch:
+        executable = Path(str(launch[0])).name.casefold()
+        if executable in ('mint-toolbox', 'mint-toolbox.py', 'mint_toolbox'):
+            raise ValueError(MINT_TOOLBOX_RETIRED_WARNING)
+    for path in (item.get('script'), item.get('deb')):
+        if isinstance(path, str) and 'mint-toolbox' in Path(path).parts:
+            raise ValueError(MINT_TOOLBOX_RETIRED_WARNING)
+
+
 def plugins():
     rows = json.loads((ROOT / 'extensions.json').read_text('utf-8'))
     ids, packages = set(), set()
     for item in rows:
+        reject_retired_mint_toolbox(item)
         if not re.fullmatch(r'[a-z][a-z0-9-]{0,63}', item['id']) or item['id'] in ids:
             raise ValueError('Invalid or duplicate extension ID')
         if item.get('kind') == 'portable':
@@ -599,6 +625,7 @@ def show_gui(parent=None):
     window.geometry('1100x760')
     window.minsize(820, 580)
     ttk.Label(window, text='ACTIVE / MAINTAINED - System Extension Manager', foreground='#17633b').pack(anchor='w', padx=12, pady=(8, 0))
+    ttk.Label(window, text=MINT_TOOLBOX_RETIRED_WARNING, foreground='#9b3200', wraplength=1050).pack(anchor='w', padx=12, pady=(2, 4))
     ttk.Label(window, text='WARNING: Installed does not mean a backup timer is running. Anki imports publish and may overwrite posts. ZIP keeps originals. Security Updates runs manually in a terminal; keep it open until completion.', foreground='#9b3200', wraplength=1050).pack(anchor='w', padx=12, pady=4)
     ttk.Label(window, text='Install / Uninstall affects all users. Portable tools run directly without installation.').pack(anchor='w', padx=12, pady=10)
     bar = ttk.Frame(window)
