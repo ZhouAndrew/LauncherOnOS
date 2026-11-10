@@ -11,7 +11,7 @@ import sys
 import tempfile
 import threading
 
-from execution import OperationLog, LogPanel
+from execution import OperationLog, LogPanel, new_log_file, show_log_history
 
 # Security status reflects the hardened source; installed old packages are
 # NOT upgraded until the user explicitly installs the corresponding release.
@@ -418,12 +418,9 @@ exit "$code"
 
 
 def new_terminal_transcript():
-    base = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state'))
-    folder = base / 'system-extension-manager/logs'
-    folder.mkdir(parents=True, exist_ok=True, mode=0o700)
-    fd, name = tempfile.mkstemp(prefix='security-updates-terminal-', suffix='.log', dir=folder)
+    fd, path = new_log_file('security-updates-terminal-')
     os.close(fd)
-    return Path(name)
+    return path
 
 
 def terminal_command(script, transcript=None):
@@ -532,6 +529,16 @@ def show_gui(parent=None):
     query, status = tk.StringVar(), tk.StringVar(value='All')
     ttk.Entry(bar, textvariable=query).pack(side='left', fill='x', expand=True, padx=8)
     ttk.Combobox(bar, textvariable=status, values=['All', 'Ready', 'Enabled', 'Disabled', 'Incomplete', 'Unknown'], state='readonly', width=16).pack(side='left')
+    def open_history():
+        if 'log_history' in window.children:
+            history = window.children['log_history']
+            history.deiconify()
+            history.lift()
+            history.focus_set()
+        else:
+            show_log_history(window)
+
+    ttk.Button(bar, text='Log History...', command=open_history).pack(side='left', padx=(8, 0))
     pane = ttk.Panedwindow(window, orient='vertical')
     pane.pack(fill='both', expand=True, padx=12, pady=10)
     upper = ttk.Frame(pane)

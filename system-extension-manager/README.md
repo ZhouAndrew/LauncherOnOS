@@ -1,6 +1,6 @@
 # System Extension Manager
 
-**ACTIVE / MAINTAINED — 0.2.6.** Mint Toolbox is DEPRECATED / NOT ACTIVE.
+**ACTIVE / MAINTAINED — 0.2.7.** Mint Toolbox is DEPRECATED / NOT ACTIVE.
 See [security status](../SECURITY_STATUS.md) for fixed and retained risks.
 ZIP 0.4.5 keeps originals by default and rechecks each remaining input before opt-in Trash. HomeBackUp 0.1.6 uses guarded no-follow root locks and verifies service shutdown.
 Anki 0.1.6 intentionally PUBLISHES: validated same-import updates may overwrite body,
@@ -26,7 +26,7 @@ Review the new versions and explicitly use the manager's Update action. Actual
 Linux Mint 22.x root APT, Borg retention/restore and live WordPress acceptance
 remain separate. Do not upgrade the kernel/NVIDIA driver as part of this review.
 
-## Portable test release: 0.2.6
+## Portable test release: 0.2.7
 
 Extract the source ZIP, open its folder and run as your desktop user:
 
@@ -73,6 +73,19 @@ Select Anki Time Travel, click **Enable / Install**, then **Open**.
 An existing installed version is detected automatically. Use Update to upgrade it to the bundled version.
 Disable removes the extension package without deleting WordPress posts, PDFs, settings or logs.
 ZIP and Trash is used from Nemo's context menu and has no standalone application window.
+
+## Log history
+
+Open **Log History...** in the manager to view saved operation logs and Security Updates
+terminal transcripts, including logs from earlier versions. The list shows the most
+recently written files first. Select a log to preview it, use **Refresh logs** to read new
+terminal output, or use **Open log folder** to find the originals in your file manager.
+**Save log...** exports the full selected file, including output outside the preview.
+
+The history includes ZIP and Trash and Anki import logs written to the shared directory.
+It uses the current user's `$XDG_STATE_HOME/system-extension-manager/logs`
+(default `~/.local/state/system-extension-manager/logs`). System journal entries
+and output from scripts run outside the manager are stored by those tools separately.
 
 ## CLI
 
