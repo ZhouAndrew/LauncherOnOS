@@ -1,4 +1,10 @@
-> **ACTIVE / MAINTAINED:** [System Extension Manager](system-extension-manager/) is the current product. Mint Toolbox is DEPRECATED; use it only with its security warnings.
+> **CURRENT / MAINTAINED:** [System Extension Manager](system-extension-manager/) is the current, independent project.
+>
+> **DO NOT USE MINT TOOLBOX — RETIRED / UNSAFE.** Never run, install, update,
+> build, test, or recommend the legacy Mint Toolbox application. The existing
+> `mint-toolbox/` directory is preserved for historical reference only and
+> **must not be modified**. Its automatic CI workflow is disabled. Do not
+> mistake independent System Extension Manager components for Mint Toolbox.
 
 # LauncherOnOS
 
