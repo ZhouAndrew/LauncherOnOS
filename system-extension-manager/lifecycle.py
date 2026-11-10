@@ -651,7 +651,7 @@ def show_gui(parent=None):
     listing = ttk.Frame(window)
     listing.grid(row=4, sticky='nsew', padx=12, pady=(8, 0))
     columns = ('name', 'version', 'state', 'source')
-    tree = ttk.Treeview(listing, columns=columns, show='headings', selectmode='browse', height=3)
+    tree = ttk.Treeview(listing, columns=columns, show='headings', selectmode='browse', height=2)
     for col, title, width in [('name', 'Tool', 180), ('version', 'Bundled version', 125), ('state', 'System status', 290), ('source', 'Source build', 110)]:
         tree.heading(col, text=title)
         tree.column(col, width=width, minwidth=width)
@@ -669,7 +669,7 @@ def show_gui(parent=None):
     buttons = ttk.Frame(window)
     buttons.grid(row=6, sticky='ew', padx=12)
     panel = LogPanel(window)
-    panel.text.configure(width=1, height=3)
+    panel.text.configure(width=1, height=2)
     panel.frame.grid(row=7, sticky='nsew', padx=12, pady=(8, 10))
     events = queue.Queue()
     busy = [False]
@@ -695,6 +695,7 @@ def show_gui(parent=None):
         item = selected()
         description.set(item['description'] if item else 'Select an extension to view its description.')
         warning.set(security_warning(item) if item else '')
+        schedule_minimum_height()
         for control in operation_buttons:
             control.configure(state='normal' if item and not busy[0] else 'disabled')
         install_button.configure(state='normal' if item and item['install'] and not busy[0] else 'disabled')
@@ -833,6 +834,21 @@ def show_gui(parent=None):
     min_width = max(560, compact_width + 24)
     action_columns = None
     layout_width = None
+    minimum_update = None
+
+    def schedule_minimum_height():
+        nonlocal minimum_update
+        if minimum_update is not None:
+            window.after_cancel(minimum_update)
+
+        def update_minimum_height():
+            nonlocal minimum_update
+            minimum_update = None
+            height = max(520, window.winfo_reqheight())
+            if window.minsize() != (min_width, height):
+                window.minsize(min_width, height)
+
+        minimum_update = window.after_idle(update_minimum_height)
 
     def resize(_event=None):
         nonlocal action_columns, layout_width
@@ -850,6 +866,7 @@ def show_gui(parent=None):
             for index, button in enumerate(actions):
                 row, column = divmod(index, count)
                 button.grid(row=row, column=column, sticky='ew', padx=(0, gap), pady=(0, 4))
+        schedule_minimum_height()
 
     window.minsize(min_width, 520)
     window.bind('<Configure>', resize)
