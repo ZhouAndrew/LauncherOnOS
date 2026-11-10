@@ -377,6 +377,81 @@ def change(key, enable, log=None, from_source=False, update=False):
             log.close()
 
 
+def update_all_plan(log=None):
+    """Return installed extensions strictly older than their verified bundled releases.
+
+    Missing/disabled extensions are never installed. Incomplete dpkg states
+    are treated as blockers rather than repaired implicitly.
+    """
+    updates = []
+    for item in plugins():
+        if item.get('kind') == 'portable':
+            continue
+        status, current = package_status(item['package'], log)
+        if status == 'absent' or status.endswith(' ok config-files'):
+            continue
+        if status != 'install ok installed':
+            raise RuntimeError('Incomplete installation blocks Update All: ' + item['package'] + ': ' + status)
+        compare = subprocess.run(['/usr/bin/dpkg', '--compare-versions', current, 'lt', item['version']],
+                                 capture_output=True, text=True, timeout=15)
+        if compare.returncode not in (0, 1):
+            raise RuntimeError('Cannot compare versions for ' + item['package'] + ': ' + compare.stderr.strip())
+        if compare.returncode == 0:
+            # Check every selected package before any installation is attempted.
+            bundled_deb(item, log)
+            updates.append((item, current))
+    return updates
+
+
+def update_all(log=None, *, include_security=True):
+    """One opt-in batch: upgrade installed outdated extensions, then open
+    Security Updates for a separately approved, kernel-safe APT transaction.
+
+    No absent extension is enabled. No automatic update service is created.
+    """
+    if os.geteuid() == 0:
+        raise ValueError('Run Update All as the normal desktop user, not as root.')
+    owned = log is None
+    log = log or OperationLog('Update All')
+    updated = []
+    try:
+        log.stage('Planning one-time updates for installed extensions only')
+        planned = update_all_plan(log)
+        if include_security:
+            # Verify the portable script and terminal support before changing packages.
+            updater = portable_script(plugin('security-updates'))
+            terminal_command(updater, transcript=Path('/dev/null'))
+        for item, previous in planned:
+            log.stage('Upgrade ' + item['name'] + ': ' + previous + ' -> ' + item['version'])
+        if not planned:
+            log.stage('No installed extensions need an update (none installed or already current)')
+        for item, previous in planned:
+            try:
+                result = change(item['id'], True, log, update=True)
+            except Exception as exc:
+                log.stage('UPDATE ALL STOPPED after ' + str(len(updated)) + ' successful upgrades. '
+                          'No remaining extensions or Security Updates were started.')
+                raise RuntimeError('Update All stopped at ' + item['name'] + ': ' + str(exc)) from exc
+            if result == item['version']:
+                updated.append(item['id'])
+            else:
+                log.stage('Skipped: ' + item['name'] + ' is no longer older than the bundled version')
+        if include_security:
+            log.stage('Opening the manual security-updates review terminal. '
+                      'APT installation requires its own explicit UPDATE approval.')
+            open_extension('security-updates', log)
+        log.stage('Batch finished: upgraded ' + str(len(updated)) + ' extension(s). '
+                  + ('Security update review terminal launched; its outcome is recorded separately.'
+                     if include_security else 'Security updates were not requested.'))
+        return dict(updated=updated, security_review_started=include_security)
+    except Exception as exc:
+        log.stage('UPDATE ALL FAILED: ' + str(exc))
+        raise
+    finally:
+        if owned:
+            log.close()
+
+
 def filter_plugins(items, query='', status_filter='All'):
     query = query.casefold().strip()
     return [item for item in items
@@ -593,6 +668,7 @@ def show_gui(parent=None):
         ))
         open_button.configure(state='normal' if open_ready and not busy[0] else 'disabled')
         package_button.configure(state='disabled' if busy[0] else 'normal')
+        update_all_button.configure(state='disabled' if busy[0] else 'normal')
     def operate(enable, from_source=False, launch=False, update=False):
         item = selected()
         if not item or busy[0]:
@@ -619,6 +695,48 @@ def show_gui(parent=None):
                     log.close()
                 events.put(('done', error))
         threading.Thread(target=worker, daemon=False).start()
+    def update_everything():
+        if busy[0]:
+            return
+        try:
+            planned = update_all_plan()
+            # Fail early if the security helper is changed or no terminal exists.
+            terminal_command(portable_script(plugin('security-updates')), transcript=Path('/dev/null'))
+        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
+            messagebox.showerror('Update All unavailable', str(exc), parent=window)
+            return
+        summary = ('\n'.join('  ' + item['name'] + ': ' + old + ' -> ' + item['version']
+                             for item, old in planned)
+                   if planned else '  No installed extensions require an upgrade.')
+        prompt = (
+            'One-time Update All (manual; no recurring jobs):\n\n'
+            + summary
+            + '\n\nOnly already-installed, older extensions are updated. '
+              'Disabled extensions stay disabled. Existing versions are rechecked before each action.\n\n'
+              'Afterwards, Security Updates opens a terminal for separate package review '
+              'and explicit UPDATE confirmation. Kernel/NVIDIA/DKMS/firmware/boot upgrades remain excluded.\n\n'
+              'Package updates may require administrator authorization. A failure stops the batch; '
+              'successful earlier updates are not rolled back. All output is logged.\n\nProceed?'
+        )
+        if not messagebox.askyesno('Update All', prompt, parent=window):
+            return
+        busy[0] = True
+        refresh_button.configure(state='disabled')
+        update_selection()
+        def worker():
+            log = None
+            error = None
+            try:
+                log = OperationLog('Update All', lambda line: events.put(('line', line)))
+                update_all(log, include_security=True)
+            except Exception as exc:
+                error = str(exc)
+            finally:
+                if log:
+                    log.close()
+                events.put(('done', error))
+        threading.Thread(target=worker, daemon=False).start()
+
     def package_manager():
         if busy[0]:
             return
@@ -662,9 +780,11 @@ def show_gui(parent=None):
     source_button = ttk.Button(buttons, text='Build from source...', command=lambda: operate(True, True))
     open_button = ttk.Button(buttons, text='Open', command=lambda: operate(True, launch=True))
     update_button = ttk.Button(buttons, text='Update', command=lambda: operate(True, update=True))
+    update_all_button = ttk.Button(buttons, text='Update All', command=update_everything)
     operation_buttons = [install_button, remove_button, update_button, source_button, open_button]
     for button in operation_buttons:
         button.pack(side='left', padx=(0, 8))
+    update_all_button.pack(side='left', padx=(12, 8))
     refresh_button = ttk.Button(buttons, text='Refresh status', command=refresh)
     refresh_button.pack(side='left')
     package_button = ttk.Button(buttons, text='Build Package...', command=package_manager)
