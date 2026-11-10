@@ -64,7 +64,9 @@ class PortableTerminalLoggingTests(unittest.TestCase):
                 self.assertEqual(popen.call_args.kwargs['stderr'], subprocess.STDOUT)
                 self.assertNotEqual(popen.call_args.kwargs['stdout'], subprocess.DEVNULL)
                 output_log = popen.call_args.kwargs['stdout']
-                self.assertEqual(stat.S_IMODE(os.fstat(output_log.fileno()).st_mode), 0o600) if not output_log.closed else None
+                self.assertTrue(output_log.closed)
+                transcript = Path(popen.call_args.args[0][-4])
+                self.assertEqual(stat.S_IMODE(transcript.stat().st_mode), 0o600)
                 self.assertTrue(any('Terminal stdout/stderr and exit status:' in call.args[0]
                                     for call in log.stage.call_args_list))
 
