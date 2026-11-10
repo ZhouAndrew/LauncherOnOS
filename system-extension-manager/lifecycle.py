@@ -853,6 +853,8 @@ def show_gui(parent=None):
     def resize(_event=None):
         nonlocal action_columns, layout_width
         if _event is not None and _event.widget is not window:
+            if _event.widget.master is window:
+                schedule_minimum_height()
             return
         available = max(min_width, window.winfo_width()) - 24
         if available == layout_width:
