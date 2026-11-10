@@ -56,7 +56,7 @@ class UpdateAllTests(unittest.TestCase):
     def test_bad_dpkg_version_comparison_stops(self):
         with patch.object(lifecycle, 'plugins', return_value=[self.one]), \
              patch.object(lifecycle, 'package_status', return_value=('install ok installed', '1.0')), \
-             patch.object(lifecycle.subprocess, 'run', return_value=subprocess.CompletedProcess([], 2, '', 'bad')):\
+             patch.object(lifecycle.subprocess, 'run', return_value=subprocess.CompletedProcess([], 2, '', 'bad')):
             with self.assertRaisesRegex(RuntimeError, 'Cannot compare versions'):
                 lifecycle.update_all_plan()
 
