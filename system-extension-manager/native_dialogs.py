@@ -10,7 +10,9 @@ options=json.loads(sys.argv[1])
 action={'open':Gtk.FileChooserAction.OPEN,'directory':Gtk.FileChooserAction.SELECT_FOLDER,'save':Gtk.FileChooserAction.SAVE}[options['kind']]
 dialog=Gtk.FileChooserNative.new(options['title'],None,action,None,None)
 dialog.set_select_multiple(options['multiple'])
-if options['kind']=='save': dialog.set_do_overwrite_confirmation(True)
+if options['kind']=='save':
+    dialog.set_do_overwrite_confirmation(True)
+    if options['initialfile']: dialog.set_current_name(options['initialfile'])
 for label,pattern in options.get('filetypes',[]):
     item=Gtk.FileFilter(); item.set_name(label); item.add_pattern(pattern); dialog.add_filter(item)
 result=dialog.run()
@@ -21,7 +23,7 @@ dialog.destroy()
 
 def _choose(kind, multiple=False, **kwargs):
     options = dict(kind=kind, multiple=multiple, title=kwargs.get('title', 'Select a file'),
-                   filetypes=kwargs.get('filetypes', []))
+                   filetypes=kwargs.get('filetypes', []), initialfile=kwargs.get('initialfile', ''))
     try:
         result = subprocess.run(['/usr/bin/python3', '-c', _SCRIPT, json.dumps(options)],
                                 capture_output=True, text=True)

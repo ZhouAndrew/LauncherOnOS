@@ -221,6 +221,52 @@ print('ALL_RECIPES_OK')
 
 @unittest.skipUnless(os.environ.get('DISPLAY'), 'requires a graphical environment')
 class ManagerGuiTests(unittest.TestCase):
+    def test_resize_keeps_actions_and_logs_visible(self):
+        import tkinter as tk
+        from tkinter import ttk
+
+        def descendants(widget):
+            for child in widget.winfo_children():
+                yield child
+                yield from descendants(child)
+
+        def assert_visible(widget, window):
+            self.assertTrue(widget.winfo_ismapped(), str(widget))
+            self.assertGreater(widget.winfo_height(), 1, str(widget))
+            self.assertLessEqual(widget.winfo_rootx() + widget.winfo_width(),
+                                 window.winfo_rootx() + window.winfo_width(), str(widget))
+            self.assertLessEqual(widget.winfo_rooty() + widget.winfo_height(),
+                                 window.winfo_rooty() + window.winfo_height(), str(widget))
+
+        parent = tk.Tk()
+        self.addCleanup(parent.destroy)
+        parent.withdraw()
+        with patch.object(lifecycle, 'package_status', return_value=('absent', None)):
+            window = lifecycle.show_gui(parent)
+        widgets = list(descendants(window))
+        tree = next(w for w in widgets if isinstance(w, ttk.Treeview))
+        tree.selection_set('security-updates')
+        tree.event_generate('<<TreeviewSelect>>')
+        buttons = {w.cget('text'): w for w in widgets if isinstance(w, ttk.Button)}
+        for width, height, wrapped in [(560, 480, True), (1100, 760, False), (640, 480, True)]:
+            with self.subTest(width=width, height=height):
+                window.geometry(f'{width}x{height}')
+                parent.update()
+                for widget in [tree, *buttons.values(), next(w for w in widgets if isinstance(w, tk.Text))]:
+                    assert_visible(widget, window)
+                self.assertEqual(buttons['Update All'].winfo_rooty() > buttons['Update'].winfo_rooty(), wrapped)
+                self.assertEqual(tree.xview()[1] < 1.0, wrapped)
+                notice = next(w for w in widgets if isinstance(w, ttk.Label) and str(w.cget('text')).startswith('WARNING: Installed'))
+                self.assertEqual(int(notice.cget('wraplength')), window.winfo_width() - 24)
+
+        buttons['Log History...'].invoke()
+        history = window.children['log_history']
+        history.geometry('600x360')
+        parent.update()
+        for widget in descendants(history):
+            if isinstance(widget, (ttk.Button, ttk.Treeview, tk.Text)):
+                assert_visible(widget, history)
+
     def test_portable_security_row_has_run_only(self):
         import tkinter as tk
         from tkinter import ttk
