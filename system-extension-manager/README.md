@@ -1,6 +1,6 @@
 # System Extension Manager
 
-**ACTIVE / MAINTAINED — 0.2.5.** Mint Toolbox is DEPRECATED / NOT ACTIVE.
+**ACTIVE / MAINTAINED — 0.2.6.** Mint Toolbox is DEPRECATED / NOT ACTIVE.
 See [security status](../SECURITY_STATUS.md) for fixed and retained risks.
 ZIP 0.4.5 keeps originals by default and rechecks each remaining input before opt-in Trash. HomeBackUp 0.1.6 uses guarded no-follow root locks and verifies service shutdown.
 Anki 0.1.6 intentionally PUBLISHES: validated same-import updates may overwrite body,
@@ -12,7 +12,7 @@ maintenance scripts lack the new protections. The manager refuses unsafe upgrade
 An independent manager for system extensions. Enable installs a bundled Debian package;
 Disable uninstalls that package. The interface shows multiple real extensions and actual dpkg state.
 
-## Security hardening in 0.2.5
+## Security hardening in 0.2.6
 
 - Privileged local Debian installation stages the approved package under root ownership, verifies the exact SHA-256 there, simulates APT and installs that same copy. The application's own package readback remains enforced.
 - The portable manual Security Updates tool uses isolated Python (`-I`) and a root-owned SHA-256-verified source snapshot; it installs nothing without explicit user approval.
@@ -26,7 +26,7 @@ Review the new versions and explicitly use the manager's Update action. Actual
 Linux Mint 22.x root APT, Borg retention/restore and live WordPress acceptance
 remain separate. Do not upgrade the kernel/NVIDIA driver as part of this review.
 
-## Portable test release: 0.2.5
+## Portable test release: 0.2.6
 
 Extract the source ZIP, open its folder and run as your desktop user:
 
@@ -64,7 +64,7 @@ The included system-extension-manager.desktop is for the optional installed mana
 - **Security Updates**: **No installation required.** Select the row and click **Run in Terminal**.
   A terminal launches the bundled Python script, refreshes indexes with sudo, lists the eligible Ubuntu
   noble-security upgrades, simulates the exact transaction and requires typing UPDATE to install.
-  Kernel/NVIDIA/DKMS/firmware/boot packages are protected. No service or timer is installed.
+  Kernel/NVIDIA/DKMS/firmware/boot packages are protected. The terminal stays open until Enter after completion or failure. Its stdout, stderr and real exit code are saved under the private `~/.local/state/system-extension-manager/logs/security-updates-terminal-*.log` file, whose exact path is shown in the manager's launch log. No service or timer is installed.
 - **Anki Time Travel**: CLI and desktop import of historical Anki PDFs into local WordPress.
   Relative paths, numeric download suffixes, GMT evaluation and exact-post permalink verification are included.
   Requires an existing accessible WordPress installation and WP-CLI. Installing or opening the application does not start an import.
