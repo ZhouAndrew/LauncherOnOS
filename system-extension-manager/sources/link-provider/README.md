@@ -1,4 +1,4 @@
-# Link Provider 0.2.2
+# Link Provider 0.3.0
 
 Link Provider is a Linux desktop tool for websites, app links and fixed local commands.
 
@@ -49,3 +49,41 @@ gio open caldav-run://open-home
 The configuration is shared with 0.1.0 and defaults to `~/.config/link-provider/links.json`, respecting `XDG_CONFIG_HOME`. Terminal clipboard operations use `wl-copy`, `xclip` or `xsel`. The graphical **Copy Link** button uses the desktop clipboard through GTK.
 
 Removing the package removes its command and application menu entry. Your user configuration is kept. A desktop link registered to the package stops resolving while the package is absent.
+
+## Custom desktop schemes
+
+Select **Desktop Scheme…**, enter a scheme such as `study`, and save.
+The manager registers it with the desktop and copies links such as `study://anki`.
+Each link selects an existing saved ID and its fixed arguments.
+
+The equivalent CLI setup is:
+
+```bash
+link-provider add-scheme study
+link-provider register-handler
+link-provider link anki --scheme study
+```
+
+## Run a preset from another device
+
+1. Save a **Local command** preset and select **Allow LAN** for that preset.
+2. Open **LAN Settings…** and enter the Mint machine's reachable hostname or IPv4 address.
+   Choose the HTTPS and optional HTTP redirect ports. Choose a certificate/key with
+   the native file chooser, or leave both paths empty to generate a certificate.
+3. Trust that certificate on the other device and set a dedicated password with
+   **Set LAN Password…**.
+4. Select **Start LAN**, then **Copy LAN Link**. Open the copied HTTPS link on the
+   other device, enter the password there and select **Run**.
+5. Select **Stop LAN** to end access. Closing the Link Provider window also ends
+   its LAN listener.
+
+The HTTP address uses the configured HTTP port and redirects to the HTTPS password
+page. Only the HTTPS endpoint accepts a password and a run request.
+The listener requires the expected Host and Origin. Wrong passwords are throttled.
+Remote requests select an individually authorized preset and cannot supply a command
+or extra arguments. Commands run as the desktop user with `no_new_privs`.
+Changing a command revokes its LAN permission until explicitly allowed again.
+
+For terminal use, `configure-lan --host HOST`, `set-lan-password`,
+`allow-lan ID` and `start-lan` provide the same configuration and listener.
+The terminal listener remains active until interrupted.

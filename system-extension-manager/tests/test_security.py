@@ -33,7 +33,7 @@ def builder_string(name):
 
 
 class SecurityTests(unittest.TestCase):
-    @unittest.skipUnless((REPO / 'mint-toolbox/originals/web2menu').exists(), 'legacy source not in portable manager')
+    @unittest.skip('Mint Toolbox is retired and must not be executed.')
     def test_multiline_url_cannot_create_an_exec_key(self):
         web = load_script('security_web2menu', REPO / 'mint-toolbox/originals/web2menu')
         for char in ('\n', '\r', '\t', '\x00', '\x7f'):
@@ -75,7 +75,7 @@ class SecurityTests(unittest.TestCase):
             zip_trash.archive_and_trash([source], run, messages.append, trash_originals=True)
             self.assertTrue(any('WARNING' in text and 'new data' in text for text in messages))
 
-    @unittest.skipUnless((REPO / 'mint-toolbox/originals/archive-folder-to-trash').exists(), 'legacy source not in portable manager')
+    @unittest.skip('Mint Toolbox is retired and must not be executed.')
     def test_legacy_archive_refuses_directory_symlink(self):
         with tempfile.TemporaryDirectory() as temp:
             target = Path(temp) / 'target'
@@ -150,7 +150,7 @@ bash "$1"
         self.assertLess(source.index('This import PUBLISHES'), source.index('ensure_term category'))
         self.assertIn('can overwrite', source)
 
-    @unittest.skipUnless((REPO / 'mint-toolbox/originals/complete_anki_tasks_today.py').exists(), 'legacy source not in portable manager')
+    @unittest.skip('Mint Toolbox is retired and must not be executed.')
     def test_caldav_http_refused_before_dependency_install_or_password(self):
         result = subprocess.run([sys.executable, str(REPO / 'mint-toolbox/originals/complete_anki_tasks_today.py'),
                                  '--url', 'http://example.invalid/calendar/'], capture_output=True, text=True)
