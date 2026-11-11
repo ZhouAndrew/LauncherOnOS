@@ -532,7 +532,7 @@ PORTABLE_TERMINAL_WRAPPER = r"""
 logfile=$1
 shift
 printf 'Security Updates terminal session started.\n' | /usr/bin/tee -a -- "$logfile"
-"$@" 2>&1 | /usr/bin/tee -a -- "$logfile"
+SEM_SECURITY_TRANSCRIPT=1 "$@" 2>&1 | /usr/bin/tee -a -- "$logfile"
 statuses=("${PIPESTATUS[@]}")
 code=${statuses[0]}
 if (( statuses[1] != 0 )); then
