@@ -5,17 +5,23 @@ import argparse
 from contextlib import contextmanager
 import ctypes
 import fcntl
+import getpass
+import hashlib
+import hmac
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import os
 from pathlib import Path
 import re
 import shutil
 import stat
+import ssl
+import time
 import subprocess
 import sys
 import tempfile
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 VERSION = "0.2.2"
@@ -253,6 +259,150 @@ def check_web(uri):
         raise LinkError(f"The service could not be reached: {exc}") from exc
 
 
+def launch_application(name, command):
+    lock_privileges()
+    process = subprocess.Popen(
+        command,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    # Process creation is not application readiness. Catch early
+    # nonzero exits, especially missing local backends, but do not
+    # block the desktop for long-running GUI applications.
+    try:
+        code = process.wait(timeout=0.35)
+    except subprocess.TimeoutExpired:
+        return f"Dispatched: {name} (PID {process.pid}); application/backend readiness not verified."
+    else:
+        if code:
+            raise LinkError(f"Application exited immediately with code {code}: {name}. Check its backend and logs.")
+        return f"Command exited with code 0: {name}; application/backend readiness not verified."
+
+
+def set_lan_password(_args):
+    require_desktop_user()
+    password = getpass.getpass("Link Provider password: ")
+    if len(password) < 12 or len(password.encode()) > 512:
+        raise LinkError("Use at least 12 characters and at most 512 UTF-8 bytes.")
+    if password != getpass.getpass("Repeat password: "):
+        raise LinkError("The passwords did not match.")
+    salt = os.urandom(16)
+    digest = hashlib.scrypt(password.encode(), salt=salt, n=32768, r=8, p=1, maxmem=64 * 1024**2)
+    with write_lock():
+        atomic_write(registry_path().with_name("lan-password"), salt + digest)
+
+
+def serve_lan(args):
+    lock_privileges()
+    if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9.-]*", args.host):
+        raise LinkError("Specify the hostname or IPv4 address used by remote clients.")
+    authority = args.host if args.port == 443 else f"{args.host}:{args.port}"
+    origin = f"https://{authority}"
+    credential = registry_path().with_name("lan-password")
+    if len(credential.read_bytes()) != 80:
+        raise LinkError("Set a Link Provider password before serving requests.")
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    context.load_cert_chain(args.cert, args.key)
+    retry_at = 0.0
+
+    class Server(HTTPServer):
+        def get_request(self):
+            connection, address = super().get_request()
+            connection.settimeout(3)
+            try:
+                return context.wrap_socket(connection, server_side=True), address
+            except OSError:
+                connection.close()
+                raise
+
+    class Handler(BaseHTTPRequestHandler):
+        def respond(self, status, body, content_type="text/plain; charset=utf-8"):
+            data = body.encode()
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Security-Policy", "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            self.wfile.write(data)
+
+        def preset_id(self):
+            match = re.fullmatch(r"/run/(" + LINK_ID.pattern + ")", self.path)
+            if self.headers.get_all("Host") != [authority] or match is None:
+                self.respond(404, "Unknown link.")
+                return None
+            return match[1]
+
+        def do_GET(self):
+            name = self.preset_id()
+            if name is not None:
+                self.respond(200, f"""<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>Run {name}</title><h1>Run {name}</h1>
+<form method="post"><label>Link Provider password
+<input name="password" type="password" required autocomplete="current-password"></label>
+<button>Run</button></form></html>""", "text/html; charset=utf-8")
+
+        def do_POST(self):
+            nonlocal retry_at
+            name = self.preset_id()
+            if name is None:
+                return
+            if self.headers.get_all("Origin") != [origin]:
+                self.respond(403, "Open the run page directly before submitting.")
+                return
+            lengths = self.headers.get_all("Content-Length", [])
+            if (len(lengths) != 1 or not re.fullmatch(r"[0-9]{1,4}", lengths[0])
+                    or not 0 < int(lengths[0]) <= 2048
+                    or self.headers.get("Transfer-Encoding") is not None
+                    or self.headers.get_content_type() != "application/x-www-form-urlencoded"):
+                self.respond(400, "Invalid form.")
+                return
+            if time.monotonic() < retry_at:
+                self.respond(429, "Wait before trying again.")
+                return
+            try:
+                fields = parse_qs(self.rfile.read(int(lengths[0])).decode("ascii"),
+                                  strict_parsing=True, max_num_fields=1, errors="strict")
+                if set(fields) != {"password"}:
+                    raise ValueError
+                password = fields["password"][0].encode()
+                if len(password) > 512:
+                    raise ValueError
+            except ValueError:
+                self.respond(400, "Invalid form.")
+                return
+            try:
+                saved = credential.read_bytes()
+                if len(saved) != 80:
+                    raise LinkError("Password is unavailable.")
+                digest = hashlib.scrypt(password, salt=saved[:16], n=32768, r=8, p=1,
+                                        maxmem=64 * 1024**2)
+                if not hmac.compare_digest(digest, saved[16:]):
+                    retry_at = time.monotonic() + 2
+                    self.respond(403, "Password verification failed.")
+                    return
+                entry = read_links().get(name)
+                if (not entry or entry["kind"] != "app" or not entry["enabled"]
+                        or not entry.get("allow_lan", False)):
+                    self.respond(404, "Preset is unavailable for LAN execution.")
+                    return
+                target = entry["target"]
+                result = launch_application(name, command_target(target[0], target[1:]))
+            except (OSError, LinkError, ValueError):
+                self.respond(500, "Launch failed. Check the preset on Mint.")
+                return
+            self.respond(200, result)
+
+    with Server((args.bind, args.port), Handler) as server:
+        print(f"Listening at {origin}", flush=True)
+        server.serve_forever()
+
+
 def use_link(args):
     name = parse_id(args.id)
     entry = get_entry(read_links(), name)
@@ -263,25 +413,7 @@ def use_link(args):
     if entry["kind"] == "app":
         command = command_target(target[0], target[1:])
         if opening:
-            lock_privileges()
-            process = subprocess.Popen(
-                command,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-            )
-            # Process creation is not application readiness. Catch early
-            # nonzero exits, especially missing local backends, but do not
-            # block the desktop for long-running GUI applications.
-            try:
-                code = process.wait(timeout=0.35)
-            except subprocess.TimeoutExpired:
-                print(f"Dispatched: {name} (PID {process.pid}); application/backend readiness not verified.")
-            else:
-                if code:
-                    raise LinkError(f"Application exited immediately with code {code}: {name}. Check its backend and logs.")
-                print(f"Command exited with code 0: {name}; application/backend readiness not verified.")
+            print(launch_application(name, command))
         else:
             print(f"Executable available: {command[0]}")
         return
@@ -445,6 +577,14 @@ def main():
     parser.add_argument("--version", action="version", version=f"Link Provider {VERSION}")
     commands = parser.add_subparsers(dest="action", required=True)
     commands.add_parser("gui", help="open the graphical link manager").set_defaults(run=show_gui)
+    commands.add_parser("set-lan-password").set_defaults(run=set_lan_password)
+    lan = commands.add_parser("serve-lan", help="serve authorized application presets over HTTPS")
+    lan.add_argument("--bind", required=True)
+    lan.add_argument("--host", required=True)
+    lan.add_argument("--port", type=int, choices=range(1, 65536), metavar="PORT", default=8765)
+    lan.add_argument("--cert", required=True)
+    lan.add_argument("--key", required=True)
+    lan.set_defaults(run=serve_lan)
     desktop = commands.add_parser("desktop", help="open the manager or a desktop command link")
     desktop.add_argument("id", nargs="?")
     desktop.set_defaults(run=desktop_launch)
