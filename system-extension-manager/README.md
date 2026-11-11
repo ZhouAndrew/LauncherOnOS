@@ -1,6 +1,6 @@
 # System Extension Manager
 
-**ACTIVE / MAINTAINED — 0.2.8.** An independent extension manager, not a front end for the retired application.
+**ACTIVE / MAINTAINED — 0.3.0.**
 See [security status](../SECURITY_STATUS.md) for fixed and retained risks.
 ZIP 0.4.5 keeps originals by default and rechecks each remaining input before opt-in Trash. HomeBackUp 0.1.6 uses guarded no-follow root locks and verifies service shutdown.
 Anki 0.1.6 intentionally PUBLISHES: validated same-import updates may overwrite body,
@@ -18,6 +18,23 @@ require explicit confirmation.
 An independent manager for system extensions. Enable installs a bundled Debian package;
 Disable uninstalls that package. The interface shows multiple real extensions and actual dpkg state.
 
+## Window authorization in 0.3.0
+
+Select **Unlock** to authorize package operations for this window. The first install,
+update or removal can also open the administrator prompt. Subsequent package operations
+reuse that helper until **Lock** or closing the window. The interface and source builds
+run as your desktop user. The helper accepts only the catalog's approved package names,
+versions and checksums, and stages installation bytes privately before running APT.
+
+Security Updates keeps its interactive terminal workflow. It requests administrator
+authorization once for that terminal session, refreshes and previews the eligible
+security upgrades, and waits for the explicit **UPDATE** confirmation before installation.
+Kernel and driver changes continue to require separate manual review.
+
+Link Provider 0.3.0 adds custom desktop URI schemes, per-preset LAN permissions,
+remote password verification over HTTPS, HTTP redirects, and GTK configuration controls.
+See [Link Provider](sources/link-provider/README.md) for setup.
+
 ## Security hardening in 0.2.8
 
 - Privileged local Debian installation stages the approved package under root ownership, verifies the exact SHA-256 there, simulates APT and installs that same copy. The application's own package readback remains enforced.
@@ -32,7 +49,7 @@ Review the new versions and explicitly use the manager's Update action. Actual
 Linux Mint 22.x root APT, Borg retention/restore and live WordPress acceptance
 remain separate. Do not upgrade the kernel/NVIDIA driver as part of this review.
 
-## Portable test release: 0.2.8
+## Portable release: 0.3.0
 
 Extract the source ZIP, open its folder and run as your desktop user:
 

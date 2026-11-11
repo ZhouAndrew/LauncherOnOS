@@ -102,13 +102,13 @@
     "id": "link-provider",
     "name": "Link Provider",
     "package": "mint-link-provider-extension",
-    "version": "0.2.2",
+    "version": "0.3.0",
     "launch": [
       "/usr/bin/link-provider"
     ],
-    "description": "Manage and test caldav-run links to URLs or fixed local commands. Opens a standalone window. Command links run as your desktop user and block sudo.",
-    "deb": "packages/mint-link-provider-extension_0.2.2_all.deb",
-    "sha256": "deed3de0179d80da29e08969119364fbe6d4832f85174197ca7b9186b31fefb8",
+    "description": "Manage custom desktop schemes and fixed commands. Authorize individual presets for password-verified LAN launches over HTTPS. HTTP links redirect to the secure run page.",
+    "deb": "packages/mint-link-provider-extension_0.3.0_all.deb",
+    "sha256": "cc8cb961cd998e5556db31dc4eb544be5d2fb88eea7da63c38ae2c612d95fa59",
     "source": {
       "kind": "bundled",
       "requires": [
@@ -117,10 +117,10 @@
         "xz"
       ],
       "files": {
-        "sources/link-provider/README.md": "dfc8ae2b0e943320524e65a2713f6ae506d3e5dbb801dbd35ce76839e8df6849",
-        "sources/link-provider/build.py": "7335f481d3d714d1f05a4d707f28e2f4cb7519bc9afaf4f838e7aa0a2ce32ab9",
-        "sources/link-provider/link-provider": "d6eb4cf1c880810614cd4a110da7950205bec5bf657ee3a0ccc729e72545fb43",
-        "sources/link-provider/link_provider_gui.py": "363400fa4f31ff205a814793994f323a3a0b2a8ae36a4bf41add754ca8280eea",
+        "sources/link-provider/README.md": "22eba469debf7a0b253764e9d1c2aadc29c2be1024da5c02306d66e6f2ab6e85",
+        "sources/link-provider/build.py": "cf7825a111a0b0c4b492f97e439f50050b0e990258dc16346a5c4ee86f1d12a1",
+        "sources/link-provider/link-provider": "2d71887c3a787523034e30c81f93cea038912497ff4983c64ab452a283d9c2cd",
+        "sources/link-provider/link_provider_gui.py": "e84739fb2e1e8596e5a6bd0a7c804d8cad7b633d1983771099c3324da046c0bd",
         "sources/link-provider/mint-link-provider.desktop": "cd8929555de6bbb5a189bc108154940cccec08308487967f2c901fa178dd0823"
       },
       "argv": [
@@ -137,7 +137,7 @@
     "name": "Security Updates",
     "version": "Built-in",
     "script": "sources/security-updates/security_updates.py",
-    "sha256": "2abca245042aac658e8c4fecf1e7bd0c1561c8fbd40e6e1064402135ed922cdb",
+    "sha256": "33a60bfaf6716ac66d70a13887b7f11d9f245698ddf670bf91d8c7b736c9a1fd",
     "description": "Run one interactive command in a terminal; manually refresh and install trusted Ubuntu noble-security updates after review. No extension package or scheduled jobs. Kernel, NVIDIA, DKMS, firmware and boot packages are protected."
   }
 ]

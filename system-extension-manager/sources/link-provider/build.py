@@ -10,7 +10,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parent
 PACKAGE = "mint-link-provider-extension"
-VERSION = "0.2.2"
+VERSION = "0.3.0"
 EPOCH = 1793404800
 
 
@@ -31,7 +31,7 @@ Section: utils
 Priority: optional
 Architecture: all
 Maintainer: ZhouAndrew <zhouandrew@users.noreply.github.com>
-Depends: python3 (>= 3.10), python3-gi, gir1.2-gtk-3.0, libglib2.0-bin, desktop-file-utils
+Depends: python3 (>= 3.10), python3-gi, gir1.2-gtk-3.0, libglib2.0-bin, desktop-file-utils, openssl
 Description: Manage desktop links and fixed local commands
  Provides a standalone GTK window and a command-line interface for creating
  links to user-configured programs and URLs, with optional user-level

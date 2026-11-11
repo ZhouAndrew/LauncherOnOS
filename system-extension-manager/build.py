@@ -16,7 +16,7 @@ from version import VERSION
 # Ship only known manager code and checksum-pinned extension resources. Never
 # copy arbitrary checkout contents (e.g. untracked credentials, .git or logs).
 MANAGER_FILES = (
-    'README.md', 'build.py', 'execution.py', 'extensions.json',
+    'README.md', 'build.py', 'admin_session.py', 'execution.py', 'extensions.json',
     'lifecycle.py', 'manager.py', 'native_dialogs.py',
     'run.sh', 'system-extension-manager.desktop', 'version.py',
 )
@@ -53,9 +53,9 @@ def build_extensions():
         dict(id='homebackup', name='HomeBackUp', package='mint-homebackup-extension', version='0.1.6',
              launch=['/usr/bin/homebackup-ext', 'gui'],
              description='Borg recovery backups with monthly scheduling, verification and up to 3 retained backup dates. Reuses an existing encrypted repository; configure from the Mint application menu. The /dev/sdc7 partition is not included.'),
-        dict(id='link-provider', name='Link Provider', package='mint-link-provider-extension', version='0.2.2',
+        dict(id='link-provider', name='Link Provider', package='mint-link-provider-extension', version='0.3.0',
              launch=['/usr/bin/link-provider'],
-             description='Manage and test caldav-run links to URLs or fixed local commands. Opens a standalone window. Command links run as your desktop user and block sudo.'),
+             description='Manage custom desktop schemes and fixed commands. Authorize individual presets for password-verified LAN launches over HTTPS. HTTP links redirect to the secure run page.'),
     ]
     for item in definitions:
         source = ROOT / 'sources' / item['id']

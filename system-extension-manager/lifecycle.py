@@ -350,7 +350,7 @@ def build_source(item, log):
     return artifacts[0]
 
 
-def change(key, enable, log=None, from_source=False, update=False):
+def change(key, enable, log=None, from_source=False, update=False, admin=None):
     owned = log is None
     log = log or OperationLog(key)
     try:
@@ -417,7 +417,13 @@ def change(key, enable, log=None, from_source=False, update=False):
             if timer not in ('disabled', 'masked'):
                 raise ValueError('Disable the HomeBackUp monthly timer before updating; current state: ' + timer)
         log.stage('Installing package' if enable else 'Removing package')
-        result = log.run(args, check=False)
+        if admin is None:
+            result = log.run(args, check=False)
+        else:
+            approved = Path(deb) if from_source else ROOT / item['deb']
+            if enable and hashlib.sha256(approved.read_bytes()).hexdigest() != item['sha256']:
+                raise ValueError('Built package differs from the catalog approved for this window.')
+            result = admin.run(key, enable, approved, log)
         log.stage('Reading package status back from dpkg')
         status, version = package_status(item['package'], log)
         log.write(f'Package state: {status}; version: {version or "none"}\n')
@@ -460,7 +466,7 @@ def update_all_plan(log=None):
     return updates
 
 
-def update_all(log=None, *, include_security=True):
+def update_all(log=None, *, include_security=True, admin=None):
     """One opt-in batch: upgrade installed outdated extensions, then open
     Security Updates for a separately approved, kernel-safe APT transaction.
 
@@ -484,7 +490,8 @@ def update_all(log=None, *, include_security=True):
             log.stage('No installed extensions need an update (none installed or already current)')
         for item, previous in planned:
             try:
-                result = change(item['id'], True, log, update=True)
+                options = {'admin': admin} if admin is not None else {}
+                result = change(item['id'], True, log, update=True, **options)
             except Exception as exc:
                 log.stage('UPDATE ALL STOPPED after ' + str(len(updated)) + ' successful upgrades. '
                           'No remaining extensions or Security Updates were started.')
@@ -654,9 +661,35 @@ def show_gui(parent=None):
     window.columnconfigure(0, weight=1)
     window.rowconfigure(2, weight=1)
     window.rowconfigure(5, weight=1)
+    from admin_session import AdminSession
+    admin = AdminSession(plugins(), SECURE_INSTALL_CODE)
+    window.admin_session = admin
     header = ttk.Frame(window)
     header.grid(row=0, sticky='ew', padx=12, pady=(8, 0))
-    ttk.Label(header, text='ACTIVE / MAINTAINED - System Extension Manager', foreground='#17633b').pack(fill='x')
+    ttk.Label(header, text='System Extension Manager', foreground='#17633b').pack(side='left', fill='x', expand=True)
+    authorization = tk.StringVar(value='Locked')
+    ttk.Label(header, textvariable=authorization).pack(side='left', padx=8)
+    def unlock_window():
+        if busy[0]:
+            return
+        if admin.active:
+            admin.close()
+            authorization.set('Locked')
+            unlock_button.configure(text='Unlock')
+            return
+        busy[0] = True
+        unlock_button.configure(state='disabled')
+        update_selection()
+        def authorize():
+            error = None
+            try:
+                admin.authorize()
+            except Exception as exc:
+                error = str(exc)
+            events.put(('done', error))
+        threading.Thread(target=authorize, daemon=False).start()
+    unlock_button = ttk.Button(header, text='Unlock', command=unlock_window)
+    unlock_button.pack(side='right')
     bar = ttk.Frame(window)
     bar.grid(row=1, sticky='ew', padx=12, pady=(8, 0))
     ttk.Label(bar, text='Search').pack(side='left')
@@ -765,7 +798,7 @@ def show_gui(parent=None):
                 if launch:
                     open_extension(item['id'], log)
                 else:
-                    change(item['id'], enable, log, from_source, update=update)
+                    change(item['id'], enable, log, from_source, update=update, admin=admin)
             except Exception as exc:
                 error = str(exc)
             finally:
@@ -806,7 +839,7 @@ def show_gui(parent=None):
             error = None
             try:
                 log = OperationLog('Update All', lambda line: events.put(('line', line)))
-                update_all(log, include_security=True)
+                update_all(log, include_security=True, admin=admin)
             except Exception as exc:
                 error = str(exc)
             finally:
@@ -850,6 +883,8 @@ def show_gui(parent=None):
                 else:
                     busy[0] = False
                     refresh_button.configure(state='normal')
+                    unlock_button.configure(state='normal', text='Lock' if admin.active else 'Unlock')
+                    authorization.set('Unlocked for this window' if admin.active else 'Locked')
                     refresh()
                     if value:
                         panel.append('Operation failed: ' + value + '\n')
@@ -919,9 +954,11 @@ def show_gui(parent=None):
         if busy[0]:
             messagebox.showinfo('Operation running', 'Wait for the current operation to finish. Its log is saved automatically.', parent=window)
         else:
+            admin.close()
             window.destroy()
     def cancel_callbacks(event):
         if event.widget is window:
+            admin.close()
             for callback in (poll_job, minimum_update):
                 if callback is not None:
                     window.after_cancel(callback)

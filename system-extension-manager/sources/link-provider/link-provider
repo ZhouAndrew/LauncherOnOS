@@ -8,7 +8,8 @@ import fcntl
 import getpass
 import hashlib
 import hmac
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
+import threading
 import json
 import os
 from pathlib import Path
@@ -24,7 +25,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-VERSION = "0.2.2"
+VERSION = "0.3.0"
 SCHEME = "caldav-run"
 MIME_TYPE = f"x-scheme-handler/{SCHEME}"
 DESKTOP_ID = "local.link-provider.desktop"
@@ -57,11 +58,113 @@ def handler_path():
 
 
 def parse_id(value):
-    alias = ALIAS.fullmatch(value)
-    name = alias[1] if alias else value
+    parts = value.split("://", 1)
+    if len(parts) == 2:
+        if parts[0].lower() not in configured_schemes():
+            raise LinkError("This desktop scheme is not configured.")
+        name = parts[1]
+    else:
+        name = value
     if not LINK_ID.fullmatch(name):
         raise LinkError("Use a lowercase link ID or an exact caldav-run://ID URI.")
     return name
+
+
+
+def settings_path(name):
+    return registry_path().with_name(name + ".json")
+
+
+def configured_schemes():
+    try:
+        values = json.loads(settings_path("schemes").read_text())
+    except FileNotFoundError:
+        return [SCHEME]
+    if (not isinstance(values, list) or not values or SCHEME not in values
+            or any(not isinstance(value, str) or not SCHEME_PATTERN.fullmatch(value)
+                   or value != value.lower() or value in WEB_SCHEMES
+                   or value in {"file", "data", "javascript"} for value in values)):
+        raise LinkError("Invalid desktop scheme settings.")
+    return values
+
+
+def configure_scheme(args):
+    require_desktop_user()
+    value = args.scheme.lower()
+    if (not SCHEME_PATTERN.fullmatch(value) or value in WEB_SCHEMES
+            or value in {"file", "data", "javascript"}):
+        raise LinkError("Choose a custom scheme, for example study or anki-run.")
+    with write_lock():
+        values = configured_schemes()
+        if value not in values:
+            values.append(value)
+        atomic_write(settings_path("schemes"), (json.dumps(values) + "\n").encode())
+    print("Saved scheme: " + value)
+
+
+def lan_settings():
+    try:
+        result = json.loads(settings_path("lan-settings").read_text())
+    except FileNotFoundError:
+        return {}
+    if not isinstance(result, dict):
+        raise LinkError("Invalid LAN settings.")
+    return result
+
+
+def configure_lan(args):
+    require_desktop_user()
+    if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9.-]{0,252}", args.host):
+        raise LinkError("Use the Mint hostname or IPv4 address reached by the other device.")
+    if args.http_port == args.port:
+        raise LinkError("HTTP and HTTPS require different ports.")
+    cert, key = args.cert, args.key
+    with write_lock():
+        if not cert and not key:
+            folder = registry_path().parent
+            cert, key = str(folder / "lan-cert.pem"), str(folder / "lan-key.pem")
+            if Path(cert).exists() != Path(key).exists():
+                raise LinkError("Certificate setup is incomplete. Choose a certificate and key.")
+            if not Path(cert).exists():
+                with tempfile.TemporaryDirectory(dir=folder) as temporary:
+                    staged = Path(temporary)
+                    san = ("IP:" if re.fullmatch(r"[0-9.]+", args.host) else "DNS:") + args.host
+                    subprocess.run([executable("openssl"), "req", "-x509", "-newkey", "rsa:3072",
+                                    "-nodes", "-days", "365", "-subj", "/CN=" + args.host,
+                                    "-addext", "subjectAltName=" + san,
+                                    "-keyout", str(staged / "key"), "-out", str(staged / "cert")],
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, check=True, timeout=30)
+                    os.chmod(staged / "key", 0o600)
+                    os.replace(staged / "key", key)
+                    os.replace(staged / "cert", cert)
+        if not cert or not key:
+            raise LinkError("Select both the certificate and its private key.")
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(cert, key)
+        config = dict(bind=args.bind, host=args.host, port=args.port,
+                      http_port=args.http_port, cert=str(Path(cert).resolve()), key=str(Path(key).resolve()))
+        atomic_write(settings_path("lan-settings"), (json.dumps(config, indent=2) + "\n").encode())
+    print("LAN settings saved. Trust the selected certificate on the other device before entering a password.")
+
+
+def save_lan_password(password, repeated):
+    require_desktop_user()
+    if len(password) < 12 or len(password.encode()) > 512:
+        raise LinkError("Use at least 12 characters and at most 512 UTF-8 bytes.")
+    if password != repeated:
+        raise LinkError("The passwords did not match.")
+    salt = os.urandom(16)
+    digest = hashlib.scrypt(password.encode(), salt=salt, n=32768, r=8, p=1, maxmem=64 * 1024**2)
+    with write_lock():
+        atomic_write(registry_path().with_name("lan-password"), salt + digest)
+    print("LAN password saved.")
+
+
+def serve_saved_lan(_args):
+    config = lan_settings()
+    if not config:
+        raise LinkError("Configure LAN access first.")
+    serve_lan(argparse.Namespace(**config))
 
 
 def validate_uri(uri):
@@ -71,7 +174,7 @@ def validate_uri(uri):
     if not separator or not SCHEME_PATTERN.fullmatch(scheme) or not target:
         raise LinkError("Enter an absolute URI with a scheme and a destination.")
     scheme = scheme.lower()
-    if scheme in {SCHEME, "file", "data", "javascript"}:
+    if scheme in {*configured_schemes(), "file", "data", "javascript"}:
         raise LinkError(f"Unsupported target scheme: {scheme}. Use add-app for a local program.")
     if scheme in WEB_SCHEMES:
         try:
@@ -281,17 +384,13 @@ def launch_application(name, command):
         return f"Command exited with code 0: {name}; application/backend readiness not verified."
 
 
-def set_lan_password(_args):
-    require_desktop_user()
-    password = getpass.getpass("Link Provider password: ")
-    if len(password) < 12 or len(password.encode()) > 512:
-        raise LinkError("Use at least 12 characters and at most 512 UTF-8 bytes.")
-    if password != getpass.getpass("Repeat password: "):
-        raise LinkError("The passwords did not match.")
-    salt = os.urandom(16)
-    digest = hashlib.scrypt(password.encode(), salt=salt, n=32768, r=8, p=1, maxmem=64 * 1024**2)
-    with write_lock():
-        atomic_write(registry_path().with_name("lan-password"), salt + digest)
+def set_lan_password(args):
+    if args.stdin:
+        values = json.loads(sys.stdin.readline(4096))
+        save_lan_password(values["password"], values["repeat"])
+    else:
+        save_lan_password(getpass.getpass("Link Provider password: "),
+                          getpass.getpass("Repeat password: "))
 
 
 def serve_lan(args):
@@ -319,6 +418,9 @@ def serve_lan(args):
                 raise
 
     class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_args):
+            pass
+
         def respond(self, status, body, content_type="text/plain; charset=utf-8"):
             data = body.encode()
             self.send_response(status)
@@ -398,9 +500,38 @@ def serve_lan(args):
                 return
             self.respond(200, result)
 
+    class RedirectHandler(BaseHTTPRequestHandler):
+        def log_message(self, *_args):
+            pass
+
+        def do_GET(self):
+            match = re.fullmatch(r"/run/(" + LINK_ID.pattern + ")", self.path)
+            http_authority = args.host if args.http_port == 80 else f"{args.host}:{args.http_port}"
+            if match is None or self.headers.get_all("Host") != [http_authority]:
+                self.send_error(404)
+                return
+            self.send_response(303)
+            self.send_header("Location", origin + self.path)
+            self.send_header("Content-Length", "0")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+
+        def do_POST(self):
+            self.send_error(405, "Open the HTTPS run page before entering your password.")
+
+    redirect = None
     with Server((args.bind, args.port), Handler) as server:
-        print(f"Listening at {origin}", flush=True)
-        server.serve_forever()
+        try:
+            if args.http_port:
+                redirect = ThreadingHTTPServer((args.bind, args.http_port), RedirectHandler)
+                redirect.daemon_threads = True
+                threading.Thread(target=redirect.serve_forever, daemon=True).start()
+            print(f"Listening at {origin}", flush=True)
+            server.serve_forever()
+        finally:
+            if redirect:
+                redirect.shutdown()
+                redirect.server_close()
 
 
 def use_link(args):
@@ -456,7 +587,10 @@ def share_link(args):
             raise LinkError("A local program has no public target URI. Use its caldav-run alias.")
         value = entry["target"]
     else:
-        value = f"{SCHEME}://{name}"
+        scheme = args.scheme or SCHEME
+        if scheme not in configured_schemes():
+            raise LinkError("Configure this desktop scheme first.")
+        value = f"{scheme}://{name}"
     if args.marker:
         value = f"CALDAV-OPEN:{value}"
     if args.action == "copy":
@@ -482,8 +616,13 @@ def change_handler(args):
     require_desktop_user()
     path = handler_path()
     with write_lock():
+        schemes = configured_schemes()
         removing = args.action == "unregister-handler"
         current = default_handler(MIME_TYPE)
+        for scheme in schemes:
+            other = default_handler(f"x-scheme-handler/{scheme}")
+            if other and other != DESKTOP_ID and not removing:
+                raise LinkError(f"Another desktop handler is already active for {scheme}: {other}")
         if not removing and current and current != DESKTOP_ID:
             raise LinkError(f"Another desktop handler is already active: {current}")
         previous = path.read_bytes() if path.exists() else None
@@ -504,12 +643,14 @@ def change_handler(args):
                 "Comment=Manage and open your registered links\n"
                 f"{desktop_exec_line()}\n"
                 f"TryExec={try_exec}\nNoDisplay=true\n"
-                f"MimeType={MIME_TYPE};\n"
+                f"MimeType={';'.join('x-scheme-handler/' + scheme for scheme in schemes)};\n"
             ).encode("utf-8")
             atomic_write(path, content)
         try:
             system_command("update-desktop-database", str(path.parent))
-            active = default_handler(MIME_TYPE) == DESKTOP_ID
+            active = all(default_handler(f"x-scheme-handler/{scheme}") == DESKTOP_ID for scheme in schemes)
+            if removing:
+                active = any(default_handler(f"x-scheme-handler/{scheme}") == DESKTOP_ID for scheme in schemes)
             saved = not path.exists() if removing else path.read_bytes() == content
             if active == removing or not saved:
                 raise LinkError("The desktop handler change could not be verified.")
@@ -544,7 +685,10 @@ def show_handler(args):
     current = False
     if handler == DESKTOP_ID:
         try:
-            current = desktop_exec_line() in handler_path().read_text(encoding="utf-8").splitlines()
+            content = handler_path().read_text(encoding="utf-8").splitlines()
+            current = (desktop_exec_line() in content
+                       and all(f"x-scheme-handler/{scheme};" in "\n".join(content)
+                               for scheme in configured_schemes()))
         except FileNotFoundError:
             pass
     print(json.dumps({"handler": handler, "current": current}))
@@ -559,15 +703,16 @@ def show_gui(_args):
         if system_python.is_file() and Path(sys.executable).resolve() != system_python.resolve():
             os.execv(system_python, [str(system_python), str(Path(__file__).resolve()), "gui"])
         raise LinkError("The graphical interface requires python3-gi and GTK 3 (gir1.2-gtk-3.0).") from exc
-    show_window(Path(__file__).resolve(), read_links, LinkError, DESKTOP_ID)
+    show_window(Path(__file__).resolve(), read_links, LinkError, DESKTOP_ID, lan_settings, configured_schemes)
 
 
 def desktop_launch(args):
     if args.id is None:
         show_gui(args)
     else:
-        if not ALIAS.fullmatch(args.id):
-            raise LinkError("The desktop handler requires an exact caldav-run://ID URI.")
+        if "://" not in args.id:
+            raise LinkError("The desktop handler requires an exact configured scheme://ID URI.")
+        parse_id(args.id)
         args.action = "open"
         use_link(args)
 
@@ -577,11 +722,26 @@ def main():
     parser.add_argument("--version", action="version", version=f"Link Provider {VERSION}")
     commands = parser.add_subparsers(dest="action", required=True)
     commands.add_parser("gui", help="open the graphical link manager").set_defaults(run=show_gui)
-    commands.add_parser("set-lan-password").set_defaults(run=set_lan_password)
+    password = commands.add_parser("set-lan-password")
+    password.add_argument("--stdin", action="store_true", help=argparse.SUPPRESS)
+    password.set_defaults(run=set_lan_password)
+    scheme = commands.add_parser("add-scheme", help="add an opt-in desktop URI scheme")
+    scheme.add_argument("scheme")
+    scheme.set_defaults(run=configure_scheme)
+    settings = commands.add_parser("configure-lan", help="save LAN listener and TLS settings")
+    settings.add_argument("--bind", default="0.0.0.0")
+    settings.add_argument("--host", required=True)
+    settings.add_argument("--port", type=int, choices=range(1, 65536), default=8765, metavar="PORT")
+    settings.add_argument("--http-port", type=int, choices=range(0, 65536), default=8764, metavar="PORT")
+    settings.add_argument("--cert", default="")
+    settings.add_argument("--key", default="")
+    settings.set_defaults(run=configure_lan)
+    commands.add_parser("start-lan", help="serve using saved LAN settings").set_defaults(run=serve_saved_lan)
     lan = commands.add_parser("serve-lan", help="serve authorized application presets over HTTPS")
     lan.add_argument("--bind", required=True)
     lan.add_argument("--host", required=True)
     lan.add_argument("--port", type=int, choices=range(1, 65536), metavar="PORT", default=8765)
+    lan.add_argument("--http-port", type=int, choices=range(0, 65536), default=0, metavar="PORT")
     lan.add_argument("--cert", required=True)
     lan.add_argument("--key", required=True)
     lan.set_defaults(run=serve_lan)
@@ -619,6 +779,7 @@ def main():
     for action, help_text in (("link", "print a shareable URI"), ("copy", "copy a shareable URI")):
         command = commands.add_parser(action, help=help_text)
         command.add_argument("id")
+        command.add_argument("--scheme", help="configured desktop scheme")
         command.add_argument("--target", action="store_true", help="use the underlying URI")
         command.add_argument("--marker", action="store_true", help="prefix with CALDAV-OPEN:")
         command.set_defaults(run=share_link)

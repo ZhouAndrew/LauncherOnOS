@@ -39,7 +39,7 @@ class ManagerPackageSafetyTests(unittest.TestCase):
                 installed = unpacked / 'usr/share/system-extension-manager'
                 self.assertTrue((installed / 'manager.py').is_file())
                 self.assertTrue((installed / 'sources/security-updates/security_updates.py').is_file())
-                self.assertTrue((installed / 'packages/mint-link-provider-extension_0.2.2_all.deb').is_file())
+                self.assertTrue((installed / 'packages/mint-link-provider-extension_0.3.0_all.deb').is_file())
                 self.assertFalse((installed / marker.name).exists())
                 self.assertFalse((installed / 'tests').exists())
             finally:
