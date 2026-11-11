@@ -265,7 +265,8 @@ def show_log_history(parent, *, security_updates=False):
             entries = saved_logs(folder)
             if security_updates:
                 entries = [entry for entry in entries
-                           if entry[0].name.startswith('security-updates-terminal-')]
+                           if entry[0].name.startswith(('security-updates-terminal-',
+                                                        'security-updates-standalone-'))]
         except OSError as exc:
             messagebox.showerror('Could not list logs', str(exc), parent=window)
             return
