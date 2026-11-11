@@ -144,7 +144,9 @@ def read_links():
             or (kind == "app" and isinstance(target, list) and target
                 and all(isinstance(arg, str) for arg in target))
         )
-        if not valid_target or not isinstance(entry.get("enabled"), bool):
+        if (not valid_target or not isinstance(entry.get("enabled"), bool)
+                or not isinstance(entry.get("allow_lan", False), bool)
+                or (entry.get("allow_lan", False) and kind != "app")):
             raise LinkError(f"Invalid entry in the link registry: {name}")
     return links
 
@@ -184,6 +186,10 @@ def change_link(args):
             del links[name]
         elif action in {"enable", "disable"}:
             links[name]["enabled"] = action == "enable"
+        elif action in {"allow-lan", "deny-lan"}:
+            if links[name]["kind"] != "app":
+                raise LinkError("Only application presets can be authorized for LAN access.")
+            links[name]["allow_lan"] = action == "allow-lan"
         elif action in {"add-app", "edit-app"}:
             target = command_target(args.program, args.arguments)
             links[name] = {"kind": "app", "target": target, "enabled": enabled}
@@ -445,6 +451,8 @@ def main():
     for action, help_text in (
         ("add", "register a URI"), ("edit", "replace a target with a URI"),
         ("add-app", "register a local executable"), ("edit-app", "replace a target with an executable"),
+        ("allow-lan", "authorize an application preset for LAN access"),
+        ("deny-lan", "revoke LAN access for an application preset"),
         ("enable", "enable a link"), ("disable", "disable a link"), ("remove", "delete a link"),
     ):
         command = commands.add_parser(action, help=help_text)
