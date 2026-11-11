@@ -139,7 +139,7 @@ jobs:
           git archive --format=zip --output="$GITHUB_WORKSPACE/System-Extension-Manager-source.zip" HEAD:system-extension-manager
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: System-Extension-Manager-0.3.0
+          name: System-Extension-Manager-0.3.1
           path: |
             System-Extension-Manager-source.zip
             ${{ runner.temp }}/manager/system-extension-manager_*.deb

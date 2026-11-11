@@ -15,7 +15,7 @@ import manager
 class UpdateAllTests(unittest.TestCase):
     def setUp(self):
         self.one = dict(id='zip-trash', kind='deb', package='zip-ext', version='2.0', name='ZIP')
-        self.two = dict(id='homebackup', kind='deb', package='backup-ext', version='3.0', name='Backups')
+        self.two = dict(id='homebackup', kind='deb', package='backup-ext', version='3.0', name='Backups', deb='packages/backup.deb')
         self.disabled = dict(id='link-provider', kind='deb', package='link-ext', version='1.0', name='Links')
         self.portable = dict(id='security-updates', kind='portable', name='Security Updates',
                              script='sources/security-updates/security_updates.py')
@@ -74,6 +74,33 @@ class UpdateAllTests(unittest.TestCase):
         self.assertEqual([x.args[0] for x in change.call_args_list], ['zip-trash', 'homebackup'])
         self.assertTrue(all(x.kwargs.get('update') for x in change.call_args_list))
         security.assert_called_once_with('security-updates', log)
+
+    def test_active_homebackup_timer_defers_only_homebackup(self):
+        log, admin = Mock(), Mock()
+        admin.run.return_value = subprocess.CompletedProcess([], 0)
+        log.run.side_effect = [
+            subprocess.CompletedProcess([], 0, '', ''),
+            subprocess.CompletedProcess([], 0, 'active\n', ''),
+            subprocess.CompletedProcess([], 0, '', ''),
+        ]
+        links = dict(self.disabled, deb='packages/link.deb', sha256='expected', version='2.0')
+        with patch.object(lifecycle.os, 'geteuid', return_value=1000), \
+             patch.object(lifecycle, 'update_all_plan', return_value=[(self.two, '2.0'), (links, '1.0')]), \
+             patch.object(lifecycle, 'plugin', side_effect=[self.two, links]), \
+             patch.object(lifecycle, 'package_status', side_effect=[
+                 ('install ok installed', '2.0'), ('install ok installed', '1.0'),
+                 ('install ok installed', '2.0')]), \
+             patch.object(lifecycle, 'command', return_value=['verified-install']), \
+             patch.object(lifecycle.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)), \
+             patch.object(Path, 'read_bytes', return_value=b'bundled'), \
+             patch.object(lifecycle.hashlib, 'sha256') as checksum:
+            checksum.return_value.hexdigest.return_value = 'expected'
+            result = lifecycle.update_all(log, include_security=False, admin=admin)
+        self.assertEqual(result['updated'], ['link-provider'])
+        self.assertIn('timer is active', result['deferred']['homebackup'])
+        admin.run.assert_called_once_with('link-provider', True, ROOT / links['deb'], log)
+        self.assertEqual([call.args[0][1] for call in log.run.call_args_list],
+                         ['--simulate', 'show', '--simulate'])
 
     def test_failed_extension_stops_rest_without_opening_updater(self):
         log = Mock()

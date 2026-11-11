@@ -1,6 +1,6 @@
 # System Extension Manager
 
-**ACTIVE / MAINTAINED — 0.3.0.**
+**ACTIVE / MAINTAINED — 0.3.1.**
 See [security status](../SECURITY_STATUS.md) for fixed and retained risks.
 ZIP 0.4.5 keeps originals by default and rechecks each remaining input before opt-in Trash. HomeBackUp 0.1.6 uses guarded no-follow root locks and verifies service shutdown.
 Anki 0.1.6 intentionally PUBLISHES: validated same-import updates may overwrite body,
@@ -49,7 +49,7 @@ Review the new versions and explicitly use the manager's Update action. Actual
 Linux Mint 22.x root APT, Borg retention/restore and live WordPress acceptance
 remain separate. Do not upgrade the kernel/NVIDIA driver as part of this review.
 
-## Portable release: 0.3.0
+## Portable release: 0.3.1
 
 Extract the source ZIP, open its folder and run as your desktop user:
 
@@ -78,7 +78,10 @@ bash run.sh --build-package --output-dir /tmp/manager-package
 Only if you later want system installation, install that deb with apt.
 The included system-extension-manager.desktop is for the optional installed manager.
 
-## One-time Update All (0.2.7)
+## One-time Update All
+
+If HomeBackUp still has an enabled timer or a busy service, the batch logs the
+deferred upgrade and continues with other eligible extensions.
 
 Select **Update All** in the manager window or, from a desktop terminal, run:
 
