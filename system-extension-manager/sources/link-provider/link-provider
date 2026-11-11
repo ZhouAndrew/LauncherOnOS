@@ -8,7 +8,7 @@ import fcntl
 import getpass
 import hashlib
 import hmac
-from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
 import json
 import os
@@ -30,7 +30,6 @@ SCHEME = "caldav-run"
 MIME_TYPE = f"x-scheme-handler/{SCHEME}"
 DESKTOP_ID = "local.link-provider.desktop"
 LINK_ID = re.compile(r"[a-z0-9][a-z0-9-]{0,62}")
-ALIAS = re.compile(rf"{SCHEME}://({LINK_ID.pattern})")
 SCHEME_PATTERN = re.compile(r"[a-zA-Z][a-zA-Z0-9+.-]*")
 WEB_SCHEMES = {"http", "https"}
 PR_SET_NO_NEW_PRIVS = 38
@@ -407,10 +406,15 @@ def serve_lan(args):
     context.load_cert_chain(args.cert, args.key)
     retry_at = 0.0
 
-    class Server(HTTPServer):
+    class Listener(HTTPServer):
         def get_request(self):
             connection, address = super().get_request()
             connection.settimeout(3)
+            return connection, address
+
+    class Server(Listener):
+        def get_request(self):
+            connection, address = super().get_request()
             try:
                 return context.wrap_socket(connection, server_side=True), address
             except OSError:
@@ -523,8 +527,7 @@ def serve_lan(args):
     with Server((args.bind, args.port), Handler) as server:
         try:
             if args.http_port:
-                redirect = ThreadingHTTPServer((args.bind, args.http_port), RedirectHandler)
-                redirect.daemon_threads = True
+                redirect = Listener((args.bind, args.http_port), RedirectHandler)
                 threading.Thread(target=redirect.serve_forever, daemon=True).start()
             print(f"Listening at {origin}", flush=True)
             server.serve_forever()

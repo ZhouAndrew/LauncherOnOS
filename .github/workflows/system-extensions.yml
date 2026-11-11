@@ -68,7 +68,7 @@ jobs:
       - name: Smoke test HomeBackUp GTK 3 window as normal user
         run: xvfb-run -a /usr/bin/python3 system-extension-manager/sources/homebackup/gui.py --smoke-test
       - name: Verify one administrator session for real package operations
-        run: python3 system-extension-manager/tests/acceptance_admin_session.py
+        run: xvfb-run -a /usr/bin/python3 system-extension-manager/tests/acceptance_admin_session.py
       - name: Verify privileged staged installation, Link Provider entry points and removal
         run: |
           # Test the real root-owned verified .deb copy on this ephemeral CI VM.
@@ -125,8 +125,7 @@ jobs:
           git archive --format=zip --output="$GITHUB_WORKSPACE/System-Extension-Manager-source.zip" HEAD:system-extension-manager
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: System-Extension-Manager-Portable-Security-Updates
+          name: System-Extension-Manager-0.3.0
           path: |
             System-Extension-Manager-source.zip
-            system-extension-manager/packages/mint-link-provider-extension_0.3.0_all.deb
             ${{ runner.temp }}/manager/system-extension-manager_*.deb

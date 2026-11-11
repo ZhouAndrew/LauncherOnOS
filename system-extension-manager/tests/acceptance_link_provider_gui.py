@@ -2,11 +2,11 @@
 """Use GTK controls, clipboard, saved settings and real HTTP(S) listeners."""
 import importlib.machinery
 import importlib.util
-import json
 import os
 from pathlib import Path
 import socket
 import ssl
+import subprocess
 import sys
 import tempfile
 import time
@@ -62,6 +62,15 @@ with tempfile.TemporaryDirectory(prefix='link-provider-human-path-') as director
     window.show_all()
     try:
         wait(lambda: not window.busy)
+        window.scheme_dialog(None)
+        editor = dialog()
+        entries(editor)[0].set_text('study')
+        editor.response(Gtk.ResponseType.OK)
+        wait(lambda: window.handler_current)
+        assert backend.default_handler('x-scheme-handler/study') == backend.DESKTOP_ID
+        subprocess.run(['gio', 'open', 'study://fixture'], check=True, timeout=10)
+        wait(marker.is_file)
+        marker.unlink()
         window.lan_button.clicked()
         wait(lambda: backend.read_links()['fixture'].get('allow_lan'))
         window.password_dialog(None)
@@ -87,7 +96,7 @@ with tempfile.TemporaryDirectory(prefix='link-provider-human-path-') as director
         window.server_button.clicked()
         wait(lambda: window.server_button.get_label() == 'Stop LAN')
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}),
-            urllib.request.HTTPSHandler(context=ssl._create_unverified_context()))
+            urllib.request.HTTPSHandler(context=ssl.create_default_context(cafile=backend.lan_settings()["cert"])))
         with opener.open(f'http://127.0.0.1:{http_port}/run/fixture', timeout=5) as response:
             assert response.url == expected
             assert b'type="password"' in response.read()
@@ -101,7 +110,7 @@ with tempfile.TemporaryDirectory(prefix='link-provider-human-path-') as director
         assert marker.is_file()
         window.server_button.clicked()
         wait(lambda: window.server is None)
-        print('PASS: GTK authorization, password entry, LAN configuration, clipboard, HTTP-to-HTTPS, authenticated launch, Stop LAN.')
+        print('PASS: GTK custom scheme and GIO dispatch, authorization, password entry, LAN configuration, clipboard, trusted HTTPS launch and Stop LAN.')
     finally:
         window.close_server()
         window.destroy()

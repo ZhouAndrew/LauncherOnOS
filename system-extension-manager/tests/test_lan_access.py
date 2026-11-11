@@ -46,7 +46,7 @@ class LANAccessTests(unittest.TestCase):
         self.addCleanup(self.stop)
         self.opener = urllib.request.build_opener(
             urllib.request.ProxyHandler({}),
-            urllib.request.HTTPSHandler(context=ssl._create_unverified_context()))
+            urllib.request.HTTPSHandler(context=ssl.create_default_context(cafile=str(self.folder / 'config/link-provider/lan-cert.pem'))))
         for _ in range(100):
             try:
                 self.request()

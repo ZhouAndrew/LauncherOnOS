@@ -2,17 +2,20 @@
 
 ## Active product
 
-**ACTIVE / MAINTAINED: System Extension Manager 0.2.5**, under
+**ACTIVE / MAINTAINED: System Extension Manager 0.3.0**, under
 `system-extension-manager/`. Its independently installed extensions are
 ZIP and Trash 0.4.5, Anki Time Travel 0.1.6, HomeBackUp 0.1.6,
-Link Provider 0.2.2, plus the built-in terminal-only Security Updates tool.
+Link Provider 0.3.0, plus the built-in terminal-only Security Updates tool.
 
 The 2026-11-08 source audit in
 [`system-extension-manager/SECURITY_AUDIT_2026-11-08.md`](system-extension-manager/SECURITY_AUDIT_2026-11-08.md)
 contains the initial review and the version 0.2.5 critical-remediation follow-up.
 APT now installs from a checked root-owned copy; manual updater root imports use
 isolated Python and verified root-owned code; backup root locks use safe no-follow
-opens. Link Provider distinguishes dispatch from application readiness.
+opens. The window-scoped package helper limits requests to the approved catalog
+and closes when its input pipe closes. Link Provider distinguishes dispatch from
+application readiness. LAN requests require HTTPS password verification and can
+only select an individually authorized, fixed preset as the desktop user.
 These fixes require **explicit installation of the new extension versions**.
 Live APT repository changes, concurrent writers and application-specific backend
 readiness are still not fully controlled.

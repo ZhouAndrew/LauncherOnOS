@@ -108,7 +108,7 @@
     ],
     "description": "Manage custom desktop schemes and fixed commands. Authorize individual presets for password-verified LAN launches over HTTPS. HTTP links redirect to the secure run page.",
     "deb": "packages/mint-link-provider-extension_0.3.0_all.deb",
-    "sha256": "cc8cb961cd998e5556db31dc4eb544be5d2fb88eea7da63c38ae2c612d95fa59",
+    "sha256": "21043f59347238f208093c7e2b33af82d490e61757dd420c4efabb8d7f07956e",
     "source": {
       "kind": "bundled",
       "requires": [
@@ -119,7 +119,7 @@
       "files": {
         "sources/link-provider/README.md": "22eba469debf7a0b253764e9d1c2aadc29c2be1024da5c02306d66e6f2ab6e85",
         "sources/link-provider/build.py": "cf7825a111a0b0c4b492f97e439f50050b0e990258dc16346a5c4ee86f1d12a1",
-        "sources/link-provider/link-provider": "2d71887c3a787523034e30c81f93cea038912497ff4983c64ab452a283d9c2cd",
+        "sources/link-provider/link-provider": "51ad1ffa2fcac0b7ca9edf68460a7e03901bc43f6dccc1bfae99b5880b8d7d13",
         "sources/link-provider/link_provider_gui.py": "e84739fb2e1e8596e5a6bd0a7c804d8cad7b633d1983771099c3324da046c0bd",
         "sources/link-provider/mint-link-provider.desktop": "cd8929555de6bbb5a189bc108154940cccec08308487967f2c901fa178dd0823"
       },
