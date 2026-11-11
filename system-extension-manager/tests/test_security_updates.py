@@ -51,29 +51,29 @@ class SafetyTests(unittest.TestCase):
             with self.assertRaisesRegex(security.SafetyError, 'terminal'):
                 security.interactive()
 
-    def test_interactive_refresh_cancel_stops_before_install(self):
+    def test_managed_interactive_authorizes_once(self):
         with (
             patch.object(security.sys.stdin, 'isatty', return_value=True),
             patch.object(security.os, 'geteuid', return_value=1000),
+            patch.dict(security.os.environ, {'SEM_SECURITY_TRANSCRIPT': '1'}),
             patch.object(security.subprocess, 'call', return_value=1) as sudo,
-            patch.object(security, 'scan', side_effect=AssertionError('scan must not run')),
         ):
-            with self.assertRaisesRegex(security.SafetyError, 'failed or was cancelled'):
-                security.interactive()
-            self.assertIn('--refresh-root', sudo.call_args.args[0])
+            self.assertEqual(security.interactive(), 1)
+            sudo.assert_called_once()
+            self.assertEqual(sudo.call_args.args[0][-1], '--interactive-root')
 
-    def test_interactive_decline_prevents_install(self):
+    def test_root_interactive_decline_prevents_install(self):
         with (
             patch.object(security.sys.stdin, 'isatty', return_value=True),
-            patch.object(security.os, 'geteuid', return_value=1000),
-            patch.object(security.subprocess, 'call', return_value=0) as sudo,
+            patch.object(security, 'refresh') as refresh,
             patch.object(security, 'scan', return_value=({'openssl': '1.0'}, {})),
             patch.object(security, 'simulate', return_value=['openssl=1.0']),
+            patch.object(security, 'apply') as apply,
             patch('builtins.input', return_value='no'),
         ):
-            security.interactive()
-            self.assertEqual(sudo.call_count, 1)
-            self.assertIn('--refresh-root', sudo.call_args.args[0])
+            security.interactive_root()
+            refresh.assert_called_once()
+            apply.assert_not_called()
 
     def test_apply_requires_root(self):
         with patch.object(security.os, 'geteuid', return_value=1000):
