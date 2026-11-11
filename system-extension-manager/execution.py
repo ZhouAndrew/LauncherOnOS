@@ -195,13 +195,32 @@ def scrollable_tree(frame, tree):
     horizontal.grid(row=1, column=0, sticky='ew')
 
 
-def show_log_history(parent):
+def security_update_result(path):
+    with open_log(path) as source:
+        size = source.seek(0, os.SEEK_END)
+        source.seek(max(0, size - 8192))
+        lines = source.read(8192).decode('utf-8', errors='replace').splitlines()
+    if not lines or not lines[-1].startswith('Exit code: '):
+        return 'No final result recorded'
+    if lines[-1] != 'Exit code: 0':
+        return 'Failed (' + lines[-1] + ')'
+    for line, result in (
+        ('Update completed and verified.', 'Updates installed and verified'),
+        ('Cancelled; no packages installed.', 'Cancelled'),
+        ('No eligible security updates. Nothing to install.', 'No eligible updates'),
+    ):
+        if line in lines:
+            return result
+    return 'Exited successfully'
+
+
+def show_log_history(parent, *, security_updates=False):
     import tkinter as tk
     from tkinter import ttk, messagebox
     import native_dialogs
 
-    window = tk.Toplevel(parent, name='log_history')
-    window.title('Log History')
+    window = tk.Toplevel(parent, name='security_update_results' if security_updates else 'log_history')
+    window.title('Security Updates — Run Results' if security_updates else 'Log History')
     window.geometry('900x590')
     window.minsize(600, 360)
     window.columnconfigure(0, weight=1)
@@ -212,7 +231,7 @@ def show_log_history(parent):
     listing = ttk.Frame(window)
     listing.grid(row=0, sticky='nsew', padx=10, pady=(10, 0))
     tree = ttk.Treeview(listing, columns=columns, show='headings', selectmode='browse', height=3)
-    for col, title, width in [('operation', 'Operation', 290), ('updated', 'Last written', 155), ('file', 'Log file', 325)]:
+    for col, title, width in [('operation', 'Result' if security_updates else 'Operation', 290), ('updated', 'Last written', 155), ('file', 'Log file', 325)]:
         tree.heading(col, text=title)
         tree.column(col, width=width, minwidth=width)
     scrollable_tree(listing, tree)
@@ -229,7 +248,7 @@ def show_log_history(parent):
         path = selected()
         status.set(str(path or folder))
         state = 'disabled'
-        message = 'No saved logs yet.'
+        message = 'No Security Updates runs recorded yet.' if security_updates else 'No saved logs yet.'
         if path:
             try:
                 message = log_preview(path)
@@ -244,11 +263,19 @@ def show_log_history(parent):
         previous = tree.selection()
         try:
             entries = saved_logs(folder)
+            if security_updates:
+                entries = [entry for entry in entries
+                           if entry[0].name.startswith('security-updates-terminal-')]
         except OSError as exc:
             messagebox.showerror('Could not list logs', str(exc), parent=window)
             return
         tree.delete(*tree.get_children())
         for path, modified, label in entries:
+            if security_updates:
+                try:
+                    label = security_update_result(path)
+                except (OSError, ValueError):
+                    label = 'Result unavailable'
             timestamp = datetime.fromtimestamp(modified).strftime('%Y-%m-%d %H:%M:%S')
             tree.insert('', 'end', iid=path.name, values=(label, timestamp, path.name))
         if entries:
