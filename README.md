@@ -88,5 +88,7 @@ The standalone [HomeBackUp Extension](extensions/homebackup/) source and Debian 
 ## Retired historical code
 
 The retired project is not part of System Extension Manager. It must never be
-executed, rebuilt, restored or extracted. Its source tree remains untouched;
+executed, rebuilt, restored or extracted. A [sealed historical ZIP](legacy-archives/MINT_TOOLBOX_DO_NOT_EXTRACT_2026-11-11.zip)
+preserves the code for historical reference only. **Do not extract or run it.**
+Its original source tree remains untouched;
 maintained extensions have their own source under `system-extension-manager/`.
