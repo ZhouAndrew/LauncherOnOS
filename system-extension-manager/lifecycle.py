@@ -350,6 +350,10 @@ def build_source(item, log):
     return artifacts[0]
 
 
+class HomeBackupUpgradeDeferred(ValueError):
+    """HomeBackUp needs a maintenance window before its package changes."""
+
+
 def change(key, enable, log=None, from_source=False, update=False, admin=None):
     owned = log is None
     log = log or OperationLog(key)
@@ -412,10 +416,10 @@ def change(key, enable, log=None, from_source=False, update=False, admin=None):
             for unit in ('mint-homebackup-extension.timer', 'mint-homebackup-extension.service'):
                 state = log.run(['/usr/bin/systemctl', 'show', '--property=ActiveState', '--value', unit]).stdout.strip()
                 if state not in ('inactive', 'failed'):
-                    raise ValueError('Stop the HomeBackUp timer and active backup service before updating: ' + unit + ' is ' + state)
+                    raise HomeBackupUpgradeDeferred('Stop the HomeBackUp timer and active backup service before updating: ' + unit + ' is ' + state)
             timer = log.run(['/usr/bin/systemctl', 'is-enabled', 'mint-homebackup-extension.timer'], check=False).stdout.strip()
             if timer not in ('disabled', 'masked'):
-                raise ValueError('Disable the HomeBackUp monthly timer before updating; current state: ' + timer)
+                raise HomeBackupUpgradeDeferred('Disable the HomeBackUp monthly timer before updating; current state: ' + timer)
         log.stage('Installing package' if enable else 'Removing package')
         if admin is None:
             result = log.run(args, check=False)
@@ -432,6 +436,9 @@ def change(key, enable, log=None, from_source=False, update=False, admin=None):
             raise RuntimeError('Operation failed or package status readback did not match')
         log.stage('Completed successfully')
         return version
+    except HomeBackupUpgradeDeferred as exc:
+        log.stage('Deferred HomeBackUp: ' + str(exc))
+        raise
     except Exception as exc:
         log.stage('FAILED: ' + str(exc))
         raise
@@ -477,6 +484,7 @@ def update_all(log=None, *, include_security=True, admin=None):
     owned = log is None
     log = log or OperationLog('Update All')
     updated = []
+    deferred = {}
     try:
         log.stage('Planning one-time updates for installed extensions only')
         planned = update_all_plan(log)
@@ -492,6 +500,9 @@ def update_all(log=None, *, include_security=True, admin=None):
             try:
                 options = {'admin': admin} if admin is not None else {}
                 result = change(item['id'], True, log, update=True, **options)
+            except HomeBackupUpgradeDeferred as exc:
+                deferred[item['id']] = str(exc)
+                continue
             except Exception as exc:
                 log.stage('UPDATE ALL STOPPED after ' + str(len(updated)) + ' successful upgrades. '
                           'No remaining extensions or Security Updates were started.')
@@ -504,10 +515,11 @@ def update_all(log=None, *, include_security=True, admin=None):
             log.stage('Opening the manual security-updates review terminal. '
                       'APT installation requires its own explicit UPDATE approval.')
             open_extension('security-updates', log)
-        log.stage('Batch finished: upgraded ' + str(len(updated)) + ' extension(s). '
+        log.stage('Batch finished: upgraded ' + str(len(updated)) + ' extension(s); '
+                  'deferred ' + str(len(deferred)) + '. '
                   + ('Security update review terminal launched; its outcome is recorded separately.'
                      if include_security else 'Security updates were not requested.'))
-        return dict(updated=updated, security_review_started=include_security)
+        return dict(updated=updated, deferred=deferred, security_review_started=include_security)
     except Exception as exc:
         log.stage('UPDATE ALL FAILED: ' + str(exc))
         raise
@@ -826,7 +838,8 @@ def show_gui(parent=None):
               'Disabled extensions stay disabled. Existing versions are rechecked before each action.\n\n'
               'Afterwards, Security Updates opens a terminal for separate package review '
               'and explicit UPDATE confirmation. Kernel/NVIDIA/DKMS/firmware/boot upgrades remain excluded.\n\n'
-              'Package updates may require administrator authorization. A failure stops the batch; '
+              'HomeBackUp is deferred if its scheduler is still enabled or its service is busy. '
+              'Package updates may require administrator authorization. Installation failures stop the batch; '
               'successful earlier updates are not rolled back. All output is logged.\n\nProceed?'
         )
         if not messagebox.askyesno('Update All', prompt, parent=window):
