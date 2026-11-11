@@ -673,6 +673,16 @@ def show_gui(parent=None):
             show_log_history(window)
 
     ttk.Button(bar, text='Log History...', command=open_history).pack(side='left', padx=(8, 0))
+    def open_security_results():
+        history = window.children.get('security_update_results')
+        if history is None:
+            show_log_history(window, security_updates=True)
+        else:
+            history.deiconify()
+            history.lift()
+            history.focus_set()
+
+    ttk.Button(bar, text='Security Update Results...', command=open_security_results).pack(side='left', padx=(8, 0))
     ttk.Button(bar, text='Safety notes...', command=lambda: messagebox.showinfo(
         'Safety notes', SAFETY_NOTICE, parent=window)).pack(side='left', padx=(8, 0))
     listing = ttk.Frame(window)
