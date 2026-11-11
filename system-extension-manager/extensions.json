@@ -4,7 +4,7 @@
     "name": "ZIP and Trash",
     "package": "mint-toolbox-extension-zip-trash",
     "version": "0.4.5",
-    "description": "Nemo verified ZIP compression; originals are KEPT by default. WARNING: optional CLI Trash cannot exclude concurrent writers. Preserves file, directory, dangling and circular symbolic links without following their targets.",
+    "description": "Nemo verified ZIP compression, keeping originals by default. Preserves symbolic links without following their targets.",
     "deb": "packages/mint-toolbox-extension-zip-trash_0.4.5_all.deb",
     "sha256": "ef194c84c7e6ef3d9a2d9701a9904f259306da253e0b3627cc5bc7944d9061f1",
     "source": {
@@ -38,7 +38,7 @@
       "/usr/bin/anki-time-travel",
       "--gui"
     ],
-    "description": "WARNING: Imports PUBLISH posts, can overwrite matching content/categories, and may reuse an old same-path attachment. Uploaded PDFs may be directly accessible. Preserves historical dates and verifies imported posts, attachments and the exact post permalink. Requires WP-CLI and an accessible existing WordPress site.",
+    "description": "Publishes historical Anki PDF posts to WordPress, verifies dates and permalinks. Requires WP-CLI and an accessible WordPress site.",
     "deb": "packages/anki-time-travel_0.1.6_all.deb",
     "sha256": "c528ccbf5c7410fff9d1ebeaff1852e9e0acc53eb03155620b42a680d80bc530",
     "source": {
@@ -73,7 +73,7 @@
       "/usr/bin/homebackup-ext",
       "gui"
     ],
-    "description": "WARNING: Successful backups permanently prune older mint-* archives. Preview retention first. Borg recovery backups: monthly scheduling, verified deduplicated archives and at most 3 retained backup dates. Existing encrypted repository is reused; configure it after enabling from the Mint application menu. The /dev/sdc7 data partition is not included.",
+    "description": "Borg recovery backups with monthly scheduling, verification and up to 3 retained backup dates. Reuses an existing encrypted repository; configure from the Mint application menu. The /dev/sdc7 partition is not included.",
     "deb": "packages/mint-homebackup-extension_0.1.6_all.deb",
     "sha256": "2025b0a966714b8f75490896464ee6bc891c04032d3bcf51c19c67f1f46771b8",
     "source": {

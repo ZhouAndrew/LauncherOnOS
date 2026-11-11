@@ -33,6 +33,37 @@ def security_warning(item, *, installing=False):
 
 ROOT = Path(__file__).resolve().parent
 
+SAFETY_NOTICE = (
+    'Safety information (shown only once):\n\n'
+    'Install / Uninstall affects all users; portable tools need no installation.\n'
+    'A HomeBackUp installation does not prove a backup timer is running; old archives may be pruned.\n'
+    'Anki imports publish WordPress posts and can overwrite existing content; back up WordPress first.\n'
+    'ZIP keeps originals by default; optional Trash moves are not atomic.\n'
+    'Security Updates is manual in a terminal: leave it open until completion. Kernel/driver changes are excluded.\n\n'
+    'Review these notes later with Safety notes...'
+)
+
+
+def safety_notice_path():
+    state_home = Path(os.environ.get('XDG_STATE_HOME') or (Path.home() / '.local/state'))
+    return state_home / 'system-extension-manager' / 'safety-notice-v1.ack'
+
+
+def show_one_time_safety_notice(window, showinfo=None):
+    from tkinter import messagebox
+    path = safety_notice_path()
+    if path.is_file():
+        return False
+    (showinfo or messagebox.showinfo)('Safety notes', SAFETY_NOTICE, parent=window)
+    try:
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        path.write_text('acknowledged\n', encoding='utf-8')
+    except OSError:
+        pass
+    return True
+
+
+
 # The privileged process opens the source package ONCE with O_NOFOLLOW,
 # copies those exact bytes into a root-owned private directory, checks the
 # approved SHA-256 against that copy, simulates APT again and installs ONLY
@@ -621,19 +652,13 @@ def show_gui(parent=None):
     window.title('System Extension Manager')
     window.geometry('1100x760')
     window.columnconfigure(0, weight=1)
-    window.rowconfigure(4, weight=1)
-    window.rowconfigure(7, weight=1)
+    window.rowconfigure(2, weight=1)
+    window.rowconfigure(5, weight=1)
     header = ttk.Frame(window)
     header.grid(row=0, sticky='ew', padx=12, pady=(8, 0))
     ttk.Label(header, text='ACTIVE / MAINTAINED - System Extension Manager', foreground='#17633b').pack(fill='x')
-    retired = ttk.Label(header, text=MINT_TOOLBOX_RETIRED_WARNING, foreground='#9b3200', justify='left')
-    retired.pack(fill='x', pady=(2, 0))
-    notice = ttk.Label(window, text='WARNING: Installed does not mean a backup timer is running. Anki imports publish and may overwrite posts. ZIP keeps originals. Security Updates runs manually in a terminal; keep it open until completion.', foreground='#9b3200', justify='left')
-    notice.grid(row=1, sticky='ew', padx=12, pady=4)
-    scope = ttk.Label(window, text='Install / Uninstall affects all users. Portable tools run directly without installation.', justify='left')
-    scope.grid(row=2, sticky='ew', padx=12, pady=(0, 8))
     bar = ttk.Frame(window)
-    bar.grid(row=3, sticky='ew', padx=12)
+    bar.grid(row=1, sticky='ew', padx=12, pady=(8, 0))
     ttk.Label(bar, text='Search').pack(side='left')
     query, status = tk.StringVar(), tk.StringVar(value='All')
     ttk.Entry(bar, textvariable=query, width=1).pack(side='left', fill='x', expand=True, padx=8)
@@ -648,8 +673,10 @@ def show_gui(parent=None):
             show_log_history(window)
 
     ttk.Button(bar, text='Log History...', command=open_history).pack(side='left', padx=(8, 0))
+    ttk.Button(bar, text='Safety notes...', command=lambda: messagebox.showinfo(
+        'Safety notes', SAFETY_NOTICE, parent=window)).pack(side='left', padx=(8, 0))
     listing = ttk.Frame(window)
-    listing.grid(row=4, sticky='nsew', padx=12, pady=(8, 0))
+    listing.grid(row=2, sticky='nsew', padx=12, pady=(8, 0))
     columns = ('name', 'version', 'state', 'source')
     tree = ttk.Treeview(listing, columns=columns, show='headings', selectmode='browse', height=2)
     for col, title, width in [('name', 'Tool', 180), ('version', 'Bundled version', 125), ('state', 'System status', 290), ('source', 'Source build', 110)]:
@@ -658,19 +685,16 @@ def show_gui(parent=None):
     scrollable_tree(listing, tree)
 
     details = ttk.Frame(window)
-    details.grid(row=5, sticky='ew', padx=12, pady=(6, 4))
+    details.grid(row=3, sticky='ew', padx=12, pady=(6, 4))
     description = tk.StringVar(value='Select an extension to view its description.')
     description_label = ttk.Label(details, textvariable=description, justify='left')
     description_label.pack(fill='x')
-    warning = tk.StringVar()
-    warning_label = ttk.Label(details, textvariable=warning, foreground='#9b3200', justify='left')
-    warning_label.pack(fill='x')
 
     buttons = ttk.Frame(window)
-    buttons.grid(row=6, sticky='ew', padx=12)
+    buttons.grid(row=4, sticky='ew', padx=12)
     panel = LogPanel(window)
     panel.text.configure(width=1, height=2)
-    panel.frame.grid(row=7, sticky='nsew', padx=12, pady=(8, 10))
+    panel.frame.grid(row=5, sticky='nsew', padx=12, pady=(8, 10))
     events = queue.Queue()
     busy = [False]
     rows = []
@@ -694,7 +718,6 @@ def show_gui(parent=None):
     def update_selection(*_):
         item = selected()
         description.set(item['description'] if item else 'Select an extension to view its description.')
-        warning.set(security_warning(item) if item else '')
         schedule_minimum_height()
         for control in operation_buttons:
             control.configure(state='normal' if item and not busy[0] else 'disabled')
@@ -716,7 +739,10 @@ def show_gui(parent=None):
         if not item or busy[0]:
             return
         label = 'Update' if update else ('Run in Terminal' if item.get('kind') == 'portable' else 'Open') if launch else ('Build from source and install' if from_source else ('Enable / Install' if enable else 'Disable / Uninstall'))
-        if not launch and not messagebox.askyesno(label, label + ': ' + item['name'] + ('\n\n' + security_warning(item, installing=True) if enable else '') + '\n\nCommands and output will appear below. Administrator authorization is requested only for package installation/removal.', parent=window):
+        if not launch and not messagebox.askyesno(
+            label, label + ': ' + item['name']
+            + '\n\nThis changes system-wide packages. Administrator authorization may be required. Proceed?',
+            parent=window):
             return
         busy[0] = True
         refresh_button.configure(state='disabled')
@@ -863,7 +889,7 @@ def show_gui(parent=None):
         if available == layout_width:
             return
         layout_width = available
-        for label in (retired, notice, scope, description_label, warning_label):
+        for label in (description_label,):
             label.configure(wraplength=available)
         count = len(actions) if sum(action_widths) <= available else columns
         if count != action_columns:
@@ -894,6 +920,7 @@ def show_gui(parent=None):
     window.protocol('WM_DELETE_WINDOW', close)
     refresh()
     poll_job = window.after(75, poll)
+    window.after_idle(lambda: show_one_time_safety_notice(window))
     if parent is None:
         window.mainloop()
     return window

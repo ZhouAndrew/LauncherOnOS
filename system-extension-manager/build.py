@@ -46,13 +46,13 @@ def build_extensions():
     packages.mkdir(exist_ok=True)
     definitions = [
         dict(id='zip-trash', name='ZIP and Trash', package='mint-toolbox-extension-zip-trash', version='0.4.5',
-             description='Nemo verified ZIP compression; originals are KEPT by default. WARNING: optional CLI Trash cannot exclude concurrent writers. Preserves file, directory, dangling and circular symbolic links without following their targets.'),
+             description='Nemo verified ZIP compression, keeping originals by default. Preserves symbolic links without following their targets.'),
         dict(id='anki-time-travel', name='Anki Time Travel', package='anki-time-travel', version='0.1.6',
              launch=['/usr/bin/anki-time-travel', '--gui'],
-             description='WARNING: Imports PUBLISH posts, can overwrite matching content/categories, and may reuse an old same-path attachment. Uploaded PDFs may be directly accessible. Preserves historical dates and verifies imported posts, attachments and the exact post permalink. Requires WP-CLI and an accessible existing WordPress site.'),
+             description='Publishes historical Anki PDF posts to WordPress, verifies dates and permalinks. Requires WP-CLI and an accessible WordPress site.'),
         dict(id='homebackup', name='HomeBackUp', package='mint-homebackup-extension', version='0.1.6',
              launch=['/usr/bin/homebackup-ext', 'gui'],
-             description='WARNING: Successful backups permanently prune older mint-* archives. Preview retention first. Borg recovery backups: monthly scheduling, verified deduplicated archives and at most 3 retained backup dates. Existing encrypted repository is reused; configure it after enabling from the Mint application menu. The /dev/sdc7 data partition is not included.'),
+             description='Borg recovery backups with monthly scheduling, verification and up to 3 retained backup dates. Reuses an existing encrypted repository; configure from the Mint application menu. The /dev/sdc7 partition is not included.'),
         dict(id='link-provider', name='Link Provider', package='mint-link-provider-extension', version='0.2.2',
              launch=['/usr/bin/link-provider'],
              description='Manage and test caldav-run links to URLs or fixed local commands. Opens a standalone window. Command links run as your desktop user and block sudo.'),

@@ -1,6 +1,6 @@
 # System Extension Manager
 
-**ACTIVE / MAINTAINED — 0.2.8.** The legacy Mint Toolbox application is RETIRED and UNSAFE: **DO NOT USE, RUN, INSTALL, UPGRADE, BUILD, OR TEST IT.** Do not change files under `mint-toolbox/`. Its automatic GitHub Actions workflow is disabled. System Extension Manager is a separate maintained application; a catalog entry attempting to revive Mint Toolbox is rejected.
+**ACTIVE / MAINTAINED — 0.2.8.** An independent extension manager, not a front end for the retired application.
 See [security status](../SECURITY_STATUS.md) for fixed and retained risks.
 ZIP 0.4.5 keeps originals by default and rechecks each remaining input before opt-in Trash. HomeBackUp 0.1.6 uses guarded no-follow root locks and verifies service shutdown.
 Anki 0.1.6 intentionally PUBLISHES: validated same-import updates may overwrite body,
@@ -8,6 +8,12 @@ categories and tags; conflicting same-path PDF bytes are blocked; PDFs may be
 directly accessible. These are warned, not claimed fixed. Back up WordPress first.
 Before upgrading HomeBackUp from 0.1.3, stop its timer and service; its old
 maintenance scripts lack the new protections. The manager refuses unsafe upgrades.
+
+Safety information is shown in a dismissible first-run dialog and acknowledged per
+user at `$XDG_STATE_HOME/system-extension-manager/safety-notice-v1.ack`.
+The main window has no permanent safety or retired-app banner. A Safety notes...
+button lets users reopen the notes voluntarily. Risky package operations still
+require explicit confirmation.
 
 An independent manager for system extensions. Enable installs a bundled Debian package;
 Disable uninstalls that package. The interface shows multiple real extensions and actual dpkg state.

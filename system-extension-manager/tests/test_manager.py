@@ -221,6 +221,20 @@ print('ALL_RECIPES_OK')
 
 @unittest.skipUnless(os.environ.get('DISPLAY'), 'requires a graphical environment')
 class ManagerGuiTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._notice_dir = tempfile.TemporaryDirectory()
+        cls._notice_env = patch.dict(os.environ, {'XDG_STATE_HOME': cls._notice_dir.name})
+        cls._notice_env.start()
+        receipt = lifecycle.safety_notice_path()
+        receipt.parent.mkdir(parents=True)
+        receipt.write_text('acknowledged\n', encoding='utf-8')
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._notice_env.stop()
+        cls._notice_dir.cleanup()
+
     def test_resize_keeps_actions_and_logs_visible(self):
         import tkinter as tk
         from tkinter import ttk
@@ -256,11 +270,9 @@ class ManagerGuiTests(unittest.TestCase):
                     assert_visible(widget, window)
                 self.assertEqual(buttons['Update All'].winfo_rooty() > buttons['Update'].winfo_rooty(), wrapped)
                 self.assertEqual(tree.xview()[1] < 1.0, wrapped)
-                notice = next(w for w in widgets if isinstance(w, ttk.Label) and str(w.cget('text')).startswith('WARNING: Installed'))
-                retired = next(w for w in widgets if isinstance(w, ttk.Label) and w.cget('text') == lifecycle.MINT_TOOLBOX_RETIRED_WARNING)
-                for label in (notice, retired):
-                    assert_visible(label, window)
-                    self.assertEqual(int(label.cget('wraplength')), window.winfo_width() - 24)
+                texts = [str(w.cget('text')) for w in widgets if isinstance(w, ttk.Label)]
+                self.assertFalse(any('Mint Toolbox' in text for text in texts))
+                self.assertFalse(any(text.startswith('WARNING: Installed') for text in texts))
 
         buttons['Log History...'].invoke()
         history = window.children['log_history']
@@ -291,7 +303,7 @@ class ManagerGuiTests(unittest.TestCase):
             buttons = {w.cget('text'): w for w in descendants(window) if isinstance(w, ttk.Button)}
             self.assertEqual(str(buttons['Run in Terminal'].cget('state')), 'normal')
             labels = [str(w.cget('text')) for w in descendants(window) if isinstance(w, ttk.Label)]
-            self.assertTrue(any('root-owned SHA-256-verified source copy' in text for text in labels))
+            self.assertFalse(any('Mint Toolbox' in text for text in labels))
             for label in ('Enable / Install', 'Disable / Uninstall', 'Update', 'Build from source...'):
                 self.assertEqual(str(buttons[label].cget('state')), 'disabled', label)
             buttons['Run in Terminal'].invoke()
@@ -327,7 +339,7 @@ class ManagerGuiTests(unittest.TestCase):
                 build.assert_not_called()
             self.assertEqual(str(buttons['Open'].cget('state')), 'normal')
             labels = [str(w.cget('text')) for w in descendants(window) if isinstance(w, ttk.Label)]
-            self.assertTrue(any('root-owned temporary directory' in text for text in labels))
+            self.assertFalse(any('Mint Toolbox' in text for text in labels))
             buttons['Open'].invoke()
             def check():
                 try:

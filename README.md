@@ -85,6 +85,8 @@ Known limitations: standalone script installation does not resolve external depe
 ## Companion package: Mint HomeBackUp Extension
 
 The standalone [HomeBackUp Extension](extensions/homebackup/) source and Debian package builder are maintained in this repository, replacing the abandoned MintBox/Toolbox integration path for backup management. It is **not** a runtime dependency of LauncherOnOS and does not change its CLI, installation or security model. Build with `bash extensions/homebackup/tests/check-package.sh` (requires Debian/Ubuntu tools); the extension manages an existing encrypted Borg recovery repository, monthly scheduling, and a maximum of three backup dates. It has not yet been live-tested on Linux Mint for installation and disaster recovery.
-## Mint Toolbox
+## Retired historical code
 
-The GUI-first Mint Toolbox lives in [`mint-toolbox/`](mint-toolbox/README.md). It includes bundled Debian system extensions and a Nemo ZIP-and-Trash context-menu action.
+The retired project is not part of System Extension Manager. It must never be
+executed, rebuilt, restored or extracted. Its source tree remains untouched;
+maintained extensions have their own source under `system-extension-manager/`.
