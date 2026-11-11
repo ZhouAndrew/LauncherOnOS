@@ -179,6 +179,9 @@ class LinkManager(Gtk.Window):
         self.test_button.connect("clicked", lambda _button: self.run_selected("test"))
         for button in (self.edit_button, self.toggle_button, self.delete_button):
             action_row.pack_start(button, False, False, 0)
+        self.lan_button = Gtk.Button(label="Allow LAN")
+        self.lan_button.connect("clicked", self.toggle_lan)
+        action_row.pack_start(self.lan_button, False, False, 0)
         action_row.pack_end(self.test_button, False, False, 0)
         content.pack_start(action_row, False, False, 0)
 
@@ -201,6 +204,8 @@ class LinkManager(Gtk.Window):
         self.toggle_button.set_label("Enable" if entry and not enabled else "Disable")
         for button in (self.edit_button, self.toggle_button, self.delete_button):
             button.set_sensitive(entry is not None and not self.busy)
+        self.lan_button.set_label("Revoke LAN" if entry and entry.get("allow_lan") else "Allow LAN")
+        self.lan_button.set_sensitive(bool(entry and entry["kind"] == "app" and not self.busy))
         self.test_button.set_sensitive(enabled and not self.busy)
         self.copy_button.set_sensitive(enabled)
         self.add_button.set_sensitive(not self.busy)
@@ -298,6 +303,13 @@ class LinkManager(Gtk.Window):
         name = self.selected()
         if name:
             self.edit(name)
+
+    def toggle_lan(self, _button):
+        name = self.selected()
+        entry = self.links.get(name)
+        if entry and entry["kind"] == "app":
+            action = "deny-lan" if entry.get("allow_lan") else "allow-lan"
+            self.action([action, name], refresh=True)
 
     def toggle_link(self, _button):
         name = self.selected()
