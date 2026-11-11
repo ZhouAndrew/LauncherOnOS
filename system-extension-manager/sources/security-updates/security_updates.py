@@ -51,10 +51,10 @@ expected, source = sys.argv[1:3]
 args = sys.argv[3:]
 if not re.fullmatch('[0-9a-f]{64}', expected):
     stop('Invalid approved source checksum.')
-if args != ['--refresh-root'] and not (
+if args not in (['--refresh-root'], ['--interactive-root']) and not (
         len(args) == 3 and args[:2] == ['--apply-root', '--expect']
         and re.fullmatch('[0-9a-f]{64}', args[2])):
-    stop('Root launcher accepts only approved refresh/apply actions.')
+    stop('Root launcher accepts only approved update actions.')
 try:
     with tempfile.TemporaryDirectory(prefix='mint-security-verified-') as directory:
         target = Path(directory) / 'security_updates.py'
@@ -89,15 +89,24 @@ except (OSError, ValueError, subprocess.SubprocessError) as exc:
 """
 
 
-def privileged_action(*args):
+def privileged_action(*args, transcript=None):
     source = Path(__file__).resolve()
     # The root helper will compare these approved bytes with an fd-opened
     # snapshot and refuses replacements before invoking privileged code.
     approved = hashlib.sha256(source.read_bytes()).hexdigest()
-    return subprocess.call([
+    command_line = [
         'sudo', '/usr/bin/python3', '-I', '-c', ROOT_BOOTSTRAP,
         approved, str(source), *args,
-    ])
+    ]
+    if transcript is None:
+        return subprocess.call(command_line)
+    with subprocess.Popen(command_line, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as process:
+        while chunk := process.stdout.read1(8192):
+            transcript.write(chunk)
+            transcript.flush()
+            sys.stdout.buffer.write(chunk)
+            sys.stdout.buffer.flush()
+        return process.wait()
 
 
 def require_isolated_root_copy():
@@ -379,23 +388,53 @@ def refresh():
         print('APT index refresh completed.', flush=True)
 
 
+def result_directory():
+    base = Path(os.environ.get('XDG_STATE_HOME') or Path.home() / '.local/state')
+    return base / 'system-extension-manager/logs'
+
+
+def show_results():
+    paths = sorted(result_directory().glob('security-updates-standalone-*.log'),
+                   key=lambda path: path.name, reverse=True)
+    for path in paths:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(fd, 'rb') as log:
+            if not stat.S_ISREG(os.fstat(log.fileno()).st_mode):
+                continue
+            print(f'\n=== {path.name} ===')
+            for line in log:
+                print(line.decode('utf-8', errors='replace'), end='')
+    if not paths:
+        print('No standalone Security Updates runs recorded.')
+
+
 def interactive():
-    """Refresh and inspect updates in a real terminal; install only after explicit approval."""
-    if os.geteuid() == 0:
-        raise SafetyError('Run this interactive command as your normal desktop user.')
-    if not sys.stdin.isatty():
-        raise SafetyError('An interactive terminal is required. No background operation is allowed.')
+    if os.geteuid() == 0 or not sys.stdin.isatty():
+        raise SafetyError('Run Security Updates as your desktop user in an interactive terminal.')
     warn_privileged_import()
-    script = str(Path(__file__).resolve())
+    print('Authorizing this manual session. Installation still requires UPDATE.', flush=True)
+    if os.environ.get('SEM_SECURITY_TRANSCRIPT') == '1':
+        return privileged_action('--interactive-root')
+
+    from datetime import datetime
+    folder = result_directory()
+    folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+    prefix = 'security-updates-standalone-' + datetime.now().strftime('%Y%m%d-%H%M%S-')
+    with tempfile.NamedTemporaryFile(dir=folder, prefix=prefix, suffix='.log',
+                                     delete=False) as log:
+        print('Run log: ' + log.name, flush=True)
+        code = privileged_action('--interactive-root', transcript=log)
+        log.write(f'\nExit code: {code}\n'.encode())
+    return code
+
+
+def interactive_root():
+    if not sys.stdin.isatty():
+        raise SafetyError('An interactive terminal is required.')
     print('=== Manual security updates (Linux Mint 22.x) ===', flush=True)
     print('Kernel / NVIDIA / DKMS / firmware / boot components are protected.', flush=True)
-    print('No timers, background upgrades, autoremove or reboot will be configured.', flush=True)
-    # WARNING: closing the terminal can interrupt APT; there is no automatic rollback.
-    print('Keep this terminal open until the operation finishes.', flush=True)
-    print('Updates can restart services. Interrupted installs cannot be automatically rolled back.\n', flush=True)
-    print('Refreshing package indexes; sudo may request your password...', flush=True)
-    if privileged_action('--refresh-root'):
-        raise SafetyError('APT index refresh failed or was cancelled; nothing was installed.')
+    print('Keep this terminal open. Updates can restart services.', flush=True)
+    refresh()
     wanted, frozen = scan()
     print('Eligible security updates: {} (protected packages: {})'.format(len(wanted), len(frozen)), flush=True)
     if not wanted:
@@ -403,21 +442,23 @@ def interactive():
         return
     for name, version in wanted.items():
         print('  {} -> {}'.format(name, version), flush=True)
-    print('\nSimulating APT transaction...', flush=True)
     simulate(wanted)
-    print('Simulation approved: no additions, removals or unapproved upgrades.', flush=True)
-    print('Type UPDATE to install these updates. Any other input cancels.', flush=True)
-    if input('Confirm [UPDATE]: ').strip() != 'UPDATE':
+    try:
+        approval = input('Type UPDATE to install, or press Enter to cancel: ').strip()
+    except EOFError:
+        approval = ''
+    if approval != 'UPDATE':
         print('Cancelled; no packages installed.', flush=True)
         return
-    if privileged_action('--apply-root', '--expect', digest(wanted)):
-        raise SafetyError('Update failed or was cancelled. A partial installation may exist; inspect the output.')
+    apply(digest(wanted))
     print('Update completed and verified.', flush=True)
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     group = parser.add_mutually_exclusive_group()
+    group.add_argument('--results', action='store_true', help='show saved standalone run results')
+    group.add_argument('--interactive-root', action='store_true', help=argparse.SUPPRESS)
     group.add_argument('--interactive', action='store_true', help='refresh, review and approve updates in a terminal')
     group.add_argument('--check', action='store_true', help='read-only scan of cached APT metadata')
     group.add_argument('--refresh', action='store_true', help='refresh APT package indexes with explicit authorization')
@@ -429,7 +470,12 @@ def main(argv=None):
     args = parser.parse_args(argv)
     warn_privileged_import()
     try:
-        if args.refresh_root:
+        if args.results:
+            show_results()
+        elif args.interactive_root:
+            require_isolated_root_copy()
+            interactive_root()
+        elif args.refresh_root:
             require_isolated_root_copy()
             refresh()
         elif args.apply_root:
@@ -440,7 +486,7 @@ def main(argv=None):
         elif args.refresh:
             return privileged_action('--refresh-root')
         elif args.interactive:
-            interactive()
+            return interactive()
         elif args.apply:
             wanted, _ = scan()
             if not wanted:
