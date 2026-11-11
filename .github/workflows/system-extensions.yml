@@ -1,7 +1,7 @@
 name: System Extension Manager
 on:
   push:
-    branches: [main, feat/system-extension-manager-anki, integrate/manager-and-lan-auth-20261111]
+    branches: [main, feat/system-extension-manager-anki]
   pull_request:
 permissions:
   contents: read
@@ -63,8 +63,22 @@ jobs:
         run: desktop-file-validate system-extension-manager/system-extension-manager.desktop system-extension-manager/sources/anki-time-travel/anki-time-travel.desktop system-extension-manager/sources/link-provider/mint-link-provider.desktop
       - name: Test extension manager and catalog
         run: xvfb-run -a python3 -m unittest discover -s system-extension-manager/tests -v
-      - name: Use the Link Provider GTK setup and authenticated HTTP(S) path
-        run: xvfb-run -a /usr/bin/python3 system-extension-manager/tests/acceptance_link_provider_gui.py
+      - name: Use GTK setup and run from a separate network client
+        run: |
+          cleanup() {
+            sudo ip link del sem-lan-host 2>/dev/null || true
+            sudo ip netns del sem-lan-client 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          sudo ip netns add sem-lan-client
+          sudo ip link add sem-lan-host type veth peer name sem-lan-peer
+          sudo ip link set sem-lan-peer netns sem-lan-client
+          sudo ip addr add 192.0.2.1/30 dev sem-lan-host
+          sudo ip link set sem-lan-host up
+          sudo ip -n sem-lan-client addr add 192.0.2.2/30 dev sem-lan-peer
+          sudo ip -n sem-lan-client link set sem-lan-peer up
+          LINK_PROVIDER_TEST_HOST=192.0.2.1 LINK_PROVIDER_TEST_CLIENT=sem-lan-client \
+            xvfb-run -a /usr/bin/python3 system-extension-manager/tests/acceptance_link_provider_gui.py
       - name: Smoke test HomeBackUp GTK 3 window as normal user
         run: xvfb-run -a /usr/bin/python3 system-extension-manager/sources/homebackup/gui.py --smoke-test
       - name: Verify one administrator session for real package operations

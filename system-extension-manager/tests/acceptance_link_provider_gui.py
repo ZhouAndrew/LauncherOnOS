@@ -5,12 +5,10 @@ import importlib.util
 import os
 from pathlib import Path
 import socket
-import ssl
 import subprocess
 import sys
 import tempfile
 import time
-import urllib.request
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -55,6 +53,9 @@ with tempfile.TemporaryDirectory(prefix='link-provider-human-path-') as director
     os.environ['XDG_CONFIG_HOME'] = str(Path(directory) / 'config')
     os.environ['XDG_DATA_HOME'] = str(Path(directory) / 'data')
     marker = Path(directory) / 'ran'
+    host = os.environ.get('LINK_PROVIDER_TEST_HOST', '127.0.0.1')
+    namespace = os.environ.get('LINK_PROVIDER_TEST_CLIENT')
+    bind = '0.0.0.0' if namespace else '127.0.0.1'
     from argparse import Namespace
     backend.change_link(Namespace(action='add-app', id='fixture', program='/usr/bin/touch', arguments=[str(marker)]))
     window = LinkManager(ROOT / 'sources/link-provider/link-provider', backend.read_links,
@@ -83,7 +84,7 @@ with tempfile.TemporaryDirectory(prefix='link-provider-human-path-') as director
         window.lan_dialog(None)
         editor = dialog()
         https_port, http_port = free_port(), free_port()
-        values = ['127.0.0.1', '127.0.0.1', str(https_port), str(http_port), '', '']
+        values = [host, bind, str(https_port), str(http_port), '', '']
         for entry, value in zip(entries(editor), values):
             entry.set_text(value)
         editor.response(Gtk.ResponseType.OK)
@@ -91,23 +92,23 @@ with tempfile.TemporaryDirectory(prefix='link-provider-human-path-') as director
         wait(lambda: editor not in Gtk.Window.list_toplevels())
         window.refresh('fixture')
         window.copy_lan_button.clicked()
-        expected = f'https://127.0.0.1:{https_port}/run/fixture'
+        origin = f'https://{host}:{https_port}'
+        expected = origin + '/run/fixture'
         assert Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).wait_for_text() == expected
         window.server_button.clicked()
         wait(lambda: window.server_button.get_label() == 'Stop LAN')
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}),
-            urllib.request.HTTPSHandler(context=ssl.create_default_context(cafile=backend.lan_settings()["cert"])))
-        with opener.open(f'http://127.0.0.1:{http_port}/run/fixture', timeout=5) as response:
-            assert response.url == expected
-            assert b'type="password"' in response.read()
+        curl = ['curl', '--noproxy', '*', '--cacert', backend.lan_settings()['cert'],
+                '--silent', '--show-error', '--fail', '--max-time', '6']
+        if namespace:
+            curl = ['sudo', 'ip', 'netns', 'exec', namespace, *curl]
+        http = f'http://{host}:{http_port}/run/fixture'
+        page = subprocess.check_output([*curl, '--location', '--write-out', '%{url_effective}', http])
+        assert b'type="password"' in page and page.endswith(expected.encode())
         assert not marker.exists()
-        import urllib.parse
-        request = urllib.request.Request(expected,
-            data=urllib.parse.urlencode({'password':'fixture-only-password-123'}).encode(),
-            headers={'Origin': f'https://127.0.0.1:{https_port}'})
-        with opener.open(request, timeout=5) as response:
-            assert response.status == 200
-        assert marker.is_file()
+        result = subprocess.check_output([*curl, '--header', 'Origin: ' + origin,
+                                          '--data-urlencode', 'password=fixture-only-password-123', expected])
+        assert b'Command exited with code 0' in result
+        assert marker.is_file() and marker.stat().st_uid == os.getuid()
         window.server_button.clicked()
         wait(lambda: window.server is None)
         print('PASS: GTK custom scheme and GIO dispatch, authorization, password entry, LAN configuration, clipboard, trusted HTTPS launch and Stop LAN.')
