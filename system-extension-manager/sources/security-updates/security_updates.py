@@ -23,6 +23,7 @@ from pathlib import Path
 import re
 import stat
 import subprocess
+import tempfile
 
 
 # The root entry point is fixed in argv; it never imports sibling modules or
@@ -113,6 +114,19 @@ def require_isolated_root_copy():
 
 LOCK = '/run/lock/mint-security-updates.lock'
 APT = '/usr/bin/apt-get'
+APT_STATE = Path('/var/lib/system-extension-manager-security')
+KEYRING = '/usr/share/keyrings/ubuntu-archive-keyring.gpg'
+APT_SCOPE = {
+    'Dir::Etc::sourcelist': str(APT_STATE / 'ubuntu.list'),
+    'Dir::Etc::sourceparts': '-',
+    'Dir::State::lists': str(APT_STATE / 'lists'),
+    'Dir::Cache::pkgcache': '',
+    'Dir::Cache::srcpkgcache': '',
+    'Acquire::AllowInsecureRepositories': 'false',
+    'Acquire::AllowDowngradeToInsecureRepositories': 'false',
+}
+APT_SCOPE_OPTIONS = [arg for key, value in APT_SCOPE.items()
+                     for arg in ('-o', key + '=' + value)]
 APT_OPTIONS = [
     '-o', 'DPkg::Lock::Timeout=0',
     '-o', 'Acquire::http::Timeout=30', '-o', 'Acquire::https::Timeout=30',
@@ -199,13 +213,48 @@ def check_locks():
         raise SafetyError('Cannot safely determine APT/dpkg lock ownership.')
 
 
-def scan():
-    ensure_host()
+def prepare_apt_scope():
+    if not Path(KEYRING).is_file():
+        raise SafetyError('Ubuntu archive signing keyring is missing.')
+    for directory in (APT_STATE, APT_STATE / 'lists'):
+        directory.mkdir(mode=0o755, exist_ok=True)
+        info = directory.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+            raise SafetyError('Unsafe APT directory: ' + str(directory))
+    with tempfile.NamedTemporaryFile(mode='w', encoding='ascii', dir=APT_STATE,
+                                     delete=False) as stream:
+        temporary = Path(stream.name)
+        try:
+            for host, suite in (
+                ('archive.ubuntu.com', 'noble'),
+                ('archive.ubuntu.com', 'noble-updates'),
+                ('security.ubuntu.com', 'noble-security'),
+            ):
+                stream.write(f'deb [signed-by={KEYRING}] https://{host}/ubuntu '
+                             f'{suite} main restricted universe multiverse\n')
+            stream.flush()
+            os.fchmod(stream.fileno(), 0o644)
+            temporary.replace(APT_STATE / 'ubuntu.list')
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
+def scoped_cache():
     import apt
     import apt_pkg
     apt_pkg.init()
+    if not Path(APT_SCOPE['Dir::Etc::sourcelist']).is_file():
+        raise SafetyError('Refresh official Ubuntu indexes before checking for updates.')
+    for key, value in APT_SCOPE.items():
+        apt_pkg.config.set(key, value)
+    return apt.Cache()
+
+
+def scan():
+    ensure_host()
+    import apt_pkg
     held = set(command(['/usr/bin/apt-mark', 'showhold']).splitlines())
-    cache = apt.Cache()
+    cache = scoped_cache()
     wanted, frozen = {}, {}
     for pkg in cache:
         if not pkg.is_installed:
@@ -236,7 +285,7 @@ def digest(packages):
 
 def simulate(packages):
     specs = [name + '=' + version for name, version in sorted(packages.items())]
-    output = command([APT, '--simulate', *APT_OPTIONS, 'install', *specs])
+    output = command([APT, *APT_SCOPE_OPTIONS, '--simulate', *APT_OPTIONS, 'install', *specs])
     installed = {}
     for line in output.splitlines():
         if line.startswith(('Remv ', 'Purg ')):
@@ -284,7 +333,7 @@ def apply(expected):
         env = dict(os.environ, DEBIAN_FRONTEND='noninteractive',
                    NEEDRESTART_MODE='l', APT_LISTCHANGES_FRONTEND='none')
         print('Installing approved security updates...', flush=True)
-        args = [APT, '-y', *APT_OPTIONS, '-o', 'Dpkg::Options::=--force-confold', 'install', *specs]
+        args = [APT, *APT_SCOPE_OPTIONS, '-y', *APT_OPTIONS, '-o', 'Dpkg::Options::=--force-confold', 'install', *specs]
         result = subprocess.run(args, env=env, check=False)
         if result.returncode:
             raise SafetyError('APT exited with {}; installation may be partial.'.format(result.returncode))
@@ -297,8 +346,7 @@ def apply(expected):
 
 
 def scan_installed(packages, frozen):
-    import apt
-    cache = apt.Cache()
+    cache = scoped_cache()
     mismatches, protected_changes = [], []
     for name, version in packages.items():
         actual = cache[name].installed.version if cache[name].is_installed else None
@@ -322,8 +370,9 @@ def refresh():
             raise SafetyError('Another manual security update is already running.') from None
         check_locks()
         check_dpkg()
-        print('Refreshing APT indexes; no packages will be installed...', flush=True)
-        print(command([APT, '-o', 'DPkg::Lock::Timeout=0',
+        prepare_apt_scope()
+        print('Refreshing official Ubuntu indexes; no packages will be installed...', flush=True)
+        print(command([APT, *APT_SCOPE_OPTIONS, '-o', 'DPkg::Lock::Timeout=0',
                        '-o', 'APT::Update::Error-Mode=any',
                        '-o', 'Acquire::http::Timeout=30', '-o', 'Acquire::https::Timeout=30',
                        '-o', 'Acquire::Retries=2', 'update']), flush=True)
