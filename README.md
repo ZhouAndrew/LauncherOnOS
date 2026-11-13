@@ -8,6 +8,15 @@
 
 # LauncherOnOS
 
+## What’s in this repository
+| Project | Where to start |
+| --- | --- |
+| LauncherOnOS | [User-scoped Linux CLI for managing script launchers](launcheronos.py) |
+| System Extension Manager | [Maintained Debian package manager for system extensions](system-extension-manager/README.md) |
+| Bundled extensions | [ZIP and Trash](system-extension-manager/sources/zip-trash/), [HomeBackUp](system-extension-manager/sources/homebackup/), [Anki Time Travel](system-extension-manager/sources/anki-time-travel/), [Link Provider](system-extension-manager/sources/link-provider/README.md), [Security Updates](system-extension-manager/sources/security-updates/) |
+| Companion projects | [Anki Time Travel](anki-time-travel/README.md) and [standalone HomeBackUp documentation](extensions/homebackup/README.md) |
+| Historical material | `mint-toolbox/` (retired and unsafe) and [legacy archives](legacy-archives/) |
+
 An interactive, user-scoped command-line manager for personal Linux scripts and utility launchers. Designed for Linux Mint / Ubuntu / Debian. Python 3.10+ and the standard library only.
 
 ## Quick start
