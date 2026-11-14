@@ -21,8 +21,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - uses: android-actions/setup-android@v3
-      - run: sdkmanager 'platforms;android-37'
+      - name: Install Android SDK platform
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37"'
+      - name: Use the runner JDK 21 for the Gradle daemon
+        run: printf 'toolchainVersion=21\n' > journal-two/gradle/gradle-daemon-jvm.properties
       - name: Build and test
         working-directory: journal-two
         run: ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest
