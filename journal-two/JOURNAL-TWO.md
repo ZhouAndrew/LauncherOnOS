@@ -4,7 +4,7 @@
 
 在笔记编辑页打开「⋮」，选择「另存为 Markdown」或「另存为 HTML」。通过 Android 系统文件选择器保存到所选位置。导出包含标题、正文或清单，有附件时导出为 ZIP，内有 note.md 或 note.html 和 attachments/。解压后打开文档，图片可直接显示，音频、视频及其他文件可从文档访问。
 
-从本目录用 Android Studio 打开，安装 Gradle 指定的工具链和 Android SDK 37 后运行 `./gradlew :app:assembleDebug`。调试 APK 生成在 `app/build/outputs/apk/` 下。
+从本目录用 Android Studio 打开，安装 Gradle 指定的工具链和 Android SDK 36 后运行 `./gradlew :app:assembleDebug`。调试 APK 生成在 `app/build/outputs/apk/` 下。
 
 ## 位置与 WordPress
 

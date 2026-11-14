@@ -13,13 +13,13 @@ plugins {
 // Do not use build-in kotlin until this issue is resolved:
 // https://github.com/google/ksp/issues/3053
 android {
-    compileSdk = 37
+    compileSdk = 36
     namespace = "org.qosp.notes"
 
     defaultConfig {
         applicationId = "io.github.zhouandrew.journaltwo"
         minSdk = 24
-        targetSdk = 37
+        targetSdk = 36
         versionCode = 59
         versionName = "1.5.16"
 

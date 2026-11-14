@@ -22,7 +22,7 @@ jobs:
           distribution: temurin
           java-version: '21'
       - name: Install Android SDK platform
-        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37"'
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36"'
       - name: Use the runner JDK 21 for the Gradle daemon
         run: printf 'toolchainVersion=21\n' > journal-two/gradle/gradle-daemon-jvm.properties
       - name: Build and test
