@@ -9,7 +9,11 @@ import java.util.zip.ZipOutputStream
 import org.qosp.notes.data.model.Attachment
 import org.qosp.notes.ui.attachments.uri
 import org.commonmark.ext.gfm.tables.TablesExtension
+import org.commonmark.node.AbstractVisitor
+import org.commonmark.node.Image
+import org.commonmark.node.Link
 import org.commonmark.parser.Parser
+import java.net.URI
 import org.commonmark.renderer.html.HtmlRenderer
 import org.qosp.notes.data.model.Note
 
@@ -17,7 +21,32 @@ internal object NoteDocument {
     private val tables = listOf(TablesExtension.create())
     private val parser = Parser.builder().extensions(tables).build()
     private val renderer = HtmlRenderer.builder().extensions(tables)
-        .escapeHtml(true).sanitizeUrls(true).build()
+        .escapeHtml(true).build()
+
+    private fun safeDestination(destination: String): String {
+        val url = runCatching { URI(destination) }.getOrNull() ?: return ""
+        return when (url.scheme?.lowercase()) {
+            null -> if (url.rawAuthority == null) destination else ""
+            "https", "http", "mailto" -> destination
+            else -> ""
+        }
+    }
+
+    private fun renderMarkdown(body: String): String {
+        val document = parser.parse(body)
+        document.accept(object : AbstractVisitor() {
+            override fun visit(link: Link) {
+                link.destination = safeDestination(link.destination)
+                visitChildren(link)
+            }
+
+            override fun visit(image: Image) {
+                image.destination = safeDestination(image.destination)
+                visitChildren(image)
+            }
+        })
+        return renderer.render(document)
+    }
 
     fun filename(title: String, extension: String): String {
         val name = title.replace(Regex("[^\\p{L}\\p{N} _.-]"), "_")
@@ -96,7 +125,7 @@ internal object NoteDocument {
                 val checked = if (task.isDone) " checked" else ""
                 "<li><input type=\"checkbox\" disabled$checked> ${escapeHtml(task.content)}</li>"
             }
-            note.isMarkdownEnabled -> renderer.render(parser.parse(body))
+            note.isMarkdownEnabled -> renderMarkdown(body)
             else -> "<div style=\"white-space:pre-wrap\">${escapeHtml(body)}</div>"
         }
         return """<!doctype html>
