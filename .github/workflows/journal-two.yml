@@ -30,7 +30,9 @@ jobs:
         run: ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest
       - name: Enable Linux KVM access
         run: sudo chmod a+rw /dev/kvm
-      - name: Install and launch on Android
+      - name: Install test media tooling
+        run: command -v ffmpeg || (sudo apt-get update -qq && sudo apt-get install -y ffmpeg)
+      - name: Exercise mixed-media editing and export on Android
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -39,12 +41,16 @@ jobs:
           disable-animations: true
           script: |
             adb install journal-two/app/build/outputs/apk/debug/app-debug.apk
-            adb shell am start -W -n io.github.zhouandrew.journaltwo/org.qosp.notes.ui.MainActivity
-            sleep 5
-            adb shell pidof io.github.zhouandrew.journaltwo
-            adb shell dumpsys activity activities | grep -E 'topResumedActivity.*io.github.zhouandrew.journaltwo'
+            adb shell wm dismiss-keyguard
+            python3 journal-two/tests/android-acceptance.py
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: journal-two-debug-apk
           path: journal-two/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: journal-two-android-acceptance
+          path: journal-acceptance/
