@@ -118,9 +118,15 @@
             android:title="@string/action_export"
             app:showAsAction="never"/>
     <item
+            android:id="@+id/action_journal_dictation"
+            android:icon="@drawable/ic_journal_mic"
+            android:title="@string/journal_dictation"
+            app:showAsAction="always"/>
+    <item
             android:id="@+id/action_add_location"
+            android:icon="@drawable/ic_journal_location"
             android:title="@string/action_add_location"
-            app:showAsAction="never"/>
+            app:showAsAction="always"/>
     <item
             android:id="@+id/action_save_markdown"
             android:title="@string/action_save_markdown"

@@ -105,7 +105,11 @@ class MainActivity : BaseActivity() {
         setupDrawerHeader()
 
         WidgetUpdateHelper.updateAllWidgets(this)
-        if (intent != null) handleIntent(intent)
+        if (savedInstanceState == null && intent?.action == Intent.ACTION_MAIN) {
+            openJournalEditor()
+        } else if (savedInstanceState == null && intent != null) {
+            handleIntent(intent)
+        }
 
         onBackPressedDispatcher.addCallback(this) {
             if (binding.drawer.isDrawerOpen(GravityCompat.START)) {
@@ -120,7 +124,13 @@ class MainActivity : BaseActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        handleIntent(intent)
+        if (intent.action == Intent.ACTION_MAIN) openJournalEditor() else handleIntent(intent)
+    }
+
+    private fun openJournalEditor() {
+        if (navController.currentDestination?.id == R.id.fragment_editor) return
+        val draftId = getSharedPreferences("journal", MODE_PRIVATE).getLong("activeNote", 0L)
+        navController.navigate(R.id.fragment_editor, bundleOf("transitionName" to "", "noteId" to draftId))
     }
 
     override fun onSupportNavigateUp(): Boolean {

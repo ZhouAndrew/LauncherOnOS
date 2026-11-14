@@ -120,7 +120,7 @@ internal object NoteDocument {
             .joinToString(if (html) "\n" else "\n\n", transform = ::renderAsset)
         fun renderText(text: String): String =
             if (note.isMarkdownEnabled) renderMarkdown(text)
-            else "<div style=\"white-space:pre-wrap\">${escapeHtml(text)}</div>"
+            else "<div style=\"white-space:pre-wrap\">${renderPlainText(text)}</div>"
         if (!html) {
             val heading = if (title.isBlank()) "" else "# ${escapeMarkdown(title)}\n\n"
             return heading + InlineMedia.marker.replace(body) { byId[it.groupValues[1]]?.let(::renderAsset).orEmpty() } + if (attachments.isEmpty()) "" else "\n\n$attachments\n"
@@ -157,6 +157,17 @@ $attachments
 </body>
 </html>
 """
+    }
+
+    private fun renderPlainText(text: String): String = buildString {
+        var start = 0
+        for (match in Regex("""https?://[^\s<>"]+""").findAll(text)) {
+            append(escapeHtml(text.substring(start, match.range.first)))
+            val url = escapeHtml(match.value)
+            append("<a href=\"$url\">$url</a>")
+            start = match.range.last + 1
+        }
+        append(escapeHtml(text.substring(start)))
     }
 
     private fun escapeMarkdown(text: String): String = buildString {
