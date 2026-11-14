@@ -14,4 +14,7 @@
     <string name="journal_import_media_failed">无法导入原始媒体</string>
     <string name="journal_dictation">语音输入</string>
     <string name="journal_dictation_unavailable">此设备没有可用的语音识别服务</string>
+    <string name="journal_hold_to_dictate">按住麦克风说话</string>
+    <string name="journal_slide_to_cancel">松手转文字 · 上滑取消</string>
+    <string name="journal_dictation_failed">未识别到语音</string>
 </resources>

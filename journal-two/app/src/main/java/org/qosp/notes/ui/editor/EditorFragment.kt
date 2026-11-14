@@ -19,6 +19,9 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.speech.RecognizerIntent
+import android.speech.RecognitionListener
+import android.speech.SpeechRecognizer
+import android.view.MotionEvent
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
@@ -120,6 +123,7 @@ import android.widget.ImageView
 import android.widget.MediaController
 import android.widget.VideoView
 import coil.load
+import org.qosp.notes.ui.utils.views.ExtendedEditText
 import org.qosp.notes.ui.utils.TakePictureContract
 import org.qosp.notes.ui.utils.collect
 import org.qosp.notes.ui.utils.dp
@@ -177,30 +181,148 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
         get() = binding.toolbar
 
     private var previewedNote: Note? = null
+    private var previewWasEditable = false
+    private val bodyFields = mutableListOf<ExtendedEditText>()
+    private var activeBodyField: ExtendedEditText? = null
+
+    private fun bodyOffset(): Int {
+        if (!model.inEditMode) return -1
+        val field = activeBodyField ?: return binding.editTextContent.selectionEnd
+        val index = bodyFields.indexOf(field)
+        if (index < 0) return -1
+        val marker = InlineMedia.marker.findAll(binding.editTextContent.text.toString()).take(index).lastOrNull()
+        return (marker?.range?.last?.plus(1) ?: 0) + field.selectionEnd.coerceAtLeast(0)
+    }
+
+    private fun replaceBody(content: String, cursor: Int) {
+        binding.editTextContent.withOnlyTextWatcher<MarkwonEditorTextWatcher> { setText(content) }
+        binding.editTextContent.setSelection(cursor.coerceIn(0, content.length))
+        val note = data.note ?: return
+        renderBodyPreview(note.copy(content = content))
+        focusBody(cursor)
+    }
+
+    private fun focusBody(cursor: Int) {
+        if (bodyFields.isEmpty()) return
+        val markers = InlineMedia.marker.findAll(binding.editTextContent.text.toString()).toList()
+        val index = markers.count { it.range.first < cursor }.coerceAtMost(bodyFields.lastIndex)
+        val start = markers.getOrNull(index - 1)?.range?.last?.plus(1) ?: 0
+        val field = bodyFields[index]
+        field.requestFocus()
+        field.setSelection((cursor - start).coerceIn(0, field.length()))
+    }
+
+    private fun insertBodyText(offset: Int, text: String) {
+        val before = binding.editTextContent.text.toString()
+        val cursor = offset.takeIf { it in 0..before.length } ?: before.length
+        val after = before.substring(0, cursor) + text + before.substring(cursor)
+        replaceBody(after, cursor + text.length)
+        model.setNoteContent(after)
+    }
     private var inlinePlayer: VideoView? = null
     private var locationRequest: CancellationSignal? = null
 
-    private val dictation = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        val text = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
-        if (result.resultCode == android.app.Activity.RESULT_OK && !text.isNullOrBlank()) {
+    private var recognizer: SpeechRecognizer? = null
+    private var dictationHeld = false
+    private var dictationOffset = -1
+    private var dictationResult: String? = null
+    private var dictationCancelled = false
+
+    private val microphonePermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) sendMessage(getString(R.string.journal_hold_to_dictate))
+        }
+
+    private fun cancelDictation() {
+        recognizer?.destroy()
+        recognizer = null
+        dictationHeld = false
+        dictationResult = null
+    }
+
+    private fun finishDictation(text: String?) {
+        cancelDictation()
+        if (!text.isNullOrBlank() && view != null && data.note?.isDeleted == false) {
             updateEditMode(true)
-            val editor = binding.editTextContent
-            val offset = mediaOffset.takeIf { it in 0..editor.length() } ?: editor.length()
-            editor.text?.insert(offset, text)
-            editor.requestFocus()
-            editor.setSelection(offset + text.length)
+            insertBodyText(dictationOffset, text)
         }
     }
 
     private fun startDictation() {
-        mediaOffset = if (model.inEditMode) binding.editTextContent.selectionEnd else -1
-        try {
-            dictation.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-                .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                .putExtra(RecognizerIntent.EXTRA_LANGUAGE, resources.configuration.locales[0].toLanguageTag())
-                .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1))
-        } catch (_: ActivityNotFoundException) {
+        val context = requireContext()
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) !=
+            PackageManager.PERMISSION_GRANTED) {
+            microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+            return
+        }
+        if (!SpeechRecognizer.isRecognitionAvailable(context)) {
             sendMessage(getString(R.string.journal_dictation_unavailable))
+            return
+        }
+        cancelDictation()
+        dictationHeld = true
+        dictationOffset = bodyOffset()
+        val session = SpeechRecognizer.createSpeechRecognizer(context)
+        recognizer = session
+        session.setRecognitionListener(object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) = Unit
+            override fun onBeginningOfSpeech() = Unit
+            override fun onRmsChanged(rmsdB: Float) = Unit
+            override fun onBufferReceived(buffer: ByteArray?) = Unit
+            override fun onEndOfSpeech() = Unit
+            override fun onPartialResults(partialResults: Bundle?) = Unit
+            override fun onEvent(eventType: Int, params: Bundle?) = Unit
+            override fun onError(error: Int) {
+                if (recognizer !== session) return
+                cancelDictation()
+                if (view != null) sendMessage(getString(R.string.journal_dictation_failed))
+            }
+            override fun onResults(results: Bundle?) {
+                if (recognizer !== session) return
+                val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+                if (dictationHeld) dictationResult = text.orEmpty() else finishDictation(text)
+            }
+        })
+        session.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE, resources.configuration.locales[0].toLanguageTag())
+            .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1))
+    }
+
+    private fun bindDictationGesture() {
+        toolbar.post {
+            if (view == null) return@post
+            val button = toolbar.findViewById<View>(R.id.action_journal_dictation) ?: return@post
+            var startY = 0f
+            button.setOnTouchListener { _, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        startY = event.rawY
+                        dictationCancelled = false
+                        startDictation()
+                        button.isPressed = recognizer != null
+                        if (button.isPressed) sendMessage(getString(R.string.journal_slide_to_cancel))
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        dictationCancelled = startY - event.rawY > 56.dp(button.context)
+                        button.isPressed = recognizer != null && !dictationCancelled
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        button.isPressed = false
+                        if (dictationCancelled) cancelDictation()
+                        else if (recognizer != null) {
+                            dictationHeld = false
+                            val pending = dictationResult
+                            if (pending != null) finishDictation(pending) else recognizer?.stopListening()
+                        }
+                    }
+                    MotionEvent.ACTION_CANCEL -> {
+                        button.isPressed = false
+                        cancelDictation()
+                    }
+                }
+                true
+            }
         }
     }
 
@@ -247,9 +369,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
                 val url = "https://www.openstreetmap.org/?mlat=${location.latitude}&mlon=${location.longitude}#map=16/$coordinates"
                 val label = getString(R.string.note_location)
                 val link = if (note.isMarkdownEnabled) "[$label]($url)" else "$label $url"
-                val editor = binding.editTextContent
-                val offset = editor.selectionEnd.takeIf { model.inEditMode && it >= 0 } ?: editor.length()
-                editor.text?.insert(offset, "\n\n$link\n\n")
+                insertBodyText(bodyOffset(), "\n\n$link\n\n")
             }
         } catch (error: SecurityException) {
             locationRequest = null
@@ -341,12 +461,15 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
         val editor = binding.editTextContent
         val before = editor.text.toString()
         val after = InlineMedia.insert(before, offset, attachments)
-        if (!isList && after != before) {
-            editor.withOnlyTextWatcher<MarkwonEditorTextWatcher> { setText(after) }
-            val insertion = if (offset < 0) before.length else offset.coerceAtMost(before.length)
-            editor.setSelection(insertion + after.length - before.length)
-        }
         model.insertAttachments(*attachments.toTypedArray(), content = after)
+        if (!isList && after != before) {
+            val insertion = if (offset < 0) before.length else offset.coerceAtMost(before.length)
+            val cursor = insertion + after.length - before.length
+            editor.withOnlyTextWatcher<MarkwonEditorTextWatcher> { setText(after) }
+            editor.setSelection(cursor)
+            data.note?.let { renderBodyPreview(it.copy(content = after, attachments = it.attachments + attachments)) }
+            focusBody(cursor)
+        }
     }
 
     private var pendingVideo: String? = null
@@ -529,6 +652,8 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
 
         data = Data()
         previewedNote = null
+        activeBodyField = null
+        bodyFields.clear()
         isFirstLoad = true
 
         if (model.isNotInitialized) {
@@ -563,7 +688,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
 
         setFragmentResultListener(MARKDOWN_DIALOG_RESULT) { _, bundle ->
             val markdown = bundle.getString(MARKDOWN_DIALOG_RESULT) ?: return@setFragmentResultListener
-            binding.editTextContent.apply {
+            (activeBodyField ?: binding.editTextContent).apply {
                 if (selectedText?.isNotEmpty() == true) {
                     text?.replace(selectionStart, selectionEnd, "")
                 }
@@ -573,7 +698,10 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
 
         binding.fabChangeMode.setOnClickListener {
             updateEditMode(!model.inEditMode)
-            if (model.inEditMode) requestFocusForFields(true) else {
+            if (model.inEditMode) {
+                data.note?.let { renderBodyPreview(it) }
+                requestFocusForFields(true)
+            } else {
                 view.hideKeyboard()
                 data.note?.let(::showSavedPreview)
             }
@@ -639,7 +767,10 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
 
                 R.id.action_change_mode -> {
                     updateEditMode(!model.inEditMode)
-                    if (model.inEditMode) requestFocusForFields(true) else {
+                    if (model.inEditMode) {
+                        renderBodyPreview(note)
+                        requestFocusForFields(true)
+                    } else {
                         view?.hideKeyboard()
                         showSavedPreview(note)
                     }
@@ -659,7 +790,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
                 }
 
                 R.id.action_journal_dictation -> {
-                    startDictation()
+                    sendMessage(getString(R.string.journal_hold_to_dictate))
                     return true
                 }
 
@@ -701,12 +832,12 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
                 }
 
                 R.id.action_attach_file -> {
-                    mediaOffset = if (model.inEditMode) binding.editTextContent.selectionEnd else -1
+                    mediaOffset = bodyOffset()
                     requestMediaLauncher.launch(null)
                 }
 
                 R.id.action_take_photo -> {
-                    mediaOffset = if (model.inEditMode) binding.editTextContent.selectionEnd else -1
+                    mediaOffset = bodyOffset()
                     lifecycleScope.launch {
                         runCatching {
                             takePhotoLauncher.launch(activityModel.createImageFile())
@@ -715,7 +846,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
                 }
 
                 R.id.action_record_video -> {
-                    mediaOffset = if (model.inEditMode) binding.editTextContent.selectionEnd else -1
+                    mediaOffset = bodyOffset()
                     if (!note.isDeleted) startVideoRecording()
                     return true
                 }
@@ -766,6 +897,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
     }
 
     override fun onPause() {
+        cancelDictation()
         inlinePlayer?.pause()
         locationRequest?.cancel()
         locationRequest = null
@@ -873,7 +1005,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
                 val marker = "[journal-media:${InlineMedia.id(attachment)}]"
                 val text = editor.text.toString()
                 if (marker in text) {
-                    editor.withOnlyTextWatcher<MarkwonEditorTextWatcher> { setText(text.replace(marker, "")) }
+                    replaceBody(text.replace(marker, ""), bodyOffset().coerceAtLeast(0))
                 }
                 model.deleteAttachment(attachment)
             }
@@ -1008,6 +1140,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
         findItem(R.id.action_record_video)?.isVisible = !note.isDeleted
         findItem(R.id.action_add_location)?.isVisible = !note.isDeleted && !note.isList
         findItem(R.id.action_journal_dictation)?.isVisible = !note.isDeleted && !note.isList
+        if (!note.isDeleted && !note.isList) bindDictationGesture()
         findItem(R.id.action_convert_note)?.apply {
             title =
                 if (note.isList) getString(R.string.action_convert_to_note) else getString(R.string.action_convert_to_list)
@@ -1100,7 +1233,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
                 requireContext().getSharedPreferences("journal", Context.MODE_PRIVATE).edit()
                     .putLong("activeNote", data.note.id).apply()
 
-                if ((!isList && args.noteId == 0L) || data.defaultEditorMode == DefaultEditorMode.EDIT) {
+                if (!isList || data.defaultEditorMode == DefaultEditorMode.EDIT) {
                     model.inEditMode = true
                 }
 
@@ -1133,6 +1266,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
                             if (selStart >= 0 && selEnd <= editTextContent.length()) {
                                 editTextContent.setSelection(selStart, selEnd)
                             }
+                            if (!isList) renderBodyPreview(data.note)
                         }
                     }
                 }
@@ -1164,7 +1298,8 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
             // Also set text of preview textviews
             textViewTitlePreview.text = data.note.title.ifEmpty { getString(R.string.indicator_untitled) }
 
-            if (!model.inEditMode) renderBodyPreview(data.note)
+            if (!model.inEditMode || (previewedNote?.content == data.note.content &&
+                    previewedNote?.attachments != data.note.attachments)) renderBodyPreview(data.note)
 
             setupMenuItems(data.note, data.note.reminders.isNotEmpty())
 
@@ -1252,15 +1387,57 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
     }
 
     private fun renderBodyPreview(note: Note) = with(binding) {
+        val markers = InlineMedia.marker.findAll(note.content).toList()
+        val editable = model.inEditMode && !note.isDeleted
+        containerBodyPreview.isVisible = !isList && (!editable || markers.isNotEmpty())
+        editTextContent.isVisible = !isList && editable && markers.isEmpty()
         val previous = previewedNote
-        if (previous != null && previous.content == note.content && previous.attachments == note.attachments &&
+        if (previewWasEditable == editable && previous != null && previous.content == note.content && previous.attachments == note.attachments &&
             previous.isMarkdownEnabled == note.isMarkdownEnabled) return@with
         previewedNote = note
+        previewWasEditable = editable
+        activeBodyField = null
+        bodyFields.clear()
         inlinePlayer?.stopPlayback()
         inlinePlayer = null
         containerBodyPreview.removeAllViews()
 
-        fun addText(content: String) {
+        if (editable && markers.isEmpty()) return@with
+
+        fun addText(content: String, section: Int) {
+            if (editable) {
+                val field = ExtendedEditText(requireContext()).apply {
+                    textSize = data.editorFontSize.takeIf { it > 0 }?.toFloat() ?: 16f
+                    inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                        InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+                    background = null
+                    setPadding(0, 8.dp(context), 0, 8.dp(context))
+                    minHeight = 42.dp(context)
+                    setText(content)
+                    enableUndoRedo(this@EditorFragment)
+                    setOnFocusChangeListener { _, focused ->
+                        if (focused) activeBodyField = this
+                        contentHasFocus = focused
+                        setMarkdownToolbarVisibility()
+                    }
+                    doOnTextChanged { value, _, _, _ ->
+                        val canonical = editTextContent.text.toString()
+                        val matches = InlineMedia.marker.findAll(canonical).toList()
+                        val first = matches.getOrNull(section - 1)?.range?.last?.plus(1) ?: 0
+                        val last = matches.getOrNull(section)?.range?.first ?: canonical.length
+                        val sectionText = value.toString()
+                        val leading = if (section > 0 && !sectionText.startsWith('\n')) "\n" else ""
+                        val trailing = if (section < matches.size && !sectionText.endsWith('\n')) "\n" else ""
+                        val updated = canonical.replaceRange(first, last, leading + sectionText + trailing)
+                        editTextContent.withOnlyTextWatcher<MarkwonEditorTextWatcher> { setText(updated) }
+                        previewedNote = previewedNote?.copy(content = updated)
+                        model.setNoteContent(updated)
+                    }
+                }
+                bodyFields.add(field)
+                containerBodyPreview.addView(field, -1, -2)
+                return
+            }
             if (content.isBlank()) return
             val text = TextView(requireContext()).apply {
                 textSize = data.editorFontSize.takeIf { it > 0 }?.toFloat() ?: 16f
@@ -1283,8 +1460,8 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
 
         val linked = note.attachments.associateBy(InlineMedia::id)
         var start = 0
-        for (marker in InlineMedia.marker.findAll(note.content)) {
-            addText(note.content.substring(start, marker.range.first))
+        for ((index, marker) in markers.withIndex()) {
+            addText(note.content.substring(start, marker.range.first), index)
             start = marker.range.last + 1
             val attachment = linked[marker.groupValues[1]] ?: continue
             val uri = attachment.uri(requireContext()) ?: continue
@@ -1331,12 +1508,12 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
                 frame.addView(play, android.widget.FrameLayout.LayoutParams(-2, -2, android.view.Gravity.CENTER))
             }
         }
-        addText(note.content.substring(start))
+        addText(note.content.substring(start), markers.size)
     }
 
     private fun setupListeners() = with(binding) {
         bottomToolbar.setOnMenuItemClickListener {
-
+            val editTextContent = activeBodyField ?: binding.editTextContent
             val span = when (it.itemId) {
                 R.id.action_insert_bold -> MarkdownSpan.BOLD
                 R.id.action_insert_italics -> MarkdownSpan.ITALICS
@@ -1591,7 +1768,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
     /** Gives the focus to the note body if it is empty */
     private fun requestFocusForFields(forceFocus: Boolean = false) = with(binding) {
         if (model.inEditMode && !isList && (data.note?.isEmpty() == true || forceFocus)) {
-            editTextContent.requestFocusAndKeyboard()
+            (activeBodyField ?: bodyFields.lastOrNull() ?: editTextContent).requestFocusAndKeyboard()
         }
     }
 
@@ -1611,9 +1788,9 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
             }
         }
 
-        containerBodyPreview.isVisible = !model.inEditMode && !isList
-        if (model.inEditMode) inlinePlayer?.pause()
-        editTextContent.isVisible = model.inEditMode && !isList
+        val hasEmbeddedMedia = InlineMedia.marker.containsMatchIn(editTextContent.text.toString())
+        containerBodyPreview.isVisible = !isList && (!model.inEditMode || hasEmbeddedMedia)
+        editTextContent.isVisible = model.inEditMode && !isList && !hasEmbeddedMedia
 
         val shouldDisplayFAB = data.showFabChangeMode && !isNoteDeleted && !noteHasEmptyContent
         when {

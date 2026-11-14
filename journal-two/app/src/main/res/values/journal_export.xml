@@ -14,4 +14,7 @@
     <string name="journal_import_media_failed">Could not import the original media</string>
     <string name="journal_dictation">Dictate</string>
     <string name="journal_dictation_unavailable">Speech recognition is unavailable on this device</string>
+    <string name="journal_hold_to_dictate">Hold the microphone to dictate</string>
+    <string name="journal_slide_to_cancel">Release to insert · slide up to cancel</string>
+    <string name="journal_dictation_failed">Speech could not be recognized</string>
 </resources>
