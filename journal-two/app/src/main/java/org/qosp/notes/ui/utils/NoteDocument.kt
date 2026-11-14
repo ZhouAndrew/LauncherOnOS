@@ -95,10 +95,11 @@ internal object NoteDocument {
     }
 
     private fun from(note: Note, html: Boolean, assets: List<Pair<String, Attachment>> = emptyList()): String {
-        val attachments = assets.joinToString(if (html) "\n" else "\n\n") { (path, attachment) ->
+        fun renderAsset(asset: Pair<String, Attachment>): String {
+            val (path, attachment) = asset
             val label = attachment.description.ifBlank { attachment.fileName }.ifBlank { path }
                 .lineSequence().joinToString(" ")
-            if (html) {
+            return if (html) {
                 val text = escapeHtml(label)
                 when (attachment.type) {
                     Attachment.Type.IMAGE -> "<figure><img src=\"$path\" alt=\"$text\" style=\"max-width:100%\"><figcaption>$text</figcaption></figure>"
@@ -113,9 +114,16 @@ internal object NoteDocument {
         }
         val title = note.title.lineSequence().joinToString(" ").trim()
         val body = note.toStorableContent()
+        val byId = assets.associateBy { InlineMedia.id(it.second) }
+        val used = InlineMedia.marker.findAll(body).map { it.groupValues[1] }.toSet()
+        val attachments = assets.filterNot { InlineMedia.id(it.second) in used }
+            .joinToString(if (html) "\n" else "\n\n", transform = ::renderAsset)
+        fun renderText(text: String): String =
+            if (note.isMarkdownEnabled) renderMarkdown(text)
+            else "<div style=\"white-space:pre-wrap\">${escapeHtml(text)}</div>"
         if (!html) {
             val heading = if (title.isBlank()) "" else "# ${escapeMarkdown(title)}\n\n"
-            return heading + body + if (attachments.isEmpty()) "" else "\n\n$attachments\n"
+            return heading + InlineMedia.marker.replace(body) { byId[it.groupValues[1]]?.let(::renderAsset).orEmpty() } + if (attachments.isEmpty()) "" else "\n\n$attachments\n"
         }
 
         val escapedTitle = escapeHtml(title)
@@ -125,8 +133,15 @@ internal object NoteDocument {
                 val checked = if (task.isDone) " checked" else ""
                 "<li><input type=\"checkbox\" disabled$checked> ${escapeHtml(task.content)}</li>"
             }
-            note.isMarkdownEnabled -> renderMarkdown(body)
-            else -> "<div style=\"white-space:pre-wrap\">${escapeHtml(body)}</div>"
+            else -> buildString {
+                var start = 0
+                for (match in InlineMedia.marker.findAll(body)) {
+                    append(renderText(body.substring(start, match.range.first)))
+                    byId[match.groupValues[1]]?.let { append(renderAsset(it)) }
+                    start = match.range.last + 1
+                }
+                append(renderText(body.substring(start)))
+            }
         }
         return """<!doctype html>
 <html>

@@ -137,9 +137,11 @@ class EditorViewModel(
         )
     }
 
-    fun insertAttachments(vararg attachments: Attachment) = update { note ->
+    fun insertAttachments(vararg attachments: Attachment, inlineOffset: Int? = null) = update { note ->
         note.copy(
             attachments = note.attachments + attachments,
+            content = if (inlineOffset == null || note.isList) note.content
+                else org.qosp.notes.ui.utils.InlineMedia.insert(note.content, inlineOffset, attachments.toList()),
             modifiedDate = Instant.now().epochSecond,
         )
     }

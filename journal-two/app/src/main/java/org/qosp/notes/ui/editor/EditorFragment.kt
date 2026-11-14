@@ -111,6 +111,9 @@ import org.qosp.notes.ui.tasks.TaskViewHolder
 import org.qosp.notes.ui.tasks.TasksAdapter
 import org.qosp.notes.ui.utils.ChooseFilesContract
 import org.qosp.notes.ui.utils.HighQualityVideoContract
+import org.qosp.notes.ui.utils.InlineMedia
+import android.text.style.URLSpan
+import android.text.style.ClickableSpan
 import org.qosp.notes.ui.utils.TakePictureContract
 import org.qosp.notes.ui.utils.collect
 import org.qosp.notes.ui.utils.dp
@@ -270,10 +273,11 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
             Attachment.fromUri(requireContext(), it)
         }
 
-        model.insertAttachments(*attachments.toTypedArray())
+        model.insertAttachments(*attachments.toTypedArray(), inlineOffset = mediaOffset)
     }
 
     private var pendingVideo: String? = null
+    private var mediaOffset = -1
 
     private val recordVideo =
         registerForActivityResult(HighQualityVideoContract) { saved ->
@@ -290,7 +294,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
                 path = filename,
                 fileName = filename,
                 description = getString(R.string.action_record_video),
-            ))
+            ), inlineOffset = mediaOffset)
         }
 
     private fun startVideoRecording() {
@@ -318,7 +322,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
         if (!saved) return@registerForActivityResult
         val uri = activityModel.tempPhotoUri ?: return@registerForActivityResult
 
-        model.insertAttachments(Attachment.fromUri(requireContext(), uri))
+        model.insertAttachments(Attachment.fromUri(requireContext(), uri), inlineOffset = mediaOffset)
         activityModel.tempPhotoUri = null
     }
 
@@ -434,6 +438,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         pendingVideo = savedInstanceState?.getString("journal.pendingVideo")
+        mediaOffset = savedInstanceState?.getInt("journal.mediaOffset", -1) ?: -1
         sharedElementEnterTransition = MaterialContainerTransform().apply {
             drawingViewId = R.id.nav_host_fragment
             duration = 300L
@@ -611,10 +616,12 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
                 }
 
                 R.id.action_attach_file -> {
+                    mediaOffset = if (model.inEditMode) binding.editTextContent.selectionEnd else -1
                     requestMediaLauncher.launch(null)
                 }
 
                 R.id.action_take_photo -> {
+                    mediaOffset = if (model.inEditMode) binding.editTextContent.selectionEnd else -1
                     lifecycleScope.launch {
                         runCatching {
                             takePhotoLauncher.launch(activityModel.createImageFile())
@@ -623,6 +630,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
                 }
 
                 R.id.action_record_video -> {
+                    mediaOffset = if (model.inEditMode) binding.editTextContent.selectionEnd else -1
                     if (!note.isDeleted) startVideoRecording()
                     return true
                 }
@@ -668,6 +676,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putString("journal.pendingVideo", pendingVideo)
+        outState.putInt("journal.mediaOffset", mediaOffset)
     }
 
     override fun onPause() {
@@ -1056,12 +1065,37 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
             // Also set text of preview textviews
             textViewTitlePreview.text = data.note.title.ifEmpty { getString(R.string.indicator_untitled) }
 
-            if (isMarkdownEnabled) {
+            val linked = data.note.attachments.associateBy(InlineMedia::id)
+            val preview = InlineMedia.marker.replace(data.note.content) { match ->
+                val item = linked[match.groupValues[1]] ?: return@replace ""
+                when (item.type) {
+                    Attachment.Type.IMAGE -> item.uri(requireContext())?.let { "![Image]($it)" }.orEmpty()
+                    Attachment.Type.VIDEO -> "[▶ Video](journal-media:${InlineMedia.id(item)})"
+                    else -> ""
+                }
+            }
+            if (isMarkdownEnabled || preview != data.note.content) {
                 // Seems to be crashing often without wrapping it in a post { } call
                 textViewContentPreview.post {
-                    markwon.applyTo(textViewContentPreview, data.note.content) {
+                    markwon.applyTo(textViewContentPreview, preview) {
                         tableReplacement = { Code(getString(R.string.message_cannot_preview_table)) }
                         maximumTableColumns = 15
+                    }
+                    val rendered = textViewContentPreview.text
+                    if (rendered is android.text.Spannable) {
+                        for (span in rendered.getSpans(0, rendered.length, URLSpan::class.java)) {
+                            val item = linked[span.url.removePrefix("journal-media:")] ?: continue
+                            val start = rendered.getSpanStart(span)
+                            val end = rendered.getSpanEnd(span)
+                            val flags = rendered.getSpanFlags(span)
+                            rendered.removeSpan(span)
+                            rendered.setSpan(object : ClickableSpan() {
+                                override fun onClick(widget: View) {
+                                    startActivity(Intent(requireContext(), MediaActivity::class.java)
+                                        .putExtra(MediaActivity.ATTACHMENT, item))
+                                }
+                            }, start, end, flags)
+                        }
                     }
                 }
             } else {
