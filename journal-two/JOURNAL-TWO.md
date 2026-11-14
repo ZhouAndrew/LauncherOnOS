@@ -19,3 +19,14 @@ python3 import-wordpress.py 日志.html.zip https://andrew.local 用户名
 按提示输入 WordPress 应用密码。导入程序创建草稿，上传附件至媒体库，并把草稿中引用的附件路径改为媒体库网址。站点拒绝某种文件类型时，导入会报错并保留已经创建的草稿；再次运行前可从终端显示的草稿 ID 检查结果。
 
 在编辑器菜单选择「录制视频」打开 Android 系统相机。确认后，视频作为当前笔记的附件保存，可随 HTML、Markdown 或 WordPress ZIP 导出。
+
+## 从思源笔记导入
+
+在思源文档菜单中将单篇日志导出为 **Markdown ZIP**，保留 ZIP 内的文档及 assets 文件夹。在电脑的 Python 虚拟环境安装 `markdown-it-py` 和 `bleach`，再运行：
+
+```bash
+python3 -m pip install markdown-it-py bleach
+python3 import-wordpress.py 思源日志.zip https://andrew.local 用户名
+```
+
+若 ZIP 含有多篇文档，可用 `--document '目录/文档.md'` 指定一篇。导入创建 WordPress 草稿，原始媒体上传到媒体库，图片和播放器保留在原位置。
