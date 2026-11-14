@@ -37,7 +37,13 @@ def tree():
 def find(*labels, scroll=False):
     for _ in range(8):
         root = tree()
-        for node in root.iter("node"):
+        nodes = list(root.iter("node"))
+        dismiss = next((n for n in nodes if n.get("resource-id") == "android:id/aerr_close"), None)
+        if dismiss is not None and any("Launcher isn't responding" in n.get("text", "") for n in nodes):
+            click(dismiss)
+            launch()
+            continue
+        for node in nodes:
             values = [node.get(k, "") for k in ("text", "content-desc", "resource-id")]
             if any(label in values or any(v.endswith("/" + label) for v in values)
                    for label in labels):
@@ -51,7 +57,10 @@ def find(*labels, scroll=False):
 
 
 def tap(*labels, scroll=False):
-    node = find(*labels, scroll=scroll)
+    click(find(*labels, scroll=scroll))
+
+
+def click(node):
     left, top, right, bottom = map(int, re.findall(r"\d+", node.get("bounds")))
     shell("input", "tap", str((left + right) // 2), str((top + bottom) // 2))
     time.sleep(0.7)
