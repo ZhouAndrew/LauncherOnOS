@@ -9,4 +9,7 @@
     <string name="action_export_wordpress">导出到 WordPress</string>
     <string name="action_record_video">录制视频</string>
     <string name="record_video_failed">无法录制视频</string>
+    <string name="journal_play_video">播放视频</string>
+    <string name="journal_video_playback_failed">无法播放视频</string>
+    <string name="journal_import_media_failed">无法导入原始媒体</string>
 </resources>

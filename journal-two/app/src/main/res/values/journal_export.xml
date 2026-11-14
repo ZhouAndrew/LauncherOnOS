@@ -9,4 +9,7 @@
     <string name="action_export_wordpress">Export for WordPress</string>
     <string name="action_record_video">Record video</string>
     <string name="record_video_failed">Could not record video</string>
+    <string name="journal_play_video">Play video</string>
+    <string name="journal_video_playback_failed">Could not play video</string>
+    <string name="journal_import_media_failed">Could not import the original media</string>
 </resources>

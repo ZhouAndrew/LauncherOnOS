@@ -105,7 +105,12 @@ class MainActivity : BaseActivity() {
         setupDrawerHeader()
 
         WidgetUpdateHelper.updateAllWidgets(this)
-        if (intent != null) handleIntent(intent)
+        if (savedInstanceState == null && intent?.action == Intent.ACTION_MAIN) {
+            val draftId = getSharedPreferences("journal", MODE_PRIVATE).getLong("activeNote", 0L)
+            navController.navigate(R.id.fragment_editor, bundleOf("transitionName" to "", "noteId" to draftId))
+        } else if (savedInstanceState == null && intent != null) {
+            handleIntent(intent)
+        }
 
         onBackPressedDispatcher.addCallback(this) {
             if (binding.drawer.isDrawerOpen(GravityCompat.START)) {

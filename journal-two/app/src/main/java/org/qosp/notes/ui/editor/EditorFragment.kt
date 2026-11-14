@@ -112,8 +112,13 @@ import org.qosp.notes.ui.tasks.TasksAdapter
 import org.qosp.notes.ui.utils.ChooseFilesContract
 import org.qosp.notes.ui.utils.HighQualityVideoContract
 import org.qosp.notes.ui.utils.InlineMedia
-import android.text.style.URLSpan
-import android.text.style.ClickableSpan
+import android.text.method.LinkMovementMethod
+import android.text.util.Linkify
+import android.widget.Button
+import android.widget.ImageView
+import android.widget.MediaController
+import android.widget.VideoView
+import coil.load
 import org.qosp.notes.ui.utils.TakePictureContract
 import org.qosp.notes.ui.utils.collect
 import org.qosp.notes.ui.utils.dp
@@ -170,6 +175,8 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
     override val toolbar: Toolbar
         get() = binding.toolbar
 
+    private var previewedNote: Note? = null
+    private var inlinePlayer: VideoView? = null
     private var locationRequest: CancellationSignal? = null
 
     private val locationPermission =
@@ -215,8 +222,9 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
                 val url = "https://www.openstreetmap.org/?mlat=${location.latitude}&mlon=${location.longitude}#map=16/$coordinates"
                 val label = getString(R.string.note_location)
                 val link = if (note.isMarkdownEnabled) "[$label]($url)" else "$label $url"
-                val body = binding.editTextContent.text.toString()
-                model.setNoteContent(listOf(body, link).filter { it.isNotBlank() }.joinToString("\n\n"))
+                val editor = binding.editTextContent
+                val offset = editor.selectionEnd.takeIf { model.inEditMode && it >= 0 } ?: editor.length()
+                editor.text?.insert(offset, "\n\n$link\n\n")
             }
         } catch (error: SecurityException) {
             locationRequest = null
@@ -248,7 +256,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
         if (uri == null) return
         val context = requireContext().applicationContext
         lifecycleScope.launch {
-            val note = model.data.first { it.note != null }.note ?: return@launch
+            val note = model.savedNote() ?: return@launch
             val saved = withContext(Dispatchers.IO) {
                 try {
                     NoteDocument.write(context, uri, note, html, packaged)
@@ -267,13 +275,53 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
 
     private val requestMediaLauncher = registerForActivityResult(ChooseFilesContract) { uris ->
         if (uris.isEmpty()) return@registerForActivityResult
-
-        val attachments = uris.map {
-            requireContext().contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            Attachment.fromUri(requireContext(), it)
+        val context = requireContext().applicationContext
+        val offset = mediaOffset
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val attachments = withContext(Dispatchers.IO) {
+                    uris.distinct().map { uri -> copyOriginal(context, uri) }
+                }
+                insertMedia(attachments, offset)
+            } catch (error: IOException) {
+                Log.w(TAG, "Could not copy original media", error)
+                sendMessage(getString(R.string.journal_import_media_failed))
+            } catch (error: SecurityException) {
+                Log.w(TAG, "Could not read original media", error)
+                sendMessage(getString(R.string.journal_import_media_failed))
+            }
         }
+    }
 
-        model.insertAttachments(*attachments.toTypedArray(), inlineOffset = mediaOffset)
+    private fun copyOriginal(context: Context, uri: Uri): Attachment {
+        val attachment = Attachment.fromUri(context, uri)
+        val mimeType = context.contentResolver.getType(uri)
+        val extension = attachment.description.substringAfterLast('.', "")
+            .takeIf { it.matches(Regex("[A-Za-z0-9]{1,12}")) }
+            ?: android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)
+        val name = UUID.randomUUID().toString() + (extension?.let { ".$it" } ?: "")
+        val directory = File(context.filesDir, App.MEDIA_FOLDER).also { it.mkdirs() }
+        val file = File(directory, name)
+        try {
+            val source = context.contentResolver.openInputStream(uri) ?: throw IOException("Cannot read media")
+            source.use { input -> file.outputStream().use { output -> input.copyTo(output) } }
+        } catch (error: Exception) {
+            file.delete()
+            throw error
+        }
+        return attachment.copy(path = name, fileName = name)
+    }
+
+    private fun insertMedia(attachments: List<Attachment>, offset: Int = mediaOffset) {
+        val editor = binding.editTextContent
+        val before = editor.text.toString()
+        val after = InlineMedia.insert(before, offset, attachments)
+        if (!isList && after != before) {
+            editor.withOnlyTextWatcher<MarkwonEditorTextWatcher> { setText(after) }
+            val insertion = if (offset < 0) before.length else offset.coerceAtMost(before.length)
+            editor.setSelection(insertion + after.length - before.length)
+        }
+        model.insertAttachments(*attachments.toTypedArray(), content = after)
     }
 
     private var pendingVideo: String? = null
@@ -289,12 +337,12 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
                 if (saved) sendMessage(getString(R.string.record_video_failed))
                 return@registerForActivityResult
             }
-            model.insertAttachments(Attachment(
+            insertMedia(listOf(Attachment(
                 type = Attachment.Type.VIDEO,
                 path = filename,
                 fileName = filename,
                 description = getString(R.string.action_record_video),
-            ), inlineOffset = mediaOffset)
+            )))
         }
 
     private fun startVideoRecording() {
@@ -322,7 +370,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
         if (!saved) return@registerForActivityResult
         val uri = activityModel.tempPhotoUri ?: return@registerForActivityResult
 
-        model.insertAttachments(Attachment.fromUri(requireContext(), uri), inlineOffset = mediaOffset)
+        insertMedia(listOf(Attachment.fromUri(requireContext(), uri)))
         activityModel.tempPhotoUri = null
     }
 
@@ -455,11 +503,12 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
         super.onViewCreated(view, savedInstanceState)
 
         data = Data()
+        previewedNote = null
         isFirstLoad = true
 
         if (model.isNotInitialized) {
             model.initialize(
-                noteId = args.noteId,
+                noteId = savedInstanceState?.getLong("journal.noteId")?.takeIf { it > 0 } ?: args.noteId,
                 newNoteTitle = args.newNoteTitle,
                 newNoteContent = args.newNoteContent,
                 newNoteAttachments = args.newNoteAttachments?.toList() ?: emptyList(),
@@ -499,7 +548,10 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
 
         binding.fabChangeMode.setOnClickListener {
             updateEditMode(!model.inEditMode)
-            if (model.inEditMode) requestFocusForFields(true) else view.hideKeyboard()
+            if (model.inEditMode) requestFocusForFields(true) else {
+                view.hideKeyboard()
+                data.note?.let(::showSavedPreview)
+            }
         }
     }
 
@@ -562,7 +614,10 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
 
                 R.id.action_change_mode -> {
                     updateEditMode(!model.inEditMode)
-                    if (model.inEditMode) requestFocusForFields(true) else view?.hideKeyboard()
+                    if (model.inEditMode) requestFocusForFields(true) else {
+                        view?.hideKeyboard()
+                        showSavedPreview(note)
+                    }
                     setupMenuItems(note, note.reminders.isNotEmpty())
                 }
 
@@ -675,11 +730,13 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
+        data.note?.id?.let { outState.putLong("journal.noteId", it) }
         outState.putString("journal.pendingVideo", pendingVideo)
         outState.putInt("journal.mediaOffset", mediaOffset)
     }
 
     override fun onPause() {
+        inlinePlayer?.pause()
         locationRequest?.cancel()
         locationRequest = null
         model.selectedRange = with(binding.editTextContent) { selectionStart to selectionEnd }
@@ -687,6 +744,8 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
     }
 
     override fun onDestroyView() {
+        inlinePlayer?.stopPlayback()
+        inlinePlayer = null
         // Dismiss the snackbar which is shown for deleted notes
         snackbar?.dismiss()
         itemTouchHelper.attachToRecyclerView(null)
@@ -758,23 +817,9 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
             }
 
             override fun onLongClick(position: Int, viewBinding: LayoutAttachmentBinding): Boolean {
-                if (data.note?.isDeleted == true) return false
-
-                data.note?.id?.let { noteId ->
-                    val attachment = attachmentsAdapter.getItemAtPosition(position)
-
-                    BottomSheet.show(attachment.description, parentFragmentManager) {
-                        action(R.string.attachments_edit_description, R.drawable.ic_pencil) {
-                            EditAttachmentDialog.build(noteId, attachment.path).show(parentFragmentManager, null)
-                        }
-                        action(R.string.action_delete, R.drawable.ic_bin) {
-                            model.deleteAttachment(attachment)
-                        }
-                        action(R.string.action_share, R.drawable.ic_share) {
-                            shareAttachment(requireContext(), attachment)
-                        }
-                    }
-                }
+                val note = data.note ?: return false
+                if (note.isDeleted) return false
+                showAttachmentActions(note, attachmentsAdapter.getItemAtPosition(position))
                 return true
             }
         }
@@ -784,6 +829,27 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
         recyclerAttachments.apply {
             layoutManager = AttachmentsGridManager(requireContext())
             adapter = attachmentsAdapter
+        }
+    }
+
+    private fun showAttachmentActions(note: Note, attachment: Attachment) {
+        if (note.isDeleted) return
+        BottomSheet.show(attachment.description, parentFragmentManager) {
+            action(R.string.attachments_edit_description, R.drawable.ic_pencil) {
+                EditAttachmentDialog.build(note.id, attachment.path).show(parentFragmentManager, null)
+            }
+            action(R.string.action_delete, R.drawable.ic_bin) {
+                val editor = binding.editTextContent
+                val marker = "[journal-media:${InlineMedia.id(attachment)}]"
+                val text = editor.text.toString()
+                if (marker in text) {
+                    editor.withOnlyTextWatcher<MarkwonEditorTextWatcher> { setText(text.replace(marker, "")) }
+                }
+                model.deleteAttachment(attachment)
+            }
+            action(R.string.action_share, R.drawable.ic_share) {
+                shareAttachment(requireContext(), attachment)
+            }
         }
     }
 
@@ -836,7 +902,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
                     return@doOnTextChanged
                 }
 
-                model.setNoteContent(text.toString().trim())
+                model.setNoteContent(text.toString())
             }
             setOnFocusChangeListener { _, hasFocus ->
                 contentHasFocus = hasFocus
@@ -910,6 +976,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
         findItem(R.id.action_record_audio)?.isVisible = !note.isDeleted
         findItem(R.id.action_take_photo)?.isVisible = !note.isDeleted
         findItem(R.id.action_record_video)?.isVisible = !note.isDeleted
+        findItem(R.id.action_add_location)?.isVisible = !note.isDeleted && !note.isList
         findItem(R.id.action_convert_note)?.apply {
             title =
                 if (note.isList) getString(R.string.action_convert_to_note) else getString(R.string.action_convert_to_list)
@@ -999,8 +1066,10 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
 
             // Update Title and Content only the first the since they are EditTexts
             if (isFirstLoad) {
+                requireContext().getSharedPreferences("journal", Context.MODE_PRIVATE).edit()
+                    .putLong("activeNote", data.note.id).apply()
 
-                if (data.defaultEditorMode == DefaultEditorMode.EDIT) {
+                if ((!isList && args.noteId == 0L) || data.defaultEditorMode == DefaultEditorMode.EDIT) {
                     model.inEditMode = true
                 }
 
@@ -1009,7 +1078,6 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
                     val fontSizeFloat = data.editorFontSize.toFloat()
 
                     textViewTitlePreview.textSize = fontSizeFloat
-                    textViewContentPreview.textSize = fontSizeFloat
 
                     editTextTitle.textSize = fontSizeFloat
                     editTextContent.textSize = fontSizeFloat
@@ -1065,42 +1133,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
             // Also set text of preview textviews
             textViewTitlePreview.text = data.note.title.ifEmpty { getString(R.string.indicator_untitled) }
 
-            val linked = data.note.attachments.associateBy(InlineMedia::id)
-            val preview = InlineMedia.marker.replace(data.note.content) { match ->
-                val item = linked[match.groupValues[1]] ?: return@replace ""
-                when (item.type) {
-                    Attachment.Type.IMAGE -> item.uri(requireContext())?.let { "![Image]($it)" }.orEmpty()
-                    Attachment.Type.VIDEO -> "[▶ Video](journal-media:${InlineMedia.id(item)})"
-                    else -> ""
-                }
-            }
-            if (isMarkdownEnabled || preview != data.note.content) {
-                // Seems to be crashing often without wrapping it in a post { } call
-                textViewContentPreview.post {
-                    markwon.applyTo(textViewContentPreview, preview) {
-                        tableReplacement = { Code(getString(R.string.message_cannot_preview_table)) }
-                        maximumTableColumns = 15
-                    }
-                    val rendered = textViewContentPreview.text
-                    if (rendered is android.text.Spannable) {
-                        for (span in rendered.getSpans(0, rendered.length, URLSpan::class.java)) {
-                            val item = linked[span.url.removePrefix("journal-media:")] ?: continue
-                            val start = rendered.getSpanStart(span)
-                            val end = rendered.getSpanEnd(span)
-                            val flags = rendered.getSpanFlags(span)
-                            rendered.removeSpan(span)
-                            rendered.setSpan(object : ClickableSpan() {
-                                override fun onClick(widget: View) {
-                                    startActivity(Intent(requireContext(), MediaActivity::class.java)
-                                        .putExtra(MediaActivity.ATTACHMENT, item))
-                                }
-                            }, start, end, flags)
-                        }
-                    }
-                }
-            } else {
-                textViewContentPreview.text = data.note.content
-            }
+            if (!model.inEditMode) renderBodyPreview(data.note)
 
             setupMenuItems(data.note, data.note.reminders.isNotEmpty())
 
@@ -1163,7 +1196,8 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
             }
 
             // Update attachments
-            attachmentsAdapter.submitList(data.note.attachments)
+            val embedded = InlineMedia.marker.findAll(data.note.content).map { it.groupValues[1] }.toSet()
+            attachmentsAdapter.submitList(data.note.attachments.filterNot { InlineMedia.id(it) in embedded })
 
             // Update tags
             containerTags.removeAllViews()
@@ -1177,6 +1211,96 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
 
             isFirstLoad = false
         }
+    }
+
+    private fun showSavedPreview(note: Note) {
+        renderBodyPreview(note)
+        viewLifecycleOwner.lifecycleScope.launch {
+            model.savedNote()?.takeIf { !model.inEditMode }?.let(::renderBodyPreview)
+        }
+    }
+
+    private fun renderBodyPreview(note: Note) = with(binding) {
+        val previous = previewedNote
+        if (previous != null && previous.content == note.content && previous.attachments == note.attachments &&
+            previous.isMarkdownEnabled == note.isMarkdownEnabled) return@with
+        previewedNote = note
+        inlinePlayer?.stopPlayback()
+        inlinePlayer = null
+        containerBodyPreview.removeAllViews()
+
+        fun addText(content: String) {
+            if (content.isBlank()) return
+            val text = TextView(requireContext()).apply {
+                textSize = data.editorFontSize.takeIf { it > 0 }?.toFloat() ?: 16f
+                setTextIsSelectable(true)
+                movementMethod = LinkMovementMethod.getInstance()
+                setPadding(0, 8.dp(context), 0, 8.dp(context))
+            }
+            containerBodyPreview.addView(text)
+            if (note.isMarkdownEnabled) {
+                markwon.applyTo(text, content.trim()) {
+                    tableReplacement = { Code(getString(R.string.message_cannot_preview_table)) }
+                    maximumTableColumns = 15
+                }
+                text.movementMethod = LinkMovementMethod.getInstance()
+            } else {
+                text.text = content.trim()
+                Linkify.addLinks(text, Linkify.WEB_URLS)
+            }
+        }
+
+        val linked = note.attachments.associateBy(InlineMedia::id)
+        var start = 0
+        for (marker in InlineMedia.marker.findAll(note.content)) {
+            addText(note.content.substring(start, marker.range.first))
+            start = marker.range.last + 1
+            val attachment = linked[marker.groupValues[1]] ?: continue
+            val uri = attachment.uri(requireContext()) ?: continue
+            if (attachment.type == Attachment.Type.IMAGE) {
+                containerBodyPreview.addView(ImageView(requireContext()).apply {
+                    adjustViewBounds = true
+                    contentDescription = attachment.description
+                    setOnLongClickListener { showAttachmentActions(note, attachment); true }
+                    load(uri)
+                }, -1, -2)
+            } else if (attachment.type == Attachment.Type.VIDEO) {
+                val context = requireContext()
+                val frame = android.widget.FrameLayout(context)
+                containerBodyPreview.addView(frame, -1, 220.dp(context))
+                val poster = ImageView(context).apply {
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                    load(uri)
+                }
+                frame.addView(poster, -1, -1)
+                val player = VideoView(context).apply {
+                    visibility = View.GONE
+                    val controls = MediaController(context)
+                    setMediaController(controls)
+                    setOnPreparedListener { controls.show(3000) }
+                    setOnErrorListener { _, _, _ ->
+                        sendMessage(getString(R.string.journal_video_playback_failed))
+                        true
+                    }
+                }
+                frame.addView(player, android.widget.FrameLayout.LayoutParams(-1, -1, android.view.Gravity.CENTER))
+                val play = Button(context).apply {
+                    setText(R.string.journal_play_video)
+                    setOnClickListener {
+                        inlinePlayer?.takeIf { it !== player }?.stopPlayback()
+                        inlinePlayer = player
+                        poster.isVisible = false
+                        isVisible = false
+                        player.isVisible = true
+                        player.setVideoURI(uri)
+                        player.start()
+                    }
+                }
+                play.setOnLongClickListener { showAttachmentActions(note, attachment); true }
+                frame.addView(play, android.widget.FrameLayout.LayoutParams(-2, -2, android.view.Gravity.CENTER))
+            }
+        }
+        addText(note.content.substring(start))
     }
 
     private fun setupListeners() = with(binding) {
@@ -1308,6 +1432,8 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
         super.setupToolbar()
         val onBackPressedHandler = {
             if (findNavController().navigateUp()) {
+                requireContext().getSharedPreferences("journal", Context.MODE_PRIVATE).edit()
+                    .remove("activeNote").apply()
                 // This is needed because "Notes" label briefly appears
                 // during the shared element transition when returning.
                 // Todo: Needs a better fix
@@ -1433,7 +1559,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
 
     /** Gives the focus to the note body if it is empty */
     private fun requestFocusForFields(forceFocus: Boolean = false) = with(binding) {
-        if (data.note?.isEmpty() == true || forceFocus) {
+        if (model.inEditMode && !isList && (data.note?.isEmpty() == true || forceFocus)) {
             editTextContent.requestFocusAndKeyboard()
         }
     }
@@ -1454,7 +1580,8 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
             }
         }
 
-        textViewContentPreview.isVisible = !model.inEditMode && !isList
+        containerBodyPreview.isVisible = !model.inEditMode && !isList
+        if (model.inEditMode) inlinePlayer?.pause()
         editTextContent.isVisible = model.inEditMode && !isList
 
         val shouldDisplayFAB = data.showFabChangeMode && !isNoteDeleted && !noteHasEmptyContent
