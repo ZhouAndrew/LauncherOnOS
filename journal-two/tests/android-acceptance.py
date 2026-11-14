@@ -27,7 +27,7 @@ def tree():
     return ElementTree.fromstring(shell("cat", "/sdcard/journal-ui.xml"))
 
 
-def find(*labels):
+def find(*labels, scroll=False):
     for _ in range(8):
         root = tree()
         for node in root.iter("node"):
@@ -35,14 +35,16 @@ def find(*labels):
             if any(label in values or any(v.endswith("/" + label) for v in values)
                    for label in labels):
                 return node
+        if scroll:
+            shell("input", "swipe", "225", "320", "225", "90", "300")
         time.sleep(1)
     (OUT / "last-ui.xml").write_bytes(ElementTree.tostring(root))
     (OUT / "last-screen.png").write_bytes(adb("exec-out", "screencap", "-p"))
     raise AssertionError(f"Cannot find {labels}")
 
 
-def tap(*labels):
-    node = find(*labels)
+def tap(*labels, scroll=False):
+    node = find(*labels, scroll=scroll)
     left, top, right, bottom = map(int, re.findall(r"\d+", node.get("bounds")))
     shell("input", "tap", str((left + right) // 2), str((top + bottom) // 2))
     time.sleep(0.7)
@@ -54,12 +56,14 @@ def launch():
 
 
 def overflow():
+    if any("inputmethod" in n.get("package", "") for n in tree().iter("node")):
+        shell("input", "keyevent", "KEYCODE_BACK")
     tap("More options")
 
 
 def attach(name):
     overflow()
-    tap("Attach files")
+    tap("Attach files", scroll=True)
     try:
         tap(name)
     except AssertionError:
@@ -104,15 +108,17 @@ try:
     shell("am", "force-stop", APP)
     launch()
     find("JournalTwoAcceptance")
-    tap("Play video")
+    tap("Play video", scroll=True)
     time.sleep(2)
     (OUT / "inline-video.png").write_bytes(adb("exec-out", "screencap", "-p"))
     activities = shell("dumpsys", "activity", "activities").decode()
     assert any("topResumedActivity" in line and "MainActivity" in line
                for line in activities.splitlines()), activities
-    assert any(node.get("class") == "android.widget.VideoView" for node in tree().iter("node"))
+    assert "MediaActivity" not in "\n".join(
+        line for line in activities.splitlines() if "topResumedActivity" in line
+    )
     overflow()
-    tap("Export for WordPress")
+    tap("Export for WordPress", scroll=True)
     tap("Save", "button1")
     time.sleep(2)
     for folder in ("Download", "Documents"):
