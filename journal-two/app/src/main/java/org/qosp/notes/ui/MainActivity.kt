@@ -106,8 +106,7 @@ class MainActivity : BaseActivity() {
 
         WidgetUpdateHelper.updateAllWidgets(this)
         if (savedInstanceState == null && intent?.action == Intent.ACTION_MAIN) {
-            val draftId = getSharedPreferences("journal", MODE_PRIVATE).getLong("activeNote", 0L)
-            navController.navigate(R.id.fragment_editor, bundleOf("transitionName" to "", "noteId" to draftId))
+            openJournalEditor()
         } else if (savedInstanceState == null && intent != null) {
             handleIntent(intent)
         }
@@ -125,7 +124,13 @@ class MainActivity : BaseActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        handleIntent(intent)
+        if (intent.action == Intent.ACTION_MAIN) openJournalEditor() else handleIntent(intent)
+    }
+
+    private fun openJournalEditor() {
+        if (navController.currentDestination?.id == R.id.fragment_editor) return
+        val draftId = getSharedPreferences("journal", MODE_PRIVATE).getLong("activeNote", 0L)
+        navController.navigate(R.id.fragment_editor, bundleOf("transitionName" to "", "noteId" to draftId))
     }
 
     override fun onSupportNavigateUp(): Boolean {

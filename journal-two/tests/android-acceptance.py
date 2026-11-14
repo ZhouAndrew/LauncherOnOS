@@ -9,7 +9,7 @@ from xml.etree import ElementTree
 from zipfile import ZipFile
 
 APP = "io.github.zhouandrew.journaltwo"
-ACTIVITY = f"{APP}/org.qosp.notes.ui.MainActivity"
+ACTIVITY = f"{APP}/org.qosp.notes.ui.launcher.LauncherActivity"
 OUT = Path("journal-acceptance")
 OUT.mkdir(exist_ok=True)
 
@@ -71,6 +71,7 @@ def attach(name):
 
 def text(value):
     shell("input", "text", value)
+    time.sleep(0.5)
 
 
 try:
@@ -106,7 +107,10 @@ try:
     tap("Play video")
     time.sleep(2)
     (OUT / "inline-video.png").write_bytes(adb("exec-out", "screencap", "-p"))
-    assert APP in shell("dumpsys", "activity", "activities").decode()
+    activities = shell("dumpsys", "activity", "activities").decode()
+    assert any("topResumedActivity" in line and "MainActivity" in line
+               for line in activities.splitlines()), activities
+    assert any(node.get("class") == "android.widget.VideoView" for node in tree().iter("node"))
     overflow()
     tap("Export for WordPress")
     tap("Save", "button1")
