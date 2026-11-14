@@ -45,7 +45,7 @@ def find(*labels, scroll=False):
             continue
         for node in nodes:
             values = [node.get(k, "") for k in ("text", "content-desc", "resource-id")]
-            if any(label in values or any(v.endswith("/" + label) for v in values)
+            if any(any(v.casefold() == label.casefold() or v.endswith("/" + label) for v in values)
                    for label in labels):
                 return node
         if scroll:
