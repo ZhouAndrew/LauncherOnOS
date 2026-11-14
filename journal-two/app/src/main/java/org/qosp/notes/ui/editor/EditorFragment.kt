@@ -18,6 +18,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.speech.RecognizerIntent
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
@@ -178,6 +179,30 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
     private var previewedNote: Note? = null
     private var inlinePlayer: VideoView? = null
     private var locationRequest: CancellationSignal? = null
+
+    private val dictation = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val text = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+        if (result.resultCode == android.app.Activity.RESULT_OK && !text.isNullOrBlank()) {
+            updateEditMode(true)
+            val editor = binding.editTextContent
+            val offset = mediaOffset.takeIf { it in 0..editor.length() } ?: editor.length()
+            editor.text?.insert(offset, text)
+            editor.requestFocus()
+            editor.setSelection(offset + text.length)
+        }
+    }
+
+    private fun startDictation() {
+        mediaOffset = if (model.inEditMode) binding.editTextContent.selectionEnd else -1
+        try {
+            dictation.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                .putExtra(RecognizerIntent.EXTRA_LANGUAGE, resources.configuration.locales[0].toLanguageTag())
+                .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1))
+        } catch (_: ActivityNotFoundException) {
+            sendMessage(getString(R.string.journal_dictation_unavailable))
+        }
+    }
 
     private val locationPermission =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
@@ -633,6 +658,11 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
                     showColorChangeDialog()
                 }
 
+                R.id.action_journal_dictation -> {
+                    startDictation()
+                    return true
+                }
+
                 R.id.action_add_location -> {
                     addCurrentLocation()
                     return true
@@ -977,6 +1007,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
         findItem(R.id.action_take_photo)?.isVisible = !note.isDeleted
         findItem(R.id.action_record_video)?.isVisible = !note.isDeleted
         findItem(R.id.action_add_location)?.isVisible = !note.isDeleted && !note.isList
+        findItem(R.id.action_journal_dictation)?.isVisible = !note.isDeleted && !note.isList
         findItem(R.id.action_convert_note)?.apply {
             title =
                 if (note.isList) getString(R.string.action_convert_to_note) else getString(R.string.action_convert_to_list)
