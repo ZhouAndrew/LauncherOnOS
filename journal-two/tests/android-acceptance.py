@@ -23,8 +23,15 @@ def shell(*args):
 
 
 def tree():
-    shell("uiautomator", "dump", "/sdcard/journal-ui.xml")
-    return ElementTree.fromstring(shell("cat", "/sdcard/journal-ui.xml"))
+    path = "/sdcard/journal-ui.xml"
+    for _ in range(5):
+        shell("rm", "-f", path)
+        shell("uiautomator", "dump", path)
+        try:
+            return ElementTree.fromstring(shell("cat", path))
+        except (subprocess.CalledProcessError, ElementTree.ParseError):
+            time.sleep(2)
+    raise AssertionError("Android UI hierarchy was unavailable after repeated attempts")
 
 
 def find(*labels, scroll=False):
@@ -53,6 +60,7 @@ def tap(*labels, scroll=False):
 def launch():
     shell("am", "start", "-W", "-a", "android.intent.action.MAIN",
           "-c", "android.intent.category.LAUNCHER", "-n", ACTIVITY)
+    time.sleep(5)
 
 
 def overflow():
