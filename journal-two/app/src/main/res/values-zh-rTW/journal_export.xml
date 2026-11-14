@@ -1,0 +1,12 @@
+<resources>
+    <string name="action_save_markdown">另存為 Markdown</string>
+    <string name="action_save_html">另存為 HTML</string>
+    <string name="note_exported">已匯出備忘錄</string>
+    <string name="note_export_failed">無法匯出備忘錄</string>
+    <string name="action_add_location">加入目前位置</string>
+    <string name="location_unavailable">無法取得目前位置</string>
+    <string name="note_location">位置</string>
+    <string name="action_export_wordpress">匯出到 WordPress</string>
+    <string name="action_record_video">錄製影片</string>
+    <string name="record_video_failed">無法錄製影片</string>
+</resources>

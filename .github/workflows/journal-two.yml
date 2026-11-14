@@ -1,0 +1,33 @@
+name: Journal Two Android
+
+on:
+  push:
+    branches: [feature/journal-two, main]
+    paths: ['journal-two/**', '.github/workflows/journal-two.yml']
+  pull_request:
+    paths: ['journal-two/**', '.github/workflows/journal-two.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager 'platforms;android-37'
+      - name: Build and test
+        working-directory: journal-two
+        run: ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest
+      - uses: actions/upload-artifact@v4
+        with:
+          name: journal-two-debug-apk
+          path: journal-two/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error

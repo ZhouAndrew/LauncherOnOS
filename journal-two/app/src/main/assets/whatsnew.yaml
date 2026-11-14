@@ -1,0 +1,38 @@
+updates:
+  - id: 7
+    title: New Color Scheme Options
+    items:
+      - More color options for notes (Teal, Cyan, Purple, Brown, Gray)
+      - Two new themes for the app (Red & Yellow)
+      - Improved performance and bug fixes
+
+  - id: 6
+    title: Bug Fixes & Translation Updates
+    items:
+      - Fixed issue with indentation not being applied correctly when swiping tasks.
+      - Updated translations for Turkish.
+
+  - id: 5
+    title: Bug Fixes & Improvements
+    items:
+      - Potential fix for all notes getting moved to the trash.
+      - New translation updates for Italian, German, Swedish, Russian, Romanian and Chinese!
+      - Default editor mode setting (Edit vs Preview)
+      - New tasks are added to the top of the list.
+      - Does not show "Untitled" when creating a new note with empty title.
+
+  - id: 4
+    title: Widgets!!!
+    items:
+      - Add a widget to your home screen to quickly access your pinned notes and tasks.
+  - id: 3
+    title: What's New in Quillpad
+    items:
+      - Quickly report issues using the new "Send Logs" option in the About section.
+      - The app now gives clearer, more specific error messages regarding Nextcloud Sync.
+      - Fixed sync issues with remotely deleted notes and local updates not reflecting on the server.
+      - New translation updates for French, German, and Russian!
+  - id: 2
+    title: Bug Fixes
+    items:
+      - The bugs are fixed

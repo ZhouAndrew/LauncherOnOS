@@ -1,0 +1,23 @@
+// Apply the Gradle version catalog
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+        maven {
+            url = "https://www.jitpack.io"
+        }
+    }
+}
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
+include ':app'
+rootProject.name = "quillpad"
+
+buildCache {
+    local {
+        directory = new File(rootDir, 'build-cache')
+    }
+}

@@ -1,0 +1,12 @@
+<resources>
+    <string name="action_save_markdown">Save as Markdown</string>
+    <string name="action_save_html">Save as HTML</string>
+    <string name="note_exported">Note exported</string>
+    <string name="note_export_failed">Could not export note</string>
+    <string name="action_add_location">Add current location</string>
+    <string name="location_unavailable">Could not get current location</string>
+    <string name="note_location">Location</string>
+    <string name="action_export_wordpress">Export for WordPress</string>
+    <string name="action_record_video">Record video</string>
+    <string name="record_video_failed">Could not record video</string>
+</resources>
