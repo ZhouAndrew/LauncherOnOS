@@ -137,6 +137,7 @@ import org.qosp.notes.ui.utils.resId
 import org.qosp.notes.ui.utils.resolveAttribute
 import org.qosp.notes.ui.utils.shareAttachment
 import org.qosp.notes.ui.utils.shareNote
+import org.qosp.notes.ui.utils.showKeyboard
 import org.qosp.notes.ui.utils.viewBinding
 import org.qosp.notes.ui.utils.views.BottomSheet
 import org.qosp.notes.ui.widget.WidgetUpdateHelper
@@ -202,7 +203,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
         focusBody(cursor)
     }
 
-    private fun focusBody(cursor: Int) {
+    private fun focusBody(cursor: Int, showKeyboard: Boolean = false) {
         if (bodyFields.isEmpty()) return
         val markers = InlineMedia.marker.findAll(binding.editTextContent.text.toString()).toList()
         val index = markers.count { it.range.first < cursor }.coerceAtMost(bodyFields.lastIndex)
@@ -210,6 +211,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
         val field = bodyFields[index]
         field.requestFocus()
         field.setSelection((cursor - start).coerceIn(0, field.length()))
+        if (showKeyboard) field.post { if (field.isFocused) field.showKeyboard() }
     }
 
     private fun insertBodyText(offset: Int, text: String) {
@@ -421,6 +423,29 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
         }
     }
 
+    private fun showMediaChoices() {
+        // Keep the cursor before the sheet or Android picker takes focus.
+        mediaOffset = bodyOffset()
+        BottomSheet.show(null, parentFragmentManager, showPlaceHolderText = false) {
+            action(R.string.action_attach_files, R.drawable.ic_attachment) {
+                requestMediaLauncher.launch(null)
+            }
+            action(R.string.action_take_photo, R.drawable.ic_camera) {
+                viewLifecycleOwner.lifecycleScope.launch {
+                    try {
+                        takePhotoLauncher.launch(activityModel.createImageFile())
+                    } catch (error: ActivityNotFoundException) {
+                        Log.w(TAG, "Cannot launch camera app", error)
+                        sendMessage(getString(R.string.journal_import_media_failed))
+                    }
+                }
+            }
+            action(R.string.action_record_video, R.drawable.ic_movie) {
+                startVideoRecording()
+            }
+        }
+    }
+
     private val requestMediaLauncher = registerForActivityResult(ChooseFilesContract) { uris ->
         if (uris.isEmpty()) return@registerForActivityResult
         val context = requireContext().applicationContext
@@ -471,7 +496,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
             editor.withOnlyTextWatcher<MarkwonEditorTextWatcher> { setText(after) }
             editor.setSelection(cursor)
             data.note?.let { renderBodyPreview(it.copy(content = after, attachments = it.attachments + attachments)) }
-            focusBody(cursor)
+            focusBody(cursor, showKeyboard = model.inEditMode)
         }
     }
 
@@ -835,22 +860,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
                 }
 
                 R.id.action_attach_file -> {
-                    mediaOffset = bodyOffset()
-                    requestMediaLauncher.launch(null)
-                }
-
-                R.id.action_take_photo -> {
-                    mediaOffset = bodyOffset()
-                    lifecycleScope.launch {
-                        runCatching {
-                            takePhotoLauncher.launch(activityModel.createImageFile())
-                        }.getOrElse { Log.e(TAG, "Cannot launch camera app", it) }
-                    }
-                }
-
-                R.id.action_record_video -> {
-                    mediaOffset = bodyOffset()
-                    if (!note.isDeleted) startVideoRecording()
+                    showMediaChoices()
                     return true
                 }
 
@@ -1211,8 +1221,6 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
         findItem(R.id.action_change_color)?.isVisible = !note.isDeleted
         findItem(R.id.action_attach_file)?.isVisible = !note.isDeleted
         findItem(R.id.action_record_audio)?.isVisible = !note.isDeleted
-        findItem(R.id.action_take_photo)?.isVisible = !note.isDeleted
-        findItem(R.id.action_record_video)?.isVisible = !note.isDeleted
         findItem(R.id.action_add_location)?.isVisible = !note.isDeleted && !note.isList
         findItem(R.id.action_journal_dictation)?.isVisible = !note.isDeleted && !note.isList
         if (!note.isDeleted && !note.isList) bindDictationGesture()

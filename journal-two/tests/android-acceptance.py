@@ -79,8 +79,8 @@ def overflow():
 
 
 def attach(name):
-    overflow()
-    tap("Attach files", scroll=True)
+    tap("action_attach_file")
+    tap("Attach files")
     try:
         tap(name)
     except AssertionError:
@@ -113,7 +113,8 @@ try:
     tap("edit_text_title")
     text("JournalTwoAcceptance")
     tap("edit_text_content")
-    text("FIRST")
+    text("FIRSTTAIL")
+    shell("input", "keyevent", *(["KEYCODE_DPAD_LEFT"] * 4))
     attach("journal-photo.png")
     find("journal-photo.png")
     text("BETWEEN")
@@ -151,7 +152,7 @@ try:
             continue
     with ZipFile(OUT / "android-export.html.zip") as archive:
         body = archive.read("note.html").decode()
-        expected = ["FIRST", "<img", "BETWEEN", "<video", "AFTER", "openstreetmap.org"]
+        expected = ["FIRST", "<img", "BETWEEN", "<video", "AFTER", "openstreetmap.org", "TAIL"]
         assert sorted(expected, key=body.index) == expected, body
         for entry, name in (("attachments/1.png", "journal-photo.png"),
                             ("attachments/2.mp4", "journal-video.mp4")):
