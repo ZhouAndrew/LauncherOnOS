@@ -11,7 +11,7 @@ from pathlib import Path, PurePosixPath
 import posixpath
 import re
 from urllib.error import HTTPError
-from urllib.parse import unquote, urlsplit
+from urllib.parse import quote, unquote, urlsplit, urlunsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 from zipfile import BadZipFile, ZipFile
 
@@ -113,7 +113,12 @@ def import_note(package, site, username, password, document=None):
                     "Content-Type": mimetypes.guess_type(name)[0] or "application/octet-stream",
                     "Content-Length": str(archive.getinfo(path).file_size),
                 })
-            media_urls[path] = html.escape(media["source_url"], quote=True)
+            source = urlsplit(media["source_url"])
+            original = media.get("media_details", {}).get("original_image")
+            if original:
+                directory = posixpath.dirname(source.path)
+                source = source._replace(path=f"{directory}/{quote(original, safe='')}")
+            media_urls[path] = html.escape(urlunsplit(source), quote=True)
 
         def link(match):
             path = paths.get(match.group("url"))

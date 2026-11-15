@@ -2,7 +2,12 @@ package org.qosp.notes.ui.editor
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -14,6 +19,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.cancel
 import me.msoul.datastore.defaultOf
 import org.qosp.notes.data.model.Attachment
 import org.qosp.notes.data.model.Note
@@ -44,6 +50,21 @@ class EditorViewModel(
     var moveCheckedItems: Boolean = true
     private val noteIdFlow: MutableStateFlow<Long?> = MutableStateFlow(null)
     var selectedRange = 0 to 0
+    private val saves = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val saveLock = Mutex()
+    private var lastSave: Job? = null
+
+    override fun onCleared() {
+        val pending = lastSave
+        if (pending == null) saves.cancel()
+        else pending.invokeOnCompletion { saves.cancel() }
+        super.onCleared()
+    }
+
+    suspend fun savedNote(): Note? {
+        lastSave?.join()
+        return noteRepository.getById(noteIdFlow.filterNotNull().first()).first()
+    }
 
     val data = noteIdFlow
         .filterNotNull()
@@ -91,7 +112,8 @@ class EditorViewModel(
                 noteRepository.insertNote(
                     Note(
                         title = newNoteTitle,
-                        content = newNoteContent,
+                        content = if (newNoteIsList || newNoteAttachments.isEmpty()) newNoteContent
+                            else org.qosp.notes.ui.utils.InlineMedia.insert(newNoteContent, -1, newNoteAttachments),
                         notebookId = newNoteNotebookId,
                         isList = newNoteIsList,
                         attachments = newNoteAttachments,
@@ -130,6 +152,7 @@ class EditorViewModel(
 
     fun deleteAttachment(attachment: Attachment) = update { note ->
         note.copy(
+            content = note.content.replace("[journal-media:${org.qosp.notes.ui.utils.InlineMedia.id(attachment)}]", ""),
             attachments = note.attachments
                 .filterNot { it.path == attachment.path }
                 .toMutableList(),
@@ -137,11 +160,10 @@ class EditorViewModel(
         )
     }
 
-    fun insertAttachments(vararg attachments: Attachment, inlineOffset: Int? = null) = update { note ->
+    fun insertAttachments(vararg attachments: Attachment, content: String? = null) = update { note ->
         note.copy(
             attachments = note.attachments + attachments,
-            content = if (inlineOffset == null || note.isList) note.content
-                else org.qosp.notes.ui.utils.InlineMedia.insert(note.content, inlineOffset, attachments.toList()),
+            content = if (note.isList) note.content else content ?: note.content,
             modifiedDate = Instant.now().epochSecond,
         )
     }
@@ -172,10 +194,12 @@ class EditorViewModel(
     }
 
     private inline fun update(crossinline transform: suspend (Note) -> Note) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val note = data.value.note ?: return@launch
-            val new = transform(note)
-            noteRepository.updateNotes(new)
+        lastSave = saves.launch {
+            saveLock.withLock {
+                val id = noteIdFlow.filterNotNull().first()
+                val note = noteRepository.getById(id).first() ?: return@withLock
+                noteRepository.updateNotes(transform(note))
+            }
         }
     }
 
