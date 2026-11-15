@@ -298,18 +298,20 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
                         startY = event.rawY
+                        button.parent?.requestDisallowInterceptTouchEvent(true)
                         dictationCancelled = false
                         startDictation()
                         button.isPressed = recognizer != null
                         if (button.isPressed) sendMessage(getString(R.string.journal_slide_to_cancel))
                     }
                     MotionEvent.ACTION_MOVE -> {
-                        dictationCancelled = startY - event.rawY > 56.dp(button.context)
+                        dictationCancelled = startY - event.rawY >= 24.dp(button.context)
                         button.isPressed = recognizer != null && !dictationCancelled
                     }
                     MotionEvent.ACTION_UP -> {
                         button.isPressed = false
-                        if (dictationCancelled) cancelDictation()
+                        button.parent?.requestDisallowInterceptTouchEvent(false)
+                        if (dictationCancelled || startY - event.rawY >= 24.dp(button.context)) cancelDictation()
                         else if (recognizer != null) {
                             dictationHeld = false
                             val pending = dictationResult
@@ -318,6 +320,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
                     }
                     MotionEvent.ACTION_CANCEL -> {
                         button.isPressed = false
+                        button.parent?.requestDisallowInterceptTouchEvent(false)
                         cancelDictation()
                     }
                 }
