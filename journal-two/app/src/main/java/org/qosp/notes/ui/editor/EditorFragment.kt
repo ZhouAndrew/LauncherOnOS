@@ -1029,6 +1029,77 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
         }
     }
 
+    private class LocationLink(val label: String, val url: String, val color: Int) :
+        android.text.style.ReplacementSpan() {
+        override fun getSize(
+            paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?,
+        ): Int = kotlin.math.ceil(paint.measureText(label)).toInt()
+
+        override fun draw(
+            canvas: Canvas, text: CharSequence, start: Int, end: Int, x: Float,
+            top: Int, y: Int, bottom: Int, paint: Paint,
+        ) {
+            val originalColor = paint.color
+            val originalUnderline = paint.isUnderlineText
+            paint.color = color
+            paint.isUnderlineText = true
+            canvas.drawText(label, x, y.toFloat(), paint)
+            paint.color = originalColor
+            paint.isUnderlineText = originalUnderline
+        }
+    }
+
+    private val locationLinkPattern = Regex(
+        """(?m)^(?:\[([^\]\r\n]+)]\((https://www\.openstreetmap\.org/\?mlat=[-.\d]+&mlon=[-.\d]+#map=16/[-.\d]+/[-.\d]+)\)|(.+?) (https://www\.openstreetmap\.org/\?mlat=[-.\d]+&mlon=[-.\d]+#map=16/[-.\d]+/[-.\d]+))$"""
+    )
+
+    private fun refreshLocationLinks(editor: ExtendedEditText) {
+        val text = editor.text ?: return
+        text.getSpans(0, text.length, LocationLink::class.java).forEach(text::removeSpan)
+        for (match in locationLinkPattern.findAll(text)) {
+            val label = match.groupValues[1].ifEmpty { match.groupValues[3] }
+            val url = match.groupValues[2].ifEmpty { match.groupValues[4] }
+            text.setSpan(
+                LocationLink(label, url, editor.linkTextColors.defaultColor),
+                match.range.first, match.range.last + 1, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
+        }
+    }
+
+    private fun bindLocationLinks(editor: ExtendedEditText) {
+        refreshLocationLinks(editor)
+        editor.doOnTextChanged { _, _, _, _ -> refreshLocationLinks(editor) }
+        val taps = android.view.GestureDetector(editor.context, object : android.view.GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(event: MotionEvent): Boolean = true
+
+            override fun onSingleTapUp(event: MotionEvent): Boolean {
+                val text = editor.text ?: return false
+                val layout = editor.layout ?: return false
+                val y = event.y - editor.totalPaddingTop + editor.scrollY
+                if (y < 0 || y >= layout.height) return false
+                val line = layout.getLineForVertical(y.toInt())
+                val x = event.x - editor.totalPaddingLeft + editor.scrollX
+                if (x < layout.getLineLeft(line) || x > layout.getLineRight(line)) return false
+                val link = text.getSpans(layout.getLineStart(line), layout.getLineEnd(line), LocationLink::class.java)
+                    .firstOrNull { span ->
+                        val left = layout.getPrimaryHorizontal(text.getSpanStart(span))
+                        val right = left + editor.paint.measureText(span.label)
+                        x >= left && x <= right
+                    } ?: return false
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link.url)))
+                } catch (_: ActivityNotFoundException) {
+                    sendMessage(getString(R.string.location_unavailable))
+                }
+                return true
+            }
+        })
+        editor.setOnTouchListener { _, event ->
+            val handled = taps.onTouchEvent(event)
+            event.actionMasked == MotionEvent.ACTION_UP && handled
+        }
+    }
+
     private fun setupEditTexts() = with(binding) {
         editTextTitle.apply {
             imeOptions = EditorInfo.IME_ACTION_NEXT
@@ -1056,6 +1127,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
         }
 
         editTextContent.apply {
+            bindLocationLinks(this)
             enableUndoRedo(this@EditorFragment)
             setRawInputType(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
             doOnTextChanged { text, _, _, _ ->
@@ -1402,7 +1474,10 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
         inlinePlayer = null
         containerBodyPreview.removeAllViews()
 
-        if (editable && markers.isEmpty()) return@with
+        if (editable && markers.isEmpty()) {
+            refreshLocationLinks(editTextContent)
+            return@with
+        }
 
         fun addText(content: String, section: Int) {
             if (editable) {
@@ -1414,6 +1489,7 @@ class EditorFragment : BaseFragment(R.layout.fragment_editor) {
                     setPadding(0, 8.dp(context), 0, 8.dp(context))
                     minHeight = 42.dp(context)
                     setText(content)
+                    bindLocationLinks(this)
                     enableUndoRedo(this@EditorFragment)
                     setOnFocusChangeListener { _, focused ->
                         if (focused) activeBodyField = this
