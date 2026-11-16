@@ -103,3 +103,43 @@ class ConsoleTests(unittest.TestCase):
         self.assertEqual(report['schema_version'], 1)
         self.assertEqual({row['id'] for row in report['extensions']},
                          {'zip-trash', 'anki-time-travel', 'homebackup', 'link-provider'})
+
+    def test_navigation_restores_numbered_output_on_real_terminal(self):
+        import fcntl
+        import select
+        import struct
+        import termios
+        import time
+
+        master, slave = pty.openpty()
+        try:
+            fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 10, 40, 0, 0))
+            with subprocess.Popen(
+                [sys.executable, str(ROOT / 'tui.py'), '--browse', '--display', 'rich'],
+                stdin=slave, stdout=slave, stderr=slave,
+                env={**os.environ, 'TERM': 'xterm'},
+            ) as process:
+                def read_until(fragment):
+                    deadline = time.monotonic() + 5
+                    observed = b''
+                    while fragment not in observed:
+                        if not select.select([master], [], [], max(0, deadline - time.monotonic()))[0]:
+                            self.fail(f'Did not see {fragment!r} in {observed!r}')
+                        observed += os.read(master, 4096)
+                    return observed
+
+                try:
+                    read_until(b'Enter a number')
+                    os.write(master, b'm\n')
+                    read_until(b'Up/Down')
+                    os.write(master, b'\x1bOB\n')
+                    output = read_until(b'Enter a number')
+                    self.assertIn(b'Nemo verified', output)
+                    os.write(master, b'\n')
+                    self.assertEqual(process.wait(timeout=5), 0)
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+        finally:
+            os.close(master)
+            os.close(slave)

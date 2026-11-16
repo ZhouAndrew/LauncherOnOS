@@ -110,14 +110,65 @@ def line(message, indent=''):
                         subsequent_indent=indent))
 
 
+def can_navigate():
+    columns, rows = shutil.get_terminal_size((0, 0))
+    return (sys.stdin.isatty() and rows >= 8 and columns >= 28
+            and all(curses.tigetstr(name) for name in ('cup', 'el', 'kcuu1', 'kcud1')))
+
+
+def navigate(screen, title, choices, back):
+    entries = [(f'0. {back}', None)]
+    entries.extend((f'{number}. {label}', value)
+                   for number, (label, value) in enumerate(choices, 1))
+    selected = 0
+    offset = 0
+    while True:
+        rows, columns = screen.getmaxyx()
+        if rows < 8 or columns < 28:
+            return False, None
+        visible = rows - 4
+        offset = min(max(selected - visible + 1, offset), selected)
+        screen.erase()
+        screen.addnstr(0, 0, title, columns - 1, curses.A_BOLD)
+        for row, (label, _) in enumerate(entries[offset:offset + visible], 2):
+            screen.addnstr(row, 0, label, columns - 1,
+                           curses.A_REVERSE if offset + row - 2 == selected else 0)
+        screen.addnstr(rows - 1, 0, 'Up/Down, Enter, Esc: menu', columns - 1)
+        screen.refresh()
+        key = screen.getch()
+        if key in (10, 13, curses.KEY_ENTER):
+            return True, entries[selected][1]
+        if key in (27, 9):
+            return False, None
+        if key == curses.KEY_DOWN:
+            selected = min(selected + 1, len(entries) - 1)
+        elif key == curses.KEY_UP:
+            selected = max(selected - 1, 0)
+        elif key in (curses.KEY_HOME, curses.KEY_END):
+            selected = 0 if key == curses.KEY_HOME else len(entries) - 1
+        elif ord('0') <= key <= ord('9') and key - ord('0') < len(entries):
+            return True, entries[key - ord('0')][1]
+
+
 def choose(title, choices, back='Back', *, rich=False):
     while True:
+        navigation = rich and can_navigate()
         heading = f'\x1b[1m{title}\x1b[0m' if rich else title
         print(f'\n{heading}', flush=True)
         for number, (label, _) in enumerate(choices, 1):
             line(f'{number}. {label}', '  ')
         line(f'0. {back}', '  ')
+        if navigation:
+            line('Type m for an arrow-key menu.', '  ')
         choice = input(f'Enter a number (Enter = {back.lower()}): ').strip()
+        if choice.lower() == 'm' and navigation:
+            try:
+                accepted, value = curses.wrapper(navigate, title, choices, back)
+                if accepted:
+                    return value
+            except curses.error:
+                print('Arrow-key menu unavailable. Use the numbers shown.')
+            continue
         if choice in ('', '0'):
             return None
         for number, (_, value) in enumerate(choices, 1):

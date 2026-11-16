@@ -270,3 +270,10 @@ graphical terminal, SSH session or multiplexer. Use
 It writes a versioned JSON object to stdout and exits with status 1 if any
 extension status could not be read. Both options are read-only. Changes still
 require the active local console. HomeBackUp writes the original diagnostics to its operation log.
+
+On a terminal with cursor positioning and arrow-key support, the rich menu
+shows an extra shortcut. Type `m` and Enter to open the arrow-key menu. Use
+Up/Down, Home/End, a number, or Enter to choose. The initial selection is Back
+or Exit. Esc and Tab return to the numbered menu. If the terminal shrinks
+below 28 columns or 8 rows, the arrow-key menu returns to the numbered menu.
+The arrow-key screen closes before confirmations, authentication and results.
