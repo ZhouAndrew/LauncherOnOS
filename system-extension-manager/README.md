@@ -232,3 +232,28 @@ Portable updates require a trusted source copy and a terminal kept open through 
 ### Additional warnings (not fixes)
 
 Selected tools describe the root-owned APT install staging, isolated updater source staging and guarded backup locks, while identifying residual plan/backup consistency risks. The package confirmation and CLI logs retain these notices. HomeBackUp 0.1.6 includes the lock notice in its GTK window and runtime scripts. Legacy PDF extraction and website-menu tools warn about output links and unrestricted icon resources. See SECURITY_STATUS.md. Publication remains intentional.
+
+## Local console (TUI)
+
+Install the manager package, press **Ctrl+Alt+F3**, sign in as your normal
+administrator account, and run:
+
+```sh
+system-extension-manager-tui
+```
+
+Use the numbers shown in each menu. Enter by itself goes back or exits. Package
+and backup changes ask for confirmation, and sudo handles system authentication.
+The security updater opens its review in the same console, refreshes APT
+metadata, and waits for approval of the exact security update plan. Kernel,
+NVIDIA, DKMS, firmware and boot components are excluded from that plan.
+
+Extension and security-update logs are saved under
+`~/.local/state/system-extension-manager/logs` (or `$XDG_STATE_HOME`).
+If a package update stops, review the printed log before retrying. A deferred
+HomeBackUp update names the timer or service that needs attention.
+
+The console entry requires the active local Linux virtual console. A graphical
+terminal, SSH session or terminal multiplexer cannot start it. The existing
+desktop launcher remains available. The source checkout can display extension
+status on a local console with `python3 system-extension-manager/tui.py`.

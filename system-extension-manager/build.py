@@ -18,7 +18,7 @@ from version import VERSION
 MANAGER_FILES = (
     'README.md', 'build.py', 'admin_session.py', 'execution.py', 'extensions.json',
     'lifecycle.py', 'manager.py', 'native_dialogs.py',
-    'run.sh', 'system-extension-manager.desktop', 'version.py',
+    'run.sh', 'system-extension-manager.desktop', 'tui.py', 'version.py',
 )
 
 
@@ -121,12 +121,13 @@ Section: utils
 Priority: optional
 Architecture: all
 Maintainer: ZhouAndrew <zhouandrew@users.noreply.github.com>
-Depends: python3 (>= 3.10), python3-tk, dpkg, apt, pkexec
+Depends: python3 (>= 3.10), python3-tk, dpkg, apt, pkexec, sudo
 Description: Manage independent system extensions through Debian packages
  Provides multiple-extension listing, install/remove controls, verified source
  builds, application launching, live logs, bundled installable extensions and a portable Security Updates script.
 ''')
         write('usr/bin/system-extension-manager', '#!/bin/sh\nexec /usr/bin/python3 /usr/share/system-extension-manager/manager.py "$@"\n', 0o755)
+        write('usr/bin/system-extension-manager-tui', '#!/bin/sh\nexec /usr/bin/python3 -I /usr/share/system-extension-manager/tui.py "$@"\n', 0o755)
         write('usr/share/applications/system-extension-manager.desktop', (ROOT / 'system-extension-manager.desktop').read_text())
         write('usr/share/doc/system-extension-manager/README.md', (ROOT / 'README.md').read_text())
         write('usr/share/doc/system-extension-manager/copyright', 'Copyright: 2026 ZhouAndrew\nLicense: GPL-2\n See /usr/share/common-licenses/GPL-2.\n')
