@@ -126,12 +126,17 @@ jobs:
           test -f "$XDG_CONFIG_HOME/link-provider/links.json"
           ! gio open caldav-run://test
       - name: Build distributable manager package
-        run: python3 system-extension-manager/build.py --package --output-dir "$RUNNER_TEMP/manager"
+        id: manager_package
+        run: |
+          python3 system-extension-manager/build.py --package --output-dir "$RUNNER_TEMP/manager"
+          version=$(dpkg-deb -f "$RUNNER_TEMP/manager/"*.deb Version)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Check bundled packages and portable security script are distributed
         run: |
           dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep 'packages/mint-homebackup-extension_0.1.6_all.deb'
           dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep 'packages/mint-link-provider-extension_0.3.0_all.deb'
           dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep 'sources/security-updates/security_updates.py'
+          dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep '/usr/bin/system-extension-manager-tui$'
           ! dpkg-deb -c "$RUNNER_TEMP/manager/"*.deb | grep 'packages/mint-security-updates-extension'
       - name: Bundle tracked portable manager source only
         run: |
@@ -139,7 +144,7 @@ jobs:
           git archive --format=zip --output="$GITHUB_WORKSPACE/System-Extension-Manager-source.zip" HEAD:system-extension-manager
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: System-Extension-Manager-0.3.1
+          name: System-Extension-Manager-${{ steps.manager_package.outputs.version }}
           path: |
             System-Extension-Manager-source.zip
             ${{ runner.temp }}/manager/system-extension-manager_*.deb
