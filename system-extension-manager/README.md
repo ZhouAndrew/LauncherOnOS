@@ -257,3 +257,16 @@ The console entry requires the active local Linux virtual console. A graphical
 terminal, SSH session or terminal multiplexer cannot start it. The existing
 desktop launcher remains available. The source checkout can display extension
 status on a local console with `python3 system-extension-manager/tui.py`.
+
+The menu uses English labels. Plain display uses no screen clearing, cursor
+movement, colors or special key combinations. On a capable terminal,
+`--display rich` adds bold headings. Use `--display plain` to force plain
+display. Auto display falls back to plain for unknown terminal capabilities,
+`TERM=dumb` or `NO_COLOR`. The menu follows terminal width on each redraw.
+
+Use `system-extension-manager-tui --browse` to view extension status from a
+graphical terminal, SSH session or multiplexer. Use
+`system-extension-manager-tui --status-json` for developer tools and scripts.
+It writes a versioned JSON object to stdout and exits with status 1 if any
+extension status could not be read. Both options are read-only. Changes still
+require the active local console. HomeBackUp writes the original diagnostics to its operation log.

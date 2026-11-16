@@ -3,13 +3,21 @@
 import argparse
 import fcntl
 import getpass
+import json
 import os
 from pathlib import Path
+import shutil
 import stat
 import struct
 import subprocess
 import sys
+import textwrap
 import warnings
+
+try:
+    import curses
+except ImportError:
+    curses = None
 
 INSTALLED = Path('/usr/share/system-extension-manager')
 ENTRY = INSTALLED / 'tui.py'
@@ -84,24 +92,43 @@ def require_installed():
     trusted_file(ENTRY)
 
 
-def choose(title, choices, back='Back'):
+def rich_display(mode):
+    term = os.environ.get('TERM', '')
+    if (curses is None or mode == 'plain' or not sys.stdout.isatty() or not term or term == 'dumb'
+            or (mode == 'auto' and ('NO_COLOR' in os.environ or not sys.stdin.isatty()))):
+        return False
+    try:
+        curses.setupterm(term, sys.stdout.fileno())
+        return curses.tigetstr('bold') == b'\x1b[1m' and bool(curses.tigetstr('sgr0'))
+    except (OSError, curses.error):
+        return False
+
+
+def line(message, indent=''):
+    width = max(12, min(78, shutil.get_terminal_size((80, 24)).columns) - 1)
+    print(textwrap.fill(message, width=width, initial_indent=indent,
+                        subsequent_indent=indent))
+
+
+def choose(title, choices, back='Back', *, rich=False):
     while True:
-        print(f'\n{title}', flush=True)
+        heading = f'\x1b[1m{title}\x1b[0m' if rich else title
+        print(f'\n{heading}', flush=True)
         for number, (label, _) in enumerate(choices, 1):
-            print(f'  {number}. {label}')
-        print(f'  0. {back}')
-        choice = input('Select a number [0]: ').strip()
+            line(f'{number}. {label}', '  ')
+        line(f'0. {back}', '  ')
+        choice = input(f'Enter a number (Enter = {back.lower()}): ').strip()
         if choice in ('', '0'):
             return None
         for number, (_, value) in enumerate(choices, 1):
             if choice == str(number):
                 return value
-        print('Choose one of the numbers shown.')
-
+        print(f'Enter a number from 0 to {len(choices)}.')
 
 def confirm(summary):
-    print('\n' + summary)
-    if input('Continue? [y/N] ').strip().lower() in ('y', 'yes'):
+    print()
+    line(summary)
+    if input('Type yes to continue, or press Enter to cancel: ').strip().lower() in ('y', 'yes'):
         return True
     print('Cancelled.')
     return False
@@ -116,23 +143,38 @@ def package_log(label, operation):
         with_log.close()
 
 
-def extensions():
+def extension_rows():
+    return [(item, lifecycle.extension_state(item)) for item in lifecycle.plugins()
+            if item.get('kind') != 'portable']
+
+
+def status_json():
+    rows = [{'id': item['id'], 'package': item['package'],
+             'bundled_version': item['version'], **state}
+            for item, state in extension_rows()]
+    print(json.dumps({'schema_version': 1, 'extensions': rows}, ensure_ascii=True))
+    return int(any(row['state'].startswith('Unknown:') for row in rows))
+
+
+def extensions(*, rich=False, read_only=False):
     while True:
-        items = [(item, lifecycle.extension_state(item)) for item in lifecycle.plugins()
-                 if item.get('kind') != 'portable']
-        choices = [(item['name'] + ' — ' + state['state'], (item, state))
-                   for item, state in items]
-        selected = choose('Extensions', choices)
+        choices = [(item['name'] + ' - ' + state['state'], (item, state))
+                   for item, state in extension_rows()]
+        title = 'Extensions (view only)' if read_only else 'Extensions'
+        selected = choose(title, choices, back='Exit' if read_only else 'Back', rich=rich)
         if selected is None:
             return
         item, state = selected
-        print(f"\n{item['description']}")
+        print()
+        line(item['description'])
+        if read_only:
+            continue
         actions = [(label, key) for key, label in (
             ('install', 'Install ' + item['version']),
             ('update', 'Update to ' + item['version']),
             ('remove', 'Uninstall'),
         ) if state[key]]
-        action = choose(item['name'], actions) if actions else None
+        action = choose(item['name'], actions, rich=rich) if actions else None
         if action:
             try:
                 require_installed()
@@ -177,7 +219,36 @@ def security_updates():
                    env=environment, check=True)
 
 
-def homebackup():
+BACKUP_STATUS_LABELS = {
+    '每月定时器安装状态：': 'Monthly schedule: ',
+    '每月定时器运行状态：': 'Monthly schedule activity: ',
+    '旧定时器状态：': 'Previous schedule: ',
+    '备份磁盘挂载：': 'Backup drive: ',
+    '已挂载正确磁盘': 'Ready',
+    '未挂载或 UUID 不符': 'Missing or wrong drive',
+}
+
+
+def backup_output(text):
+    for original, english in BACKUP_STATUS_LABELS.items():
+        text = text.replace(original, english)
+    for row in text.splitlines():
+        if row and row.isascii() and all(c.isprintable() or c == '\t' for c in row):
+            line(row.expandtabs(4))
+
+
+def backup_command(action, argv):
+    result = package_log('HomeBackUp: ' + action,
+                         lambda log: log.run(argv, env={
+                             'PATH': SYSTEM_PATH, 'SYSTEMD_PAGER': 'cat',
+                             'SYSTEMD_COLORS': '0',
+                         }, check=False))
+    backup_output(result.stdout)
+    if result.returncode != 0:
+        raise RuntimeError('HomeBackUp could not finish. See the log above for the reason.')
+
+
+def homebackup(*, rich=False):
     require_installed()
     item = lifecycle.plugin('homebackup')
     version = lifecycle.installed_version(item['package'])
@@ -199,23 +270,22 @@ def homebackup():
         ('Set Borg passphrase and enable monthly backups', (
             'enroll', 'After validating the passphrase, HomeBackUp will enable monthly backups.')),
     ]
-    environment = {**os.environ, 'PATH': SYSTEM_PATH, 'SYSTEMD_PAGER': 'cat'}
-    while selected := choose('HomeBackUp', choices):
+    while selected := choose('HomeBackUp', choices, rich=rich):
         action, summary = selected
         try:
             if action == 'status':
-                subprocess.run([str(BACKUP), action], env=environment, check=True)
+                backup_command(action, [str(BACKUP), action])
             elif confirm(summary):
                 require_installed()
                 if action == 'enroll':
-                    subprocess.run([SUDO, '/usr/bin/python3', '-I', str(ENTRY),
-                                    '--enroll-backup'], check=True)
+                    args = [SUDO, '/usr/bin/python3', '-I', str(ENTRY), '--enroll-backup']
                 else:
-                    subprocess.run([SUDO, str(BACKUP), action], check=True)
+                    args = [SUDO, str(BACKUP), action]
+                backup_command(action, args)
                 if action in ('enroll', 'enable', 'disable'):
-                    subprocess.run([str(BACKUP), 'status'], env=environment, check=True)
+                    backup_command('status', [str(BACKUP), 'status'])
                 print('HomeBackUp operation finished.')
-        except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
             print(f'HomeBackUp operation failed: {exc}', file=sys.stderr)
 
 
@@ -238,7 +308,13 @@ def enroll_backup():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--display', choices=('auto', 'plain', 'rich'), default='auto',
+                        help='terminal display style (default: auto)')
     internal = parser.add_mutually_exclusive_group()
+    internal.add_argument('--browse', action='store_true',
+                          help='view extension status in any interactive terminal')
+    internal.add_argument('--status-json', action='store_true',
+                          help='write versioned extension status as JSON without prompts')
     internal.add_argument('--package-operation', nargs=2, help=argparse.SUPPRESS)
     internal.add_argument('--enroll-backup', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args()
@@ -249,22 +325,31 @@ def main():
         return package_operation(action, key)
     if args.enroll_backup:
         return enroll_backup()
+    if args.status_json:
+        return status_json()
+    rich = rich_display(args.display)
+    if args.browse:
+        if not sys.stdin.isatty() or not sys.stdout.isatty():
+            raise ValueError('Use an interactive terminal for --browse, or use --status-json.')
+        extensions(rich=rich, read_only=True)
+        return 0
     if not local_console():
         raise ValueError('Open a local Linux console with Ctrl+Alt+F3, sign in and run '
-                         'system-extension-manager-tui there.')
+                         'system-extension-manager-tui there. For read-only status here, add --browse.')
     if os.geteuid() == 0:
         raise ValueError('Start the TUI without sudo. It requests authorization when needed.')
     choices = [
-        ('Extensions and package status', extensions),
+        ('View, install or remove extensions', lambda: extensions(rich=rich)),
         ('Update installed extensions', update_extensions),
         ('Review system security updates', security_updates),
-        ('HomeBackUp', homebackup),
+        ('Back up or check your files (HomeBackUp)', lambda: homebackup(rich=rich)),
     ]
-    while operation := choose('System Extension Manager', choices, back='Exit'):
+    while operation := choose('System Extension Manager', choices, back='Exit', rich=rich):
         try:
             operation()
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
             print(f'Error: {exc}', file=sys.stderr)
+            print('You can choose another task or exit.')
     return 0
 
 

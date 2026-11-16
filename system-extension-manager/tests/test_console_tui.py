@@ -65,3 +65,41 @@ class ConsoleTests(unittest.TestCase):
                 lifecycle.update_all(unittest.mock.Mock(), include_security=False,
                                      plan=[({'id': 'zip-trash'}, '1')])
         change.assert_not_called()
+
+    def test_plain_and_rich_browse_on_real_pseudo_terminal(self):
+        for term, mode, bold in (('dumb', 'rich', False),
+                                 ('sem-unknown-terminal', 'rich', False),
+                                 ('xterm', 'rich', True),
+                                 ('xterm', 'plain', False)):
+            with self.subTest(term=term, mode=mode):
+                master, slave = pty.openpty()
+                try:
+                    os.write(master, b'1\n\n')
+                    completed = subprocess.run(
+                        [sys.executable, str(ROOT / 'tui.py'),
+                         '--browse', '--display', mode],
+                        stdin=slave, stdout=slave, stderr=slave, timeout=10,
+                        env={**os.environ, 'TERM': term, 'COLUMNS': '40'},
+                    )
+                    self.assertEqual(completed.returncode, 0)
+                    output = os.read(master, 8192)
+                    self.assertIn(b'Extensions (view only)', output)
+                    self.assertIn(b'ZIP and Trash', output)
+                    self.assertNotIn(b'Uninstall', output)
+                    self.assertEqual(b'\x1b[1m' in output, bold)
+                finally:
+                    os.close(master)
+                    os.close(slave)
+
+    def test_json_status_is_readable_without_a_terminal(self):
+        import json
+
+        completed = subprocess.run(
+            [sys.executable, str(ROOT / 'tui.py'), '--status-json'],
+            capture_output=True, text=True, timeout=10,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        report = json.loads(completed.stdout)
+        self.assertEqual(report['schema_version'], 1)
+        self.assertEqual({row['id'] for row in report['extensions']},
+                         {'zip-trash', 'anki-time-travel', 'homebackup', 'link-provider'})
