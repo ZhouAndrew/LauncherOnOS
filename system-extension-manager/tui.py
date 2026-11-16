@@ -207,9 +207,17 @@ def status_json():
     return int(any(row['state'].startswith('Unknown:') for row in rows))
 
 
+def package_label(state):
+    if state['state'].startswith('Enabled: '):
+        return 'Installed: ' + state['state'].removeprefix('Enabled: ')
+    if state['state'] == 'Disabled':
+        return 'Not installed'
+    return state['state']
+
+
 def extensions(*, rich=False, read_only=False):
     while True:
-        choices = [(item['name'] + ' - ' + state['state'], (item, state))
+        choices = [(item['name'] + ' - ' + package_label(state), (item, state))
                    for item, state in extension_rows()]
         title = 'Extensions (view only)' if read_only else 'Extensions'
         selected = choose(title, choices, back='Exit' if read_only else 'Back', rich=rich)

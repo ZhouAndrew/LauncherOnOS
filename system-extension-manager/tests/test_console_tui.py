@@ -143,3 +143,13 @@ class ConsoleTests(unittest.TestCase):
         finally:
             os.close(master)
             os.close(slave)
+
+    def test_browse_labels_package_installation_not_timer_state(self):
+        item = {'name': 'HomeBackUp'}
+        installed = {'state': 'Enabled: 0.1.3 (Update available)'}
+        with patch.object(tui, 'extension_rows', return_value=[(item, installed)]), \
+                patch.object(tui, 'choose', return_value=None) as choose:
+            tui.extensions(read_only=True)
+        self.assertEqual(choose.call_args.args[1][0][0],
+                         'HomeBackUp - Installed: 0.1.3 (Update available)')
+        self.assertEqual(tui.package_label({'state': 'Disabled'}), 'Not installed')
