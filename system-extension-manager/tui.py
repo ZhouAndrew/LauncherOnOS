@@ -465,8 +465,11 @@ def main():
 # With -I the installed entry must explicitly load its sibling modules.
 # The packaged launcher uses the fixed root-owned path above.
 if Path(__file__).resolve() == ENTRY:
-    for name in ('tui.py', 'lifecycle.py', 'execution.py', 'extensions.json'):
-        trusted_file(INSTALLED / name)
+    try:
+        for name in ('tui.py', 'lifecycle.py', 'execution.py', 'extensions.json'):
+            trusted_file(INSTALLED / name)
+    except (OSError, ValueError) as exc:
+        sys.exit(f'Error: {exc}')
     sys.path.insert(0, str(INSTALLED))
 import lifecycle
 from execution import OperationLog
