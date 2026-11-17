@@ -184,3 +184,42 @@ class ConsoleTests(unittest.TestCase):
                 self.assertEqual(backup.call_count, {None: 0, 0: 1, 1: 2}[code])
                 if code is not None:
                     self.assertIn('/logs/backup.log', footer)
+
+    def test_multi_line_paste_cannot_confirm_menu_action(self):
+        import select
+        import time
+
+        for answer, accepted in ((b'\n', False), (b'yes\n', True)):
+            with self.subTest(accepted=accepted):
+                master, slave = pty.openpty()
+                try:
+                    child = (
+                        "import tui; menu = tui.choose('Menu', [('Demo', 'demo')]); "
+                        "print('Approved:', tui.confirm('Apply demo?') if menu else False)"
+                    )
+                    with subprocess.Popen(
+                        [sys.executable, '-c', child], cwd=ROOT,
+                        stdin=slave, stdout=slave, stderr=slave,
+                    ) as process:
+                        def read_until(fragment):
+                            end = time.monotonic() + 5
+                            captured = b''
+                            while fragment not in captured:
+                                if not select.select([master], [], [], max(0, end - time.monotonic()))[0]:
+                                    self.fail(f'Missing {fragment!r} in {captured!r}')
+                                captured += os.read(master, 4096)
+                            return captured
+
+                        try:
+                            read_until(b'Enter a number')
+                            os.write(master, b'1\nyes\n')
+                            read_until(b'Your answer: ')
+                            os.write(master, answer)
+                            read_until(f'Approved: {accepted}'.encode())
+                            self.assertEqual(process.wait(timeout=5), 0)
+                        finally:
+                            if process.poll() is None:
+                                process.kill()
+                finally:
+                    os.close(master)
+                    os.close(slave)

@@ -137,7 +137,7 @@
     "name": "Security Updates",
     "version": "Built-in",
     "script": "sources/security-updates/security_updates.py",
-    "sha256": "33a60bfaf6716ac66d70a13887b7f11d9f245698ddf670bf91d8c7b736c9a1fd",
+    "sha256": "c5a5cd7c833b34cb1cb420e0319072334cbcf8caf2f8652d0d9b909d3ab68bb6",
     "description": "Run one interactive command in a terminal; manually refresh and install trusted Ubuntu noble-security updates after review. No extension package or scheduled jobs. Kernel, NVIDIA, DKMS, firmware and boot packages are protected."
   }
 ]

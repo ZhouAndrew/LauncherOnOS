@@ -69,10 +69,13 @@ class SafetyTests(unittest.TestCase):
             patch.object(security, 'scan', return_value=({'openssl': '1.0'}, {})),
             patch.object(security, 'simulate', return_value=['openssl=1.0']),
             patch.object(security, 'apply') as apply,
-            patch('builtins.input', return_value='no'),
+            patch.object(security.termios, 'tcflush') as flush,
+            patch('builtins.input', return_value='no') as answer,
         ):
             security.interactive_root()
             refresh.assert_called_once()
+            flush.assert_called_once()
+            answer.assert_called_once()
             apply.assert_not_called()
 
     def test_apply_requires_root(self):

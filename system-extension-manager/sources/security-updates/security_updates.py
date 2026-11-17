@@ -2,6 +2,7 @@
 """Opt-in security updates for Ubuntu Noble-based Linux Mint; no scheduler."""
 # SECURITY WARNING: show this before importing any same-directory-shadowable modules.
 import sys
+import termios
 PRIVILEGED_IMPORT_WARNING = 'SECURITY: Privileged updates use a root-owned checksum-verified snapshot and isolated Python (-I). A modified checkout or failed verification stops execution. Use only a trusted source copy.'
 _warning_shown = False
 
@@ -37,6 +38,7 @@ import re
 import stat
 import subprocess
 import sys
+import termios
 import tempfile
 
 def stop(message):
@@ -428,6 +430,21 @@ def interactive():
     return code
 
 
+def approve_install():
+    if not sys.stdin.isatty():
+        return False
+    print('Type UPDATE to install.', flush=True)
+    print('Press Enter to cancel.', flush=True)
+    try:
+        termios.tcflush(sys.stdin.fileno(), termios.TCIFLUSH)
+        return input('Your answer: ').strip() == 'UPDATE'
+    except EOFError:
+        return False
+    except (OSError, termios.error):
+        print('Could not read a fresh answer.', flush=True)
+        return False
+
+
 def interactive_root():
     if not sys.stdin.isatty():
         raise SafetyError('An interactive terminal is required.')
@@ -443,11 +460,7 @@ def interactive_root():
     for name, version in wanted.items():
         print('  {} -> {}'.format(name, version), flush=True)
     simulate(wanted)
-    try:
-        approval = input('Type UPDATE to install, or press Enter to cancel: ').strip()
-    except EOFError:
-        approval = ''
-    if approval != 'UPDATE':
+    if not approve_install():
         print('Cancelled; no packages installed.', flush=True)
         return
     apply(digest(wanted))
@@ -496,7 +509,7 @@ def main(argv=None):
             for name, version in wanted.items():
                 print('  {} -> {}'.format(name, version))
             simulate(wanted)
-            if not sys.stdin.isatty() or input('Type UPDATE to install: ').strip() != 'UPDATE':
+            if not approve_install():
                 print('Cancelled; no packages installed.')
                 return 0
             return privileged_action('--apply-root', '--expect', digest(wanted))

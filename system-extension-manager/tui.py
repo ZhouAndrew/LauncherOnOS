@@ -11,6 +11,7 @@ import stat
 import struct
 import subprocess
 import sys
+import termios
 import textwrap
 import warnings
 
@@ -183,8 +184,17 @@ def choose(title, choices, back='Back', *, rich=False, result=''):
 def confirm(summary):
     print()
     line(summary)
-    if input('Type yes to continue, or press Enter to cancel: ').strip().lower() in ('y', 'yes'):
-        return True
+    line('Type yes to continue.')
+    line('Press Enter to cancel.')
+    try:
+        if sys.stdin.isatty():
+            termios.tcflush(sys.stdin.fileno(), termios.TCIFLUSH)
+        if input('Your answer: ').strip().lower() == 'yes':
+            return True
+    except EOFError:
+        pass
+    except (OSError, termios.error):
+        print('Could not read a fresh answer.')
     print('Cancelled.')
     return False
 
@@ -278,8 +288,14 @@ def security_updates():
     # The existing updater handles sudo, exact-plan confirmation and its transcript.
     environment = {**os.environ, 'PATH': SYSTEM_PATH}
     environment.pop('SEM_SECURITY_TRANSCRIPT', None)
-    subprocess.run(['/usr/bin/python3', '-I', str(script), '--interactive'],
-                   env=environment, check=True)
+    result = subprocess.run(['/usr/bin/python3', '-I', str(script), '--interactive'],
+                            env=environment, check=False)
+    if result.returncode:
+        line('Security updates did not finish.')
+        line('Check the update message and log above before retrying.')
+        line('If another update is running, wait for it to finish.')
+        line('If the connection dropped, reconnect before trying again.')
+        line(f'Exit code: {result.returncode}.')
 
 
 BACKUP_STATUS_LABELS = {
