@@ -150,7 +150,7 @@ def navigate(screen, title, choices, back):
             return True, entries[key - ord('0')][1]
 
 
-def choose(title, choices, back='Back', *, rich=False):
+def choose(title, choices, back='Back', *, rich=False, result=''):
     while True:
         navigation = rich and can_navigate()
         heading = f'\x1b[1m{title}\x1b[0m' if rich else title
@@ -160,6 +160,10 @@ def choose(title, choices, back='Back', *, rich=False):
         line(f'0. {back}', '  ')
         if navigation:
             line('Type m for an arrow-key menu.', '  ')
+        if result:
+            print()
+            for row in result.splitlines():
+                line(row)
         choice = input(f'Enter a number (Enter = {back.lower()}): ').strip()
         if choice.lower() == 'm' and navigation:
             try:
@@ -297,14 +301,22 @@ def backup_output(text):
 
 
 def backup_command(action, argv):
-    result = package_log('HomeBackUp: ' + action,
-                         lambda log: log.run(argv, env={
-                             'PATH': SYSTEM_PATH, 'SYSTEMD_PAGER': 'cat',
-                             'SYSTEMD_COLORS': '0',
-                         }, check=False))
+    def run(log):
+        result = log.run(argv, env={
+            'PATH': SYSTEM_PATH, 'SYSTEMD_PAGER': 'cat', 'SYSTEMD_COLORS': '0',
+        }, check=False)
+        return result, log.path
+
+    result, path = package_log('HomeBackUp: ' + action, run)
     backup_output(result.stdout)
-    if result.returncode != 0:
-        raise RuntimeError('HomeBackUp could not finish. See the log above for the reason.')
+    return result, path
+
+
+def backup_failure(output):
+    if any(message in output for message in (
+            'HomeBackUp 未挂载。', '备份目标 UUID 不符。', '未挂载或 UUID 不符')):
+        return 'Failed. Connect or mount the correct backup drive, then try again.'
+    return 'Failed. See the operation log for details.'
 
 
 def homebackup(*, rich=False):
@@ -319,7 +331,7 @@ def homebackup(*, rich=False):
     trusted_file(BACKUP)
     choices = [
         ('View disk and schedule status', ('status', '')),
-        ('Start backup', ('run', 'The backup can apply the configured archive retention.')),
+        ('Start backup', ('run', 'Start backup? After checking the new backup, this may delete older backups.')),
         ('List backup archives', ('list', 'List the archives in the existing Borg repository.')),
         ('Preview archive retention', ('preview', 'Preview the archives selected for removal.')),
         ('Check archive structure', ('check', 'Check archive structure.')),
@@ -329,23 +341,47 @@ def homebackup(*, rich=False):
         ('Set Borg passphrase and enable monthly backups', (
             'enroll', 'After validating the passphrase, HomeBackUp will enable monthly backups.')),
     ]
-    while selected := choose('HomeBackUp', choices, rich=rich):
+    result = ''
+    while selected := choose('HomeBackUp', choices, rich=rich, result=result):
         action, summary = selected
         try:
             if action == 'status':
-                backup_command(action, [str(BACKUP), action])
-            elif confirm(summary):
-                require_installed()
-                if action == 'enroll':
-                    args = [SUDO, '/usr/bin/python3', '-I', str(ENTRY), '--enroll-backup']
-                else:
-                    args = [SUDO, str(BACKUP), action]
-                backup_command(action, args)
-                if action in ('enroll', 'enable', 'disable'):
-                    backup_command('status', [str(BACKUP), 'status'])
-                print('HomeBackUp operation finished.')
+                status, path = backup_command(action, [str(BACKUP), action])
+                if status.returncode:
+                    result = f'{backup_failure(status.stdout)}\nLog: {path}'
+                continue
+            if not confirm(summary):
+                result = 'Cancelled. No changes made.'
+                continue
+            require_installed()
+            if action == 'enroll':
+                args = [SUDO, '/usr/bin/python3', '-I', str(ENTRY), '--enroll-backup']
+            else:
+                args = [SUDO, str(BACKUP), action]
+            operation, path = backup_command(action, args)
+            if operation.returncode:
+                result = backup_failure(operation.stdout)
+                if action == 'run' and result.startswith('Failed. See'):
+                    try:
+                        status, _ = backup_command('status', [str(BACKUP), 'status'])
+                    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
+                        pass  # Keep the original failure if the status probe also fails.
+                    else:
+                        if status.returncode == 0:
+                            result = backup_failure(status.stdout)
+                result += f'\nLog: {path}'
+                continue
+            if action in ('enroll', 'enable', 'disable'):
+                status, _ = backup_command('status', [str(BACKUP), 'status'])
+                result = ('Operation finished. See the schedule status above.' if not status.returncode
+                          else 'Operation finished. Could not read back the schedule status.')
+            elif action == 'run':
+                result = f'Backup succeeded. The new archive was verified.\nLog: {path}'
+            else:
+                result = 'Operation finished. See the output above.'
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
             print(f'HomeBackUp operation failed: {exc}', file=sys.stderr)
+            result = 'HomeBackUp could not finish. See the error above.'
 
 
 def enroll_backup():

@@ -153,3 +153,34 @@ class ConsoleTests(unittest.TestCase):
         self.assertEqual(choose.call_args.args[1][0][0],
                          'HomeBackUp - Installed: 0.1.3 (Update available)')
         self.assertEqual(tui.package_label({'state': 'Disabled'}), 'Not installed')
+
+    def test_backup_result_stays_next_to_the_input_prompt(self):
+        import contextlib
+        import io
+
+        scenarios = [
+            ('yes', 0, '', 'Backup succeeded. The new archive was verified.'),
+            ('yes', 1, '未挂载或 UUID 不符', 'Connect or mount the correct backup drive'),
+            ('', None, '', 'Cancelled. No changes made.'),
+        ]
+        for answer, code, status_text, message in scenarios:
+            with self.subTest(code=code):
+                output = io.StringIO()
+                responses = [
+                    (subprocess.CompletedProcess([], code, ''), '/logs/backup.log'),
+                    (subprocess.CompletedProcess([], 0, status_text), '/logs/status.log'),
+                ]
+                with patch.object(tui, 'require_installed'), patch.object(tui, 'trusted_file'), \
+                        patch.object(lifecycle, 'installed_version', return_value='0.1.6'), \
+                        patch('sys.stdin', io.StringIO(f'2\n{answer}\n\n')), \
+                        patch.object(tui, 'backup_command', side_effect=responses) as backup, \
+                        contextlib.redirect_stdout(output):
+                    tui.homebackup()
+                screen = output.getvalue()
+                self.assertIn('may delete older', ' '.join(screen.split()))
+                footer = screen.rsplit('0. Back', 1)[-1]
+                self.assertIn(message, ' '.join(footer.split()))
+                self.assertIn('Enter a number', footer)
+                self.assertEqual(backup.call_count, {None: 0, 0: 1, 1: 2}[code])
+                if code is not None:
+                    self.assertIn('/logs/backup.log', footer)
