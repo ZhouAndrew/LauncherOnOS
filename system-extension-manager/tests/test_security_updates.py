@@ -78,6 +78,40 @@ class SafetyTests(unittest.TestCase):
             answer.assert_called_once()
             apply.assert_not_called()
 
+    def test_review_failure_does_not_attempt_installation(self):
+        for fault in (security.SafetyError('Another package operation is running.'),
+                      OSError('Network unreachable'), KeyboardInterrupt()):
+            with self.subTest(fault=type(fault).__name__):
+                with (
+                    patch.object(security.sys.stdin, 'isatty', return_value=True),
+                    patch.object(security, 'refresh', side_effect=fault),
+                    patch.object(security, 'approve_install') as approve,
+                    patch.object(security, 'apply') as install,
+                ):
+                    with self.assertRaisesRegex(security.SafetyError, 'before package installation'):
+                        security.interactive_root()
+                    approve.assert_not_called()
+                    install.assert_not_called()
+
+    def test_interruption_during_install_reports_unverified_state(self):
+        from contextlib import nullcontext
+
+        approved = {'openssl': '1.0'}
+        with (
+            patch.object(security.os, 'geteuid', return_value=0),
+            patch.object(security, 'open_update_lock', return_value=nullcontext(10)),
+            patch.object(security.fcntl, 'flock'),
+            patch.object(security, 'check_locks'),
+            patch.object(security, 'check_dpkg'),
+            patch.object(security, 'scan', return_value=(approved, {})),
+            patch.object(security, 'simulate', return_value=['openssl=1.0']),
+            patch.object(security.subprocess, 'run', side_effect=KeyboardInterrupt()),
+            patch.object(security, 'scan_installed') as verify,
+        ):
+            with self.assertRaisesRegex(security.SafetyError, 'Some packages may have changed'):
+                security.apply(security.digest(approved))
+            verify.assert_not_called()
+
     def test_apply_requires_root(self):
         with patch.object(security.os, 'geteuid', return_value=1000):
             with self.assertRaisesRegex(security.SafetyError, 'Root authorization'):

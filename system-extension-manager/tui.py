@@ -293,8 +293,6 @@ def security_updates():
     if result.returncode:
         line('Security updates did not finish.')
         line('Check the update message and log above before retrying.')
-        line('If another update is running, wait for it to finish.')
-        line('If the connection dropped, reconnect before trying again.')
         line(f'Exit code: {result.returncode}.')
 
 
