@@ -306,10 +306,32 @@ BACKUP_STATUS_LABELS = {
 }
 
 
-def backup_output(text):
+def backup_status_text(text):
     for original, english in BACKUP_STATUS_LABELS.items():
         text = text.replace(original, english)
-    for row in text.splitlines():
+    return text
+
+
+def backup_status_summary(output):
+    entries = dict(row.split(': ', 1) for row in backup_status_text(output).splitlines() if ': ' in row)
+    schedule = entries.get('Monthly schedule')
+    active = entries.get('Monthly schedule activity')
+    if schedule in ('enabled', 'enabled-runtime'):
+        monthly = 'On' if active == 'active' else 'Enabled, but not running'
+    elif schedule in ('disabled', 'masked', 'masked-runtime'):
+        monthly = 'Off' if active in ('inactive', 'failed') else 'Off for startup, timer still running'
+    else:
+        monthly = 'Could not verify'
+    drive = entries.get('Backup drive')
+    if drive == 'Missing or wrong drive':
+        drive = 'Connect or mount the backup drive.'
+    elif drive != 'Ready':
+        drive = 'Could not verify.'
+    return f'Backup drive: {drive}\nMonthly backups: {monthly}'
+
+
+def backup_output(text):
+    for row in backup_status_text(text).splitlines():
         if row and row.isascii() and all(c.isprintable() or c == '\t' for c in row):
             line(row.expandtabs(4))
 
@@ -344,12 +366,12 @@ def homebackup(*, rich=False):
         return
     trusted_file(BACKUP)
     choices = [
-        ('View disk and schedule status', ('status', '')),
+        ('Check if the drive is ready and monthly backups are on', ('status', '')),
         ('Start backup', ('run', 'Start backup? After checking the new backup, this may delete older backups.')),
-        ('List backup archives', ('list', 'List the archives in the existing Borg repository.')),
-        ('Preview archive retention', ('preview', 'Preview the archives selected for removal.')),
-        ('Check archive structure', ('check', 'Check archive structure.')),
-        ('Verify file data', ('verify-data', 'Read and verify archived data. This can take a long time.')),
+        ('List saved backups', ('list', 'Show the backups already saved on the drive.')),
+        ('See which old backups would be deleted', ('preview', 'Show what cleanup would delete. Nothing will be deleted.')),
+        ('Quick check of saved backups', ('check', 'Check backup records without reading every saved file.')),
+        ('Check every saved file (slow)', ('verify-data', 'Read and verify all saved file data. This can take a long time.')),
         ('Enable monthly backups', ('enable', 'A missed backup may start immediately.')),
         ('Stop backups and disable the monthly timer', ('disable', 'This can interrupt an active backup.')),
         ('Set Borg passphrase and enable monthly backups', (
@@ -361,8 +383,8 @@ def homebackup(*, rich=False):
         try:
             if action == 'status':
                 status, path = backup_command(action, [str(BACKUP), action])
-                if status.returncode:
-                    result = f'{backup_failure(status.stdout)}\nLog: {path}'
+                result = (f'{backup_failure(status.stdout)}\nLog: {path}'
+                          if status.returncode else backup_status_summary(status.stdout))
                 continue
             if not confirm(summary):
                 result = 'Cancelled. No changes made.'
@@ -387,8 +409,8 @@ def homebackup(*, rich=False):
                 continue
             if action in ('enroll', 'enable', 'disable'):
                 status, _ = backup_command('status', [str(BACKUP), 'status'])
-                result = ('Operation finished. See the schedule status above.' if not status.returncode
-                          else 'Operation finished. Could not read back the schedule status.')
+                result = (backup_status_summary(status.stdout) if not status.returncode
+                          else 'Could not verify whether monthly backups are on or off.')
             elif action == 'run':
                 result = f'Backup succeeded. The new archive was verified.\nLog: {path}'
             else:

@@ -158,7 +158,7 @@ jobs:
         run: |
           python3 system-extension-manager/build.py --package --output-dir "$RUNNER_TEMP/console"
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends psmisc "$RUNNER_TEMP/console/"*.deb
+          sudo apt-get install -y --no-install-recommends psmisc borgbackup "$RUNNER_TEMP/console/"*.deb
       - name: Match installed application directory permissions on this VM
         run: |
           stat -c '%A %U:%G %n' / /usr /usr/share
@@ -182,3 +182,5 @@ jobs:
         run: sudo -n /usr/bin/python3 -I system-extension-manager/tests/acceptance_update_faults.py busy
       - name: Check actual APT failure in an isolated network
         run: sudo -n unshare --net /usr/bin/python3 -I system-extension-manager/tests/acceptance_update_faults.py offline
+      - name: Check real password prompts and Borg backup and restore
+        run: sudo -n GITHUB_ACTIONS=true /usr/bin/python3 -I system-extension-manager/tests/acceptance_backup_and_sudo.py

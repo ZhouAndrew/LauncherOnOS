@@ -223,3 +223,25 @@ class ConsoleTests(unittest.TestCase):
                 finally:
                     os.close(master)
                     os.close(slave)
+
+    def test_backup_status_shows_plain_language_beside_menu_prompt(self):
+        import contextlib
+        import io
+
+        status = ('每月定时器安装状态：disabled\n每月定时器运行状态：inactive\n'
+                  '备份磁盘挂载：未挂载或 UUID 不符\n')
+        result = subprocess.CompletedProcess([], 0, status)
+        output = io.StringIO()
+        with patch.object(tui, 'require_installed'), patch.object(tui, 'trusted_file'), \
+                patch.object(lifecycle, 'installed_version', return_value='0.1.6'), \
+                patch('sys.stdin', io.StringIO('1\n\n')), \
+                patch.object(tui, 'backup_command', return_value=(result, '/logs/status.log')), \
+                contextlib.redirect_stdout(output):
+            tui.homebackup()
+        footer = ' '.join(output.getvalue().rsplit('0. Back', 1)[-1].split())
+        self.assertIn('Backup drive: Connect or mount the backup drive.', footer)
+        self.assertIn('Monthly backups: Off', footer)
+        self.assertIn('Enter a number', footer)
+        self.assertIn('Monthly backups: On', tui.backup_status_summary(
+            '每月定时器安装状态：enabled\n每月定时器运行状态：active\n'))
+        self.assertIn('Monthly backups: Could not verify', tui.backup_status_summary(''))
