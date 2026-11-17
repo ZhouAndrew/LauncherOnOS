@@ -148,3 +148,26 @@ jobs:
           path: |
             System-Extension-Manager-source.zip
             ${{ runner.temp }}/manager/system-extension-manager_*.deb
+
+  packaged-console:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install the built manager in the disposable VM
+        run: |
+          python3 system-extension-manager/build.py --package --output-dir "$RUNNER_TEMP/console"
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends psmisc "$RUNNER_TEMP/console/"*.deb
+      - name: Check the installed launcher and real sudo package operations
+        run: |
+          system-extension-manager-tui --help
+          ! system-extension-manager-tui </dev/null
+          sudo -n system-extension-manager-tui --package-operation install link-provider
+          system-extension-manager-tui --status-json | python3 -c 'import json,sys; assert any(x["id"] == "link-provider" and x["installed"] == "0.3.0" for x in json.load(sys.stdin)["extensions"])'
+          sudo -n system-extension-manager-tui --package-operation remove link-provider
+          system-extension-manager-tui --status-json | python3 -c 'import json,sys; assert any(x["id"] == "link-provider" and x["installed"] is None for x in json.load(sys.stdin)["extensions"])'
+      - name: Check an occupied APT lock and recovery after release
+        run: sudo -n /usr/bin/python3 -I system-extension-manager/tests/acceptance_update_faults.py busy
+      - name: Check actual APT failure in an isolated network
+        run: sudo -n unshare --net /usr/bin/python3 -I system-extension-manager/tests/acceptance_update_faults.py offline
