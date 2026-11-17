@@ -230,14 +230,21 @@ def package_label(state):
 
 
 def extensions(*, rich=False, read_only=False):
+    result = ''
     while True:
         choices = [(item['name'] + ' - ' + package_label(state), (item, state))
                    for item, state in extension_rows()]
         title = 'Extensions (view only)' if read_only else 'Extensions'
-        selected = choose(title, choices, back='Exit' if read_only else 'Back', rich=rich)
+        selected = choose(title, choices, back='Exit' if read_only else 'Back',
+                          rich=rich, result=result)
         if selected is None:
             return
         item, state = selected
+        result = ''
+        if state['state'].startswith('Unknown:'):
+            result = (f"Could not check {item['name']}. The list has been checked again. "
+                      'If the status is still unknown, try again later.')
+            continue
         print()
         line(item['description'])
         if read_only:
@@ -294,6 +301,27 @@ def security_updates():
         line('Security updates did not finish.')
         line('Check the update message and log above before retrying.')
         line(f'Exit code: {result.returncode}.')
+        choices = [('Check software package status (read only)', True)]
+        status = ''
+        while choose('After an update failure', choices, result=status):
+            status = package_audit()
+
+
+def package_audit():
+    try:
+        audit = subprocess.run(['/usr/bin/dpkg', '--audit'], capture_output=True,
+                               text=True, errors='replace', timeout=15, check=False,
+                               env={**os.environ, 'LC_ALL': 'C.UTF-8'})
+    except (OSError, subprocess.TimeoutExpired):
+        return 'Could not check software packages. Try the check again later.'
+    for row in (audit.stdout + audit.stderr).splitlines():
+        if row.strip():
+            line(row)
+    if audit.returncode or audit.stderr.strip():
+        return 'Could not confirm the package state. Review the check output above.'
+    if audit.stdout.strip():
+        return 'Some packages need attention. Ask for help before installing updates.'
+    return ('No incomplete packages found. Fix the original issue before trying again.')
 
 
 BACKUP_STATUS_LABELS = {
@@ -349,6 +377,10 @@ def backup_command(action, argv):
 
 
 def backup_failure(output):
+    if 'Backup setup cancelled.' in output:
+        return 'Cancelled. Monthly backup settings did not change.'
+    if '解密验证失败，保持旧密码不变。' in output:
+        return 'The backup password did not work. Try again with the password for this backup drive.'
     if any(message in output for message in (
             'HomeBackUp 未挂载。', '备份目标 UUID 不符。', '未挂载或 UUID 不符')):
         return 'Failed. Connect or mount the correct backup drive, then try again.'
@@ -372,10 +404,10 @@ def homebackup(*, rich=False):
         ('See which old backups would be deleted', ('preview', 'Show what cleanup would delete. Nothing will be deleted.')),
         ('Quick check of saved backups', ('check', 'Check backup records without reading every saved file.')),
         ('Check every saved file (slow)', ('verify-data', 'Read and verify all saved file data. This can take a long time.')),
-        ('Enable monthly backups', ('enable', 'A missed backup may start immediately.')),
-        ('Stop backups and disable the monthly timer', ('disable', 'This can interrupt an active backup.')),
-        ('Set Borg passphrase and enable monthly backups', (
-            'enroll', 'After validating the passphrase, HomeBackUp will enable monthly backups.')),
+        ('Turn on monthly backups', (
+            'enable', 'Turn on monthly backups? If a backup was missed, one may start now.')),
+        ('Stop backups and turn off monthly backups', (
+            'disable', 'Turn off monthly backups? This can interrupt a backup that is running.')),
     ]
     result = ''
     while selected := choose('HomeBackUp', choices, rich=rich, result=result):
@@ -390,7 +422,7 @@ def homebackup(*, rich=False):
                 result = 'Cancelled. No changes made.'
                 continue
             require_installed()
-            if action == 'enroll':
+            if action == 'enable':
                 args = [SUDO, '/usr/bin/python3', '-I', str(ENTRY), '--enroll-backup']
             else:
                 args = [SUDO, str(BACKUP), action]
@@ -407,7 +439,7 @@ def homebackup(*, rich=False):
                             result = backup_failure(status.stdout)
                 result += f'\nLog: {path}'
                 continue
-            if action in ('enroll', 'enable', 'disable'):
+            if action in ('enable', 'disable'):
                 status, _ = backup_command('status', [str(BACKUP), 'status'])
                 result = (backup_status_summary(status.stdout) if not status.returncode
                           else 'Could not verify whether monthly backups are on or off.')
@@ -425,16 +457,36 @@ def enroll_backup():
         raise ValueError('Administrator authorization is required.')
     trusted_file(ENTRY)
     trusted_file(BACKUP)
+    environment = {'PATH': SYSTEM_PATH, 'LC_ALL': 'C.UTF-8'}
+    existing = subprocess.run([str(BACKUP), 'use-existing'], text=True,
+                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                              env=environment, check=False)
+    if not existing.returncode:
+        print('Monthly backups are on. Used the saved backup password.', flush=True)
+        return 0
+    if not any(message in existing.stdout for message in (
+            '尚未保存 Borg 密码；请先执行设置。', '已存 Borg 密码无效。')):
+        print(existing.stdout, end='', flush=True)
+        return existing.returncode
+
+    print('Enter the password for this backup drive.', flush=True)
+    print('This is separate from your Linux login password.', flush=True)
+    print('Press Enter to cancel.', flush=True)
     with warnings.catch_warnings():
         warnings.simplefilter('error', getpass.GetPassWarning)
         try:
-            secret = getpass.getpass('Borg repository passphrase (hidden): ')
+            secret = getpass.getpass('Backup password: ')
+        except (EOFError, KeyboardInterrupt):
+            secret = ''
         except getpass.GetPassWarning:
             raise ValueError('A terminal with hidden input is required.') from None
-    if not secret or '\n' in secret or '\r' in secret:
-        raise ValueError('Enter a nonempty, single-line Borg passphrase.')
+    if not secret:
+        print('Backup setup cancelled.', flush=True)
+        return 2
+    if '\n' in secret or '\r' in secret:
+        raise ValueError('Enter the backup password on one line.')
     return subprocess.run([str(BACKUP), 'enroll'], input=secret + '\n', text=True,
-                          env={'PATH': SYSTEM_PATH, 'LC_ALL': 'C.UTF-8'}).returncode
+                          env=environment).returncode
 
 
 def main():

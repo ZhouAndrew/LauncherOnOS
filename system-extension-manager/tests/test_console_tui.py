@@ -245,3 +245,43 @@ class ConsoleTests(unittest.TestCase):
         self.assertIn('Monthly backups: On', tui.backup_status_summary(
             '每月定时器安装状态：enabled\n每月定时器运行状态：active\n'))
         self.assertIn('Monthly backups: Could not verify', tui.backup_status_summary(''))
+
+    def test_monthly_setup_asks_only_when_saved_password_cannot_be_used(self):
+        import contextlib
+        import io
+
+        for code, message, answer, expected in (
+            (0, '', 'fixture', 0),
+            (1, '尚未保存 Borg 密码；请先执行设置。', 'fixture', 0),
+            (1, '已存 Borg 密码无效。', '', 2),
+            (1, 'HomeBackUp 未挂载。', 'fixture', 1),
+        ):
+            with self.subTest(message=message):
+                first = subprocess.CompletedProcess([], code, message)
+                enrolled = subprocess.CompletedProcess([], 0)
+                with patch.object(tui.os, 'geteuid', return_value=0), \
+                        patch.object(tui, 'trusted_file'), \
+                        patch.object(tui.subprocess, 'run', side_effect=[first, enrolled]) as run, \
+                        patch.object(tui.getpass, 'getpass', return_value=answer) as ask, \
+                        contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(tui.enroll_backup(), expected)
+                self.assertEqual(run.call_args_list[0].args[0][-1], 'use-existing')
+                self.assertEqual(ask.call_count, int('Borg' in message))
+                if run.call_count == 2:
+                    self.assertEqual(run.call_args.args[0][-1], 'enroll')
+                    self.assertEqual(run.call_args.kwargs['input'], 'fixture\n')
+
+    def test_package_audit_distinguishes_clean_incomplete_and_unavailable(self):
+        import contextlib
+        import io
+
+        for code, stdout, stderr, label in (
+            (0, '', '', 'No incomplete packages found'),
+            (0, 'Package is unpacked', '', 'Some packages need attention'),
+            (1, '', 'Database unreadable', 'Could not confirm'),
+        ):
+            result = subprocess.CompletedProcess([], code, stdout, stderr)
+            with patch.object(tui.subprocess, 'run', return_value=result) as run, \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertIn(label, tui.package_audit())
+            self.assertEqual(run.call_args.args[0], ['/usr/bin/dpkg', '--audit'])
