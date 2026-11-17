@@ -24,6 +24,7 @@ def expect_review_failure(detail):
             assert 'Review stopped before package installation.' in message, message
             assert detail in message, message
             print(message)
+            return message
         else:
             raise AssertionError('Expected the review to stop.')
 
@@ -70,7 +71,10 @@ def offline():
         with patch.object(updater, 'ensure_host'), \
                 patch.object(updater, 'prepare_apt_scope'), \
                 patch.object(updater, 'APT_SCOPE_OPTIONS', options):
-            expect_review_failure('Could not refresh the update list.')
+            message = expect_review_failure('Could not refresh the update list.')
+            assert '127.0.0.1' in message and any(reason in message for reason in (
+                'Network is unreachable', 'Connection refused', 'Unable to connect',
+            )), message
 
 
 if __name__ == '__main__':
