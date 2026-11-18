@@ -42,9 +42,9 @@ class ConsoleTests(unittest.TestCase):
                 patch.object(sys, 'argv', ['tui.py']), \
                 patch('builtins.input', side_effect=['3', '']), \
                 patch.object(tui, 'security_updates', side_effect=ValueError('APT is busy')), \
-                patch('sys.stderr') as error, patch('sys.stdout') as output:
+                patch('sys.stdout') as output:
             self.assertEqual(tui.main(), 0)
-        error.write.assert_any_call('Error: APT is busy')
+        output.write.assert_any_call('Error: APT is busy')
         self.assertEqual(output.write.call_args_list.count(
             unittest.mock.call('\nSystem Extension Manager')), 2)
 
@@ -363,14 +363,29 @@ class ConsoleTests(unittest.TestCase):
 
     def test_admin_task_requires_console_and_opens_selected_task(self):
         with patch.object(tui, 'local_console', return_value=False), \
-                patch.object(tui, 'update_extensions') as update:
+                patch.object(tui, 'update_extensions', return_value=None) as update:
             with self.assertRaisesRegex(ValueError, 'Ctrl\\+Alt\\+F3'):
                 tui.main(['--task', 'updates'])
             update.assert_not_called()
         with patch.object(tui, 'local_console', return_value=True), \
                 patch.object(tui.os, 'geteuid', return_value=1000), \
-                patch.object(tui, 'update_extensions') as update, \
+                patch.object(tui, 'update_extensions', return_value=None) as update, \
                 patch.object(tui, 'choose') as choose:
             self.assertEqual(tui.main(['--task', 'updates']), 0)
             update.assert_called_once()
             choose.assert_not_called()
+
+    def test_no_updates_stays_visible_at_the_next_main_menu_prompt(self):
+        import contextlib
+        import io
+
+        output = io.StringIO()
+        with patch.object(tui, 'local_console', return_value=True), \
+                patch.object(tui.os, 'geteuid', return_value=1000), \
+                patch.object(tui.lifecycle, 'update_all_plan', return_value=[]), \
+                patch('sys.stdin', io.StringIO('2\n\n')), \
+                contextlib.redirect_stdout(output):
+            self.assertEqual(tui.main(['--display', 'plain']), 0)
+        footer = output.getvalue().rsplit('0. Exit', 1)[-1]
+        self.assertIn('Installed extensions are up to date.', footer)
+        self.assertIn('Choice:', footer)

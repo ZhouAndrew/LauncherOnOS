@@ -293,17 +293,32 @@ def extensions(*, rich=False, read_only=False):
 def update_extensions():
     planned = lifecycle.update_all_plan()
     if not planned:
-        print('No installed extensions need an update.')
-        return
+        return 'Installed extensions are up to date.'
     for item, previous in planned:
-        print(f"  {item['name']}: {previous} -> {item['version']}")
+        line(f"{item['name']}: {previous} -> {item['version']}")
     require_installed()
-    if confirm('Apply these bundled extension updates?'):
-        result = package_log('Update installed extensions', lambda log: lifecycle.update_all(
-            log, include_security=False, admin=ConsoleAuthorization(), plan=planned))
-        print(f"Verified updates: {len(result['updated'])}.")
-        for reason in result['deferred'].values():
-            print(f'Deferred: {reason}')
+    if not confirm('Install the extension updates listed above?'):
+        return 'Cancelled. No extension updates installed.'
+
+    def apply_plan(log):
+        try:
+            result = lifecycle.update_all(log, include_security=False,
+                                          admin=ConsoleAuthorization(), plan=planned)
+        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
+            raise RuntimeError(
+                f'Check installed versions before retrying. Earlier updates may have finished.\n'
+                f'{exc}\nLog: {log.path}'
+            ) from exc
+        names = {item['id']: item['name'] for item, _ in planned}
+        summary = [f"Updated: {', '.join(names[key] for key in result['updated'])}."
+                   if result['updated'] else 'No extensions were updated.']
+        for key, reason in result['deferred'].items():
+            summary.append(f'Pending update for {names[key]}. {reason}')
+        if result['deferred']:
+            summary.append(f'Log: {log.path}')
+        return '\n'.join(summary)
+
+    return package_log('Update installed extensions', apply_plan)
 
 
 def security_updates():
@@ -583,20 +598,23 @@ def main(argv=None):
         raise ValueError('Start the TUI without sudo. It requests authorization when needed.')
     tasks = {
         'extensions': ('View, install or remove extensions', lambda: extensions(rich=rich)),
-        'updates': ('Update installed extensions', update_extensions),
+        'updates': ('Check and update extensions', update_extensions),
         'security': ('Review system security updates', security_updates),
         'backup': ('Back up or check your files (HomeBackUp)', lambda: homebackup(rich=rich)),
     }
     if args.task:
-        tasks[args.task][1]()
+        result = tasks[args.task][1]()
+        if result:
+            for row in result.splitlines():
+                line(row)
         return 0
     choices = list(tasks.values())
-    while operation := choose('System Extension Manager', choices, back='Exit', rich=rich):
+    result = ''
+    while operation := choose('System Extension Manager', choices, back='Exit', rich=rich, result=result):
         try:
-            operation()
+            result = operation() or ''
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
-            print(f'Error: {exc}', file=sys.stderr)
-            print('You can choose another task or exit.')
+            result = f'Error: {exc}\nYou can choose another task or exit.'
     return 0
 
 
@@ -618,5 +636,5 @@ if __name__ == '__main__':
         sys.exit(main())
     except (EOFError, KeyboardInterrupt):
         print('\nConsole closed.')
-    except (OSError, ValueError, RuntimeError) as exc:
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
         sys.exit(f'Error: {exc}')
