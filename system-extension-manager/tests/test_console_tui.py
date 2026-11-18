@@ -74,7 +74,7 @@ class ConsoleTests(unittest.TestCase):
             with self.subTest(term=term, mode=mode):
                 master, slave = pty.openpty()
                 try:
-                    os.write(master, b'1\n\n')
+                    os.write(master, b'1\n\n\n')
                     completed = subprocess.run(
                         [sys.executable, str(ROOT / 'tui.py'),
                          '--browse', '--display', mode],
@@ -129,12 +129,15 @@ class ConsoleTests(unittest.TestCase):
                     return observed
 
                 try:
-                    read_until(b'Enter a number')
+                    read_until(b'Choice:')
                     os.write(master, b'm\n')
                     read_until(b'Up/Down')
                     os.write(master, b'\x1bOB\n')
-                    output = read_until(b'Enter a number')
+                    output = read_until(b'Press Enter to return.')
                     self.assertIn(b'Nemo verified', output)
+                    self.assertNotIn(b'Choice:', output)
+                    os.write(master, b'\n')
+                    read_until(b'Choice:')
                     os.write(master, b'\n')
                     self.assertEqual(process.wait(timeout=5), 0)
                 finally:
@@ -211,7 +214,7 @@ class ConsoleTests(unittest.TestCase):
                             return captured
 
                         try:
-                            read_until(b'Enter a number')
+                            read_until(b'Choice:')
                             os.write(master, b'1\nyes\n')
                             read_until(b'Your answer: ')
                             os.write(master, answer)

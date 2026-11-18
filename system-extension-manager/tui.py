@@ -175,7 +175,8 @@ def choose(title, choices, back='Back', *, rich=False, result=''):
         if feedback:
             line(feedback)
         line(f'Press Enter alone for {back.lower()}.')
-        choice = input('Enter a number: ').strip()
+        line('Enter a number, then press Enter.')
+        choice = input('Choice: ').strip()
         feedback = ''
         if choice.lower() == 'm' and navigation:
             try:
@@ -259,6 +260,7 @@ def extensions(*, rich=False, read_only=False):
         print()
         line(item['description'])
         if read_only:
+            input('Press Enter to return. ')
             continue
         actions = [(label, key) for key, label in (
             ('install', 'Install ' + item['version']),
@@ -541,8 +543,14 @@ def main():
         extensions(rich=rich, read_only=True)
         return 0
     if not local_console():
-        raise ValueError('Open a local Linux console with Ctrl+Alt+F3, sign in and run '
-                         'system-extension-manager-tui there. For read-only status here, add --browse.')
+        raise ValueError(
+            'To open the management menu:\n'
+            '1. Press Ctrl+Alt+F3 to open the Linux console.\n'
+            '2. Sign in with your Linux username and password.\n'
+            '3. Type system-extension-manager-tui and press Enter.\n'
+            'To return to the desktop, try Ctrl+Alt+F1, F2, or F7.\n'
+            'To view status here, run system-extension-manager-tui --browse.'
+        )
     if os.geteuid() == 0:
         raise ValueError('Start the TUI without sudo. It requests authorization when needed.')
     choices = [
