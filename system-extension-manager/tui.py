@@ -520,7 +520,24 @@ def enroll_backup():
                           env=environment).returncode
 
 
-def main():
+def extension_update_plan():
+    """Return the read-only update plan as a Python dictionary."""
+    updates = [{'id': item['id'], 'installed': installed, 'available': item['version']}
+               for item, installed in lifecycle.update_all_plan()]
+    return {'schema_version': 1, 'updates': updates}
+
+
+def update_plan_json():
+    try:
+        plan = extension_update_plan()
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
+        print(json.dumps({'schema_version': 1, 'error': str(exc)}))
+        return 1
+    print(json.dumps(plan))
+    return 0
+
+
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--display', choices=('auto', 'plain', 'rich'), default='auto',
                         help='terminal display style (default: auto)')
@@ -531,7 +548,11 @@ def main():
                           help='write versioned extension status as JSON without prompts')
     internal.add_argument('--package-operation', nargs=2, help=argparse.SUPPRESS)
     internal.add_argument('--enroll-backup', action='store_true', help=argparse.SUPPRESS)
-    args = parser.parse_args()
+    internal.add_argument('--update-plan-json', action='store_true',
+                          help='preview installed extension updates as JSON')
+    internal.add_argument('--task', choices=('extensions', 'updates', 'security', 'backup'),
+                          help='open an administrator task directly on the local console')
+    args = parser.parse_args(argv)
     if args.package_operation is not None:
         action, key = args.package_operation
         if action not in ('install', 'remove'):
@@ -541,6 +562,8 @@ def main():
         return enroll_backup()
     if args.status_json:
         return status_json()
+    if args.update_plan_json:
+        return update_plan_json()
     rich = rich_display(args.display)
     if args.browse:
         if not sys.stdin.isatty() or not sys.stdout.isatty():
@@ -558,12 +581,16 @@ def main():
         )
     if os.geteuid() == 0:
         raise ValueError('Start the TUI without sudo. It requests authorization when needed.')
-    choices = [
-        ('View, install or remove extensions', lambda: extensions(rich=rich)),
-        ('Update installed extensions', update_extensions),
-        ('Review system security updates', security_updates),
-        ('Back up or check your files (HomeBackUp)', lambda: homebackup(rich=rich)),
-    ]
+    tasks = {
+        'extensions': ('View, install or remove extensions', lambda: extensions(rich=rich)),
+        'updates': ('Update installed extensions', update_extensions),
+        'security': ('Review system security updates', security_updates),
+        'backup': ('Back up or check your files (HomeBackUp)', lambda: homebackup(rich=rich)),
+    }
+    if args.task:
+        tasks[args.task][1]()
+        return 0
+    choices = list(tasks.values())
     while operation := choose('System Extension Manager', choices, back='Exit', rich=rich):
         try:
             operation()

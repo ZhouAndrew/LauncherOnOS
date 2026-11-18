@@ -277,3 +277,14 @@ Up/Down, Home/End, a number, or Enter to choose. The initial selection is Back
 or Exit. Esc and Tab return to the numbered menu. If the terminal shrinks
 below 28 columns or 8 rows, the arrow-key menu returns to the numbered menu.
 The arrow-key screen closes before confirmations, authentication and results.
+
+To preview extension updates without opening a menu, run
+`system-extension-manager-tui --update-plan-json`. From this source directory,
+Python code can also call `tui.extension_update_plan()` for a dictionary of
+installed and available versions. The plan checks bundled extension updates
+without installing them.
+
+On the local administrator console, `system-extension-manager-tui --task updates`
+opens the extension update review directly. Other task names are `extensions`,
+`security`, and `backup`. Each task uses the same authorization and
+confirmation as its menu entry.

@@ -346,3 +346,31 @@ class ConsoleTests(unittest.TestCase):
             tui.extensions(read_only=True)
         for page in output.getvalue().split('Choice: ')[:-1]:
             self.assertIn('1. ZIP and Trash', '\n'.join((page + 'Choice: ').splitlines()[-10:]))
+
+    def test_python_update_plan_and_json_agree(self):
+        import contextlib
+        import io
+        import json
+
+        output = io.StringIO()
+        plan = [({'id': 'sample', 'version': '2'}, '1')]
+        with patch.object(tui.lifecycle, 'update_all_plan', return_value=plan), \
+                contextlib.redirect_stdout(output):
+            expected = tui.extension_update_plan()
+            self.assertEqual(tui.main(['--update-plan-json']), 0)
+        self.assertEqual(json.loads(output.getvalue()), expected)
+        self.assertEqual(expected['updates'][0]['available'], '2')
+
+    def test_admin_task_requires_console_and_opens_selected_task(self):
+        with patch.object(tui, 'local_console', return_value=False), \
+                patch.object(tui, 'update_extensions') as update:
+            with self.assertRaisesRegex(ValueError, 'Ctrl\\+Alt\\+F3'):
+                tui.main(['--task', 'updates'])
+            update.assert_not_called()
+        with patch.object(tui, 'local_console', return_value=True), \
+                patch.object(tui.os, 'geteuid', return_value=1000), \
+                patch.object(tui, 'update_extensions') as update, \
+                patch.object(tui, 'choose') as choose:
+            self.assertEqual(tui.main(['--task', 'updates']), 0)
+            update.assert_called_once()
+            choose.assert_not_called()
