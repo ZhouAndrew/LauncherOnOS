@@ -127,13 +127,19 @@ def navigate(screen, title, choices, back):
         rows, columns = screen.getmaxyx()
         if rows < 8 or columns < 28:
             return False, None
-        visible = rows - 4
+        # Keep the full label of the selected action readable on narrow screens.
+        detail = textwrap.wrap(entries[selected][0], width=columns - 1)
+        visible = rows - 4 - len(detail)
+        if visible < 1:
+            return False, None
         offset = min(max(selected - visible + 1, offset), selected)
         screen.erase()
         screen.addnstr(0, 0, title, columns - 1, curses.A_BOLD)
         for row, (label, _) in enumerate(entries[offset:offset + visible], 2):
             screen.addnstr(row, 0, label, columns - 1,
                            curses.A_REVERSE if offset + row - 2 == selected else 0)
+        for row, label in enumerate(detail, rows - 2 - len(detail)):
+            screen.addnstr(row, 0, label, columns - 1, curses.A_BOLD)
         screen.addnstr(rows - 1, 0, 'Up/Down, Enter, Esc: menu', columns - 1)
         screen.refresh()
         key = screen.getch()
@@ -152,6 +158,7 @@ def navigate(screen, title, choices, back):
 
 
 def choose(title, choices, back='Back', *, rich=False, result=''):
+    feedback = ''
     while True:
         navigation = rich and can_navigate()
         heading = f'\x1b[1m{title}\x1b[0m' if rich else title
@@ -165,21 +172,25 @@ def choose(title, choices, back='Back', *, rich=False, result=''):
             print()
             for row in result.splitlines():
                 line(row)
-        choice = input(f'Enter a number (Enter = {back.lower()}): ').strip()
+        if feedback:
+            line(feedback)
+        line(f'Press Enter alone for {back.lower()}.')
+        choice = input('Enter a number: ').strip()
+        feedback = ''
         if choice.lower() == 'm' and navigation:
             try:
                 accepted, value = curses.wrapper(navigate, title, choices, back)
                 if accepted:
                     return value
             except curses.error:
-                print('Arrow-key menu unavailable. Use the numbers shown.')
+                feedback = 'Arrow-key menu unavailable. Use the numbers shown.'
             continue
         if choice in ('', '0'):
             return None
         for number, (_, value) in enumerate(choices, 1):
             if choice == str(number):
                 return value
-        print(f'Enter a number from 0 to {len(choices)}.')
+        feedback = f'That choice is unavailable. Use a number from 0 to {len(choices)}.'
 
 def confirm(summary):
     print()

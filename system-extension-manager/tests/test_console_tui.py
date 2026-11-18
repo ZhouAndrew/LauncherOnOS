@@ -318,3 +318,14 @@ class ConsoleTests(unittest.TestCase):
         ):
             with self.subTest(message=message):
                 self.assertIn(next_step, tui.backup_failure(message))
+
+    def test_invalid_choice_guidance_stays_near_prompt(self):
+        import contextlib
+        import io
+
+        output = io.StringIO()
+        with patch('sys.stdin', io.StringIO('9\n1\n')), contextlib.redirect_stdout(output):
+            self.assertEqual(tui.choose('Menu', [('View status', 'status')]), 'status')
+        last_prompt = output.getvalue().rsplit('0. Back', 1)[-1]
+        self.assertIn('That choice is unavailable.', last_prompt)
+        self.assertIn('Press Enter alone for back.', last_prompt)
