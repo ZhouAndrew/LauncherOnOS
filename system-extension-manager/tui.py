@@ -380,7 +380,14 @@ def backup_failure(output):
     if 'Backup setup cancelled.' in output:
         return 'Cancelled. Monthly backup settings did not change.'
     if '解密验证失败，保持旧密码不变。' in output:
-        return 'The backup password did not work. Try again with the password for this backup drive.'
+        return 'Could not unlock the backup. Check the drive and backup password, then try again.'
+    if any(message in output for message in (
+            '请先设置 Borg 仓库密码。', '尚未保存 Borg 密码；请先执行设置。')):
+        return 'Backup setup is needed. Choose Turn on monthly backups to set it up.'
+    if '找不到原有 Borg 仓库' in output:
+        return 'The backup folder was not found on this drive. Check that the correct drive is connected.'
+    if '旧 homebackup-monthly.timer 已启用' in output:
+        return 'An older monthly backup schedule is still on. Ask for help switching schedules before trying again.'
     if any(message in output for message in (
             'HomeBackUp 未挂载。', '备份目标 UUID 不符。', '未挂载或 UUID 不符')):
         return 'Failed. Connect or mount the correct backup drive, then try again.'
@@ -418,7 +425,7 @@ def homebackup(*, rich=False):
                 result = (f'{backup_failure(status.stdout)}\nLog: {path}'
                           if status.returncode else backup_status_summary(status.stdout))
                 continue
-            if not confirm(summary):
+            if action not in ('list', 'preview') and not confirm(summary):
                 result = 'Cancelled. No changes made.'
                 continue
             require_installed()
@@ -446,7 +453,13 @@ def homebackup(*, rich=False):
             elif action == 'run':
                 result = f'Backup succeeded. The new archive was verified.\nLog: {path}'
             else:
-                result = 'Operation finished. See the output above.'
+                completed = {
+                    'list': 'Saved backups are listed above.',
+                    'preview': 'Cleanup preview is above. No backups were deleted.',
+                    'check': 'Quick check passed. Backup records are readable.',
+                    'verify-data': 'File data check passed.',
+                }
+                result = f'{completed[action]}\nLog: {path}'
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
             print(f'HomeBackUp operation failed: {exc}', file=sys.stderr)
             result = 'HomeBackUp could not finish. See the error above.'

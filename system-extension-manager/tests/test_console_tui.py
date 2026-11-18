@@ -285,3 +285,36 @@ class ConsoleTests(unittest.TestCase):
                     contextlib.redirect_stdout(io.StringIO()):
                 self.assertIn(label, tui.package_audit())
             self.assertEqual(run.call_args.args[0], ['/usr/bin/dpkg', '--audit'])
+
+    def test_read_only_backup_lists_need_no_confirmation(self):
+        import contextlib
+        import io
+
+        for selection, action, message in (
+            ('3', 'list', 'Saved backups are listed above.'),
+            ('4', 'preview', 'No backups were deleted.'),
+        ):
+            with self.subTest(action=action):
+                output = io.StringIO()
+                reply = (subprocess.CompletedProcess([], 0, 'fixture'), '/logs/backup.log')
+                with patch.object(tui, 'require_installed'), patch.object(tui, 'trusted_file'), \
+                        patch.object(lifecycle, 'installed_version', return_value='0.1.6'), \
+                        patch('sys.stdin', io.StringIO(selection + '\n\n')), \
+                        patch.object(tui, 'confirm') as confirm, \
+                        patch.object(tui, 'backup_command', return_value=reply) as command, \
+                        contextlib.redirect_stdout(output):
+                    tui.homebackup()
+                confirm.assert_not_called()
+                self.assertEqual(command.call_args.args[0], action)
+                self.assertIn(message, output.getvalue())
+                self.assertIn('/logs/backup.log', output.getvalue())
+
+    def test_backup_failures_give_the_relevant_next_step(self):
+        for message, next_step in (
+            ('请先设置 Borg 仓库密码。', 'Choose Turn on monthly backups'),
+            ('找不到原有 Borg 仓库；不会新建仓库。', 'correct drive'),
+            ('旧 homebackup-monthly.timer 已启用', 'switching schedules'),
+            ('解密验证失败，保持旧密码不变。', 'drive and backup password'),
+        ):
+            with self.subTest(message=message):
+                self.assertIn(next_step, tui.backup_failure(message))
