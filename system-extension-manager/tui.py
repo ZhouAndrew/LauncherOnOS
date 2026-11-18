@@ -163,9 +163,12 @@ def choose(title, choices, back='Back', *, rich=False, result=''):
         navigation = rich and can_navigate()
         heading = f'\x1b[1m{title}\x1b[0m' if rich else title
         print(f'\n{heading}', flush=True)
+        compact = shutil.get_terminal_size((80, 24)).columns <= 32
+        indent = '' if compact else '  '
         for number, (label, _) in enumerate(choices, 1):
-            line(f'{number}. {label}', '  ')
-        line(f'0. {back}', '  ')
+            line(f'{number}. {label}', indent)
+        back_label = f'0. {back} (or Enter alone)' if compact else f'0. {back}'
+        line(back_label, indent)
         if navigation:
             line('Type m for an arrow-key menu.', '  ')
         if result:
@@ -174,8 +177,9 @@ def choose(title, choices, back='Back', *, rich=False, result=''):
                 line(row)
         if feedback:
             line(feedback)
-        line(f'Press Enter alone for {back.lower()}.')
-        line('Enter a number, then press Enter.')
+        if not compact:
+            line(f'Press Enter alone for {back.lower()}.')
+        line('Enter a number and press Enter.')
         choice = input('Choice: ').strip()
         feedback = ''
         if choice.lower() == 'm' and navigation:
@@ -191,7 +195,8 @@ def choose(title, choices, back='Back', *, rich=False, result=''):
         for number, (_, value) in enumerate(choices, 1):
             if choice == str(number):
                 return value
-        feedback = f'That choice is unavailable. Use a number from 0 to {len(choices)}.'
+        feedback = (f'Use a number from 0 to {len(choices)}.' if compact
+                    else f'That choice is unavailable. Use a number from 0 to {len(choices)}.')
 
 def confirm(summary):
     print()
@@ -244,7 +249,7 @@ def package_label(state):
 def extensions(*, rich=False, read_only=False):
     result = ''
     while True:
-        choices = [(item['name'] + ' - ' + package_label(state), (item, state))
+        choices = [(item['name'] + ': ' + package_label(state), (item, state))
                    for item, state in extension_rows()]
         title = 'Extensions (view only)' if read_only else 'Extensions'
         selected = choose(title, choices, back='Exit' if read_only else 'Back',

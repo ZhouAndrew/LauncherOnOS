@@ -154,7 +154,7 @@ class ConsoleTests(unittest.TestCase):
                 patch.object(tui, 'choose', return_value=None) as choose:
             tui.extensions(read_only=True)
         self.assertEqual(choose.call_args.args[1][0][0],
-                         'HomeBackUp - Installed: 0.1.3 (Update available)')
+                         'HomeBackUp: Installed: 0.1.3 (Update available)')
         self.assertEqual(tui.package_label({'state': 'Disabled'}), 'Not installed')
 
     def test_backup_result_stays_next_to_the_input_prompt(self):
@@ -332,3 +332,17 @@ class ConsoleTests(unittest.TestCase):
         last_prompt = output.getvalue().rsplit('0. Back', 1)[-1]
         self.assertIn('That choice is unavailable.', last_prompt)
         self.assertIn('Press Enter alone for back.', last_prompt)
+
+    def test_small_browse_menu_keeps_first_choice_visible_after_invalid_input(self):
+        import contextlib
+        import io
+
+        output = io.StringIO()
+        rows = [(dict(name=name), dict(state='Disabled')) for name in
+                ('ZIP and Trash', 'Anki Time Travel', 'HomeBackUp', 'Link Provider')]
+        with patch.object(tui.shutil, 'get_terminal_size', return_value=os.terminal_size((32, 10))), \
+                patch.object(tui, 'extension_rows', return_value=rows), \
+                patch('sys.stdin', io.StringIO('9\n\n')), contextlib.redirect_stdout(output):
+            tui.extensions(read_only=True)
+        for page in output.getvalue().split('Choice: ')[:-1]:
+            self.assertIn('1. ZIP and Trash', '\n'.join((page + 'Choice: ').splitlines()[-10:]))
