@@ -389,3 +389,23 @@ class ConsoleTests(unittest.TestCase):
         footer = output.getvalue().rsplit('0. Exit', 1)[-1]
         self.assertIn('Installed extensions are up to date.', footer)
         self.assertIn('Choice:', footer)
+
+    def test_single_extension_result_stays_at_next_choice(self):
+        import contextlib
+        import io
+
+        item = dict(id='sample', name='Sample', description='Sample extension', version='2')
+        state = dict(state='Disabled', install=True, update=False, remove=False)
+        for answer, expected in (('yes', 'Sample 2 is installed.'),
+                                 ('', 'Cancelled. Sample was not changed.')):
+            output = io.StringIO()
+            with patch.object(tui, 'extension_rows', return_value=[(item, state)]), \
+                    patch.object(tui, 'require_installed'), \
+                    patch.object(tui, 'package_log', return_value='2') as operation, \
+                    patch('sys.stdin', io.StringIO(f'1\n1\n{answer}\n\n')), \
+                    contextlib.redirect_stdout(output):
+                tui.extensions()
+            footer = output.getvalue().rsplit('0. Back', 1)[-1]
+            self.assertIn(expected, ' '.join(footer.split()))
+            self.assertIn('Choice:', footer)
+            self.assertEqual(operation.call_count, int(answer == 'yes'))

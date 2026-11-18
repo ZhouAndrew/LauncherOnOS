@@ -273,21 +273,32 @@ def extensions(*, rich=False, read_only=False):
             ('remove', 'Uninstall'),
         ) if state[key]]
         action = choose(item['name'], actions, rich=rich) if actions else None
-        if action:
-            try:
-                require_installed()
-                detail = ' This affects all users.'
-                if item['id'] == 'homebackup' and action in ('update', 'remove'):
-                    detail += ' Check the backup service and schedule first.'
-                if confirm(f"{action.capitalize()} {item['name']}?{detail}"):
-                    version = package_log(item['name'], lambda log: lifecycle.change(
+        if not action:
+            continue
+        try:
+            require_installed()
+            detail = ' This affects all users.'
+            if item['id'] == 'homebackup' and action in ('update', 'remove'):
+                detail += ' Check the backup service and schedule first.'
+            if not confirm(f"{action.capitalize()} {item['name']}?{detail}"):
+                result = f"Cancelled. {item['name']} was not changed."
+                continue
+
+            def change_extension(log):
+                try:
+                    return lifecycle.change(
                         item['id'], action != 'remove', log, update=action == 'update',
                         admin=ConsoleAuthorization(),
-                    ))
-                    print(f"Verified: {item['name']} " + ('is absent.' if version is None
-                                                           else f'{version} is installed.'))
-            except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
-                print(f'Error: {exc}', file=sys.stderr)
+                    )
+                except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
+                    raise RuntimeError(f'{exc}\nLog: {log.path}') from exc
+
+            version = package_log(item['name'], change_extension)
+            result = (f"{item['name']} is no longer installed." if version is None
+                      else f"{item['name']} {version} is installed.")
+        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
+            result = (f"Could not finish {action} for {item['name']}. "
+                      f"Check its current status above before trying again.\n{exc}")
 
 
 def update_extensions():
