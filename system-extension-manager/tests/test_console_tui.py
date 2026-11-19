@@ -417,8 +417,7 @@ class ConsoleTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as state, patch.dict(os.environ, {'XDG_STATE_HOME': state}):
             def fail(log):
-                log.write('Could not install package\n')
-                raise RuntimeError('failed')
+                raise RuntimeError('Could not install package')
 
             output = io.StringIO()
             with contextlib.redirect_stdout(output):
@@ -429,3 +428,29 @@ class ConsoleTests(unittest.TestCase):
             self.assertIn('Failed | Test install', output.getvalue())
             self.assertIn('Could not install package', output.getvalue())
             self.assertIn('Press Enter to return.', output.getvalue())
+
+    def test_old_failure_remains_reachable_on_a_small_screen(self):
+        import contextlib
+        import io
+        import tempfile
+
+        def fail(log):
+            raise RuntimeError('The package database was unavailable.')
+
+        with tempfile.TemporaryDirectory() as state, patch.dict(os.environ, {'XDG_STATE_HOME': state}):
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                with self.assertRaises(RuntimeError):
+                    tui.package_log('Install extension', fail)
+                for _ in range(5):
+                    tui.package_log('Verify every saved file in HomeBackUp', lambda log: None)
+                with patch.object(tui.shutil, 'get_terminal_size', return_value=os.terminal_size((32, 10))), \
+                        patch('sys.stdin', io.StringIO('4\n3\n\n\n')):
+                    tui.recent_operations()
+
+        history = output.getvalue().split('Recent operations', 1)[1]
+        first_view = history.split('Choice:', 1)[0].splitlines()
+        self.assertIn('1. Finished', '\n'.join(first_view[-9:]))
+        self.assertIn('Older operations', history)
+        self.assertIn('Failed | Install extension', history)
+        self.assertIn('The package database was unavailable.', ' '.join(history.split()))

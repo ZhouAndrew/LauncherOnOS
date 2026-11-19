@@ -222,13 +222,20 @@ def package_log(label, operation):
     print(f'Working. The result will appear here.\nLog: {with_log.path}', flush=True)
     try:
         result = operation(with_log)
-    except Exception:
-        with_log.write('\nManager result: Failed\n')
+    except (KeyboardInterrupt, EOFError):
+        with_log.write('\nManager result: Interrupted\n')
+        raise
+    except Exception as exc:
+        with_log.write(f'\nError: {exc}\nManager result: Failed\n')
         raise
     else:
-        failed = (isinstance(result, tuple) and isinstance(result[0], subprocess.CompletedProcess)
-                  and result[0].returncode != 0)
-        with_log.write(f"\nManager result: {'Failed' if failed else 'Finished'}\n")
+        outcome = 'Finished'
+        if isinstance(result, tuple) and result and isinstance(result[0], subprocess.CompletedProcess):
+            process = result[0]
+            if process.returncode:
+                outcome = ('Cancelled' if 'Backup setup cancelled.' in (process.stdout or '')
+                           else 'Failed')
+        with_log.write(f'\nManager result: {outcome}\n')
         return result
     finally:
         with_log.close()
@@ -238,37 +245,58 @@ def recent_operations(*, rich=False):
     def safe_text(value):
         return ''.join(character if character.isprintable() else ' ' for character in value)
 
+    entries = []
+    outcomes = {f'Manager result: {name}'.encode(): name
+                for name in ('Failed', 'Finished', 'Cancelled', 'Interrupted')}
+    for path, modified, label in saved_logs(log_directory()):
+        try:
+            with open_log(path) as source:
+                size = source.seek(0, os.SEEK_END)
+                source.seek(max(0, size - 128))
+                last = source.read(128).rstrip().rsplit(b'\n', 1)[-1]
+        except (OSError, ValueError):
+            continue
+        entries.append((path, modified, label, outcomes.get(last, 'Result unknown')))
+    if not entries:
+        print('No recent operations found.')
+        input('Press Enter to return. ')
+        return
+
+    offset = 0
+    per_page = 3
     result = ''
     while True:
+        columns = shutil.get_terminal_size((80, 24)).columns
+        label_width = max(10, min(columns, 79) - (4 if columns <= 32 else 6))
         choices = []
-        for path, modified, label in saved_logs(log_directory())[:5]:
+        for path, modified, label, outcome in entries[offset:offset + per_page]:
             stamp = datetime.fromtimestamp(modified).strftime('%m-%d %H:%M')
-            try:
-                with open_log(path) as source:
-                    size = source.seek(0, os.SEEK_END)
-                    source.seek(max(0, size - 128))
-                    last = source.read(128).rstrip().rsplit(b'\n', 1)[-1]
-            except (OSError, ValueError):
-                continue
-            outcome = {b'Manager result: Failed': 'Failed',
-                       b'Manager result: Finished': 'Finished'}.get(last, 'Result unknown')
-            choices.append((f'{stamp} {outcome} | {safe_text(label)}', path))
-        if not choices:
-            print('No recent operations found.')
-            input('Press Enter to return. ')
-            return
+            caption = f'{outcome} | {safe_text(label)} | {stamp}'
+            if len(caption) > label_width:
+                caption = caption[:label_width - 3].rstrip() + '...'
+            choices.append((caption, (path, stamp, label, outcome)))
+        if offset + per_page < len(entries):
+            choices.append(('Older operations', offset + per_page))
+        if offset:
+            choices.append(('Newer operations', offset - per_page))
         selected = choose('Recent operations', choices, rich=rich, result=result)
         if selected is None:
             return
+        if isinstance(selected, int):
+            offset = selected
+            result = ''
+            continue
+        path, stamp, label, outcome = selected
         try:
-            output = log_preview(selected).splitlines()
+            output = log_preview(path).splitlines()
         except (OSError, ValueError):
             result = 'Could not open that record. Select another operation.'
             continue
+        line(f'{outcome} | {safe_text(label)} | {stamp}')
         print('Last lines of the operation log')
         for row in output[-12:]:
             line(safe_text(row))
-        line(f'Full log: {safe_text(str(selected))}')
+        line(f'Full log: {safe_text(str(path))}')
         input('Press Enter to return. ')
         result = ''
 
