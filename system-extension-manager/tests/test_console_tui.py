@@ -483,3 +483,18 @@ class ConsoleTests(unittest.TestCase):
                 patch.object(tui.subprocess, 'run', return_value=subprocess.CompletedProcess([], 7)), \
                 patch('sys.stdin', io.StringIO('\n')), contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(tui.main(['--task', 'security']), 7)
+
+    def test_package_stage_is_visible_before_the_operation_finishes(self):
+        import contextlib
+        import io
+        import tempfile
+
+        output = io.StringIO()
+        with tempfile.TemporaryDirectory() as state, patch.dict(os.environ, {'XDG_STATE_HOME': state}), \
+                contextlib.redirect_stdout(output):
+            def operation(log):
+                log.stage('Installing package')
+                self.assertIn('Installing the extension.', output.getvalue())
+                log.write('raw command output\n')
+                self.assertNotIn('raw command output', output.getvalue())
+            tui.package_log('Install test', operation)

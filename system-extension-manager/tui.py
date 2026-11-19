@@ -218,7 +218,19 @@ def confirm(summary):
 
 
 def package_log(label, operation):
-    with_log = OperationLog(label, emit=lambda text: None)
+    messages = {
+        'Checking package changes without changing the system': 'Checking which packages would change.',
+        'Installing package': 'Installing the extension. Follow any Linux password prompt.',
+        'Removing package': 'Removing the extension. Follow any Linux password prompt.',
+        'Reading package status back from dpkg': 'Checking the installed version.',
+    }
+
+    def show_stage(stage):
+        if stage in messages:
+            line(messages[stage])
+            sys.stdout.flush()
+
+    with_log = OperationLog(label, emit=lambda text: None, on_stage=show_stage)
     print(f'Working. The result will appear here.\nLog: {with_log.path}', flush=True)
     try:
         result = operation(with_log)
@@ -495,6 +507,9 @@ def backup_output(text):
 
 def backup_command(action, argv):
     def run(log):
+        if action in ('run', 'verify-data'):
+            line('This can take a while. Wait for the result before starting another backup.')
+            sys.stdout.flush()
         result = log.run(argv, env={
             'PATH': SYSTEM_PATH, 'SYSTEMD_PAGER': 'cat', 'SYSTEMD_COLORS': '0',
         }, check=False)
@@ -611,13 +626,13 @@ def enroll_backup():
         print(existing.stdout, end='', flush=True)
         return existing.returncode
 
-    print('Enter the password for this backup drive.', flush=True)
-    print('This is separate from your Linux login password.', flush=True)
-    print('Press Enter to cancel.', flush=True)
+    prompt = ('Enter the password for this backup drive.\n'
+              'Use the backup password here. Press Enter to cancel.\n'
+              'Backup password: ')
     with warnings.catch_warnings():
         warnings.simplefilter('error', getpass.GetPassWarning)
         try:
-            secret = getpass.getpass('Backup password: ')
+            secret = getpass.getpass(prompt)
         except (EOFError, KeyboardInterrupt):
             secret = ''
         except getpass.GetPassWarning:
