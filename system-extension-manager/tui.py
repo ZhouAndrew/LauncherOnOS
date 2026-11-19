@@ -433,6 +433,7 @@ def security_updates():
         status = ''
         while choose('After an update failure', choices, result=status):
             status = package_audit()
+    return result.returncode if result.returncode >= 0 else 128 - result.returncode
 
 
 def package_audit():
@@ -700,6 +701,8 @@ def main(argv=None):
     }
     if args.task:
         result = tasks[args.task][1]()
+        if isinstance(result, int):
+            return result
         if result:
             for row in result.splitlines():
                 line(row)
@@ -708,7 +711,8 @@ def main(argv=None):
     result = ''
     while operation := choose('System Extension Manager', choices, back='Exit', rich=rich, result=result):
         try:
-            result = operation() or ''
+            outcome = operation()
+            result = outcome if isinstance(outcome, str) else ''
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
             result = f'Error: {exc}\nYou can choose another task or exit.'
     return 0
@@ -731,7 +735,10 @@ from execution import (OperationLog, log_directory, log_preview, open_log, saved
 if __name__ == '__main__':
     try:
         sys.exit(main())
-    except (EOFError, KeyboardInterrupt):
+    except KeyboardInterrupt:
+        print('\nInterrupted.', file=sys.stderr)
+        sys.exit(130)
+    except EOFError:
         print('\nConsole closed.')
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
         sys.exit(f'Error: {exc}')

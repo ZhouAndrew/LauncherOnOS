@@ -472,3 +472,14 @@ class ConsoleTests(unittest.TestCase):
                 tui.recent_operations()
         self.assertIn('Failed | Security Updates', output.getvalue())
         self.assertIn('Cancelled | Security Updates', output.getvalue())
+
+    def test_security_shortcut_reports_failure_as_exit_status(self):
+        import contextlib
+        import io
+
+        with patch.object(tui, 'local_console', return_value=True), \
+                patch.object(tui.os, 'geteuid', return_value=1000), \
+                patch.object(tui, 'require_installed'), patch.object(tui, 'trusted_file'), \
+                patch.object(tui.subprocess, 'run', return_value=subprocess.CompletedProcess([], 7)), \
+                patch('sys.stdin', io.StringIO('\n')), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(tui.main(['--task', 'security']), 7)
