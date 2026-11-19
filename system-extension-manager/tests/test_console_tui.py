@@ -409,3 +409,23 @@ class ConsoleTests(unittest.TestCase):
             self.assertIn(expected, ' '.join(footer.split()))
             self.assertIn('Choice:', footer)
             self.assertEqual(operation.call_count, int(answer == 'yes'))
+
+    def test_recent_operations_opens_failure_details_and_can_go_back(self):
+        import contextlib
+        import io
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as state, patch.dict(os.environ, {'XDG_STATE_HOME': state}):
+            def fail(log):
+                log.write('Could not install package\n')
+                raise RuntimeError('failed')
+
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                with self.assertRaises(RuntimeError):
+                    tui.package_log('Test install', fail)
+                with patch('sys.stdin', io.StringIO('1\n\n\n')):
+                    tui.recent_operations()
+            self.assertIn('Failed | Test install', output.getvalue())
+            self.assertIn('Could not install package', output.getvalue())
+            self.assertIn('Press Enter to return.', output.getvalue())

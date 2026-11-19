@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 """Manage extensions, manual security updates and HomeBackUp on a local console."""
 import argparse
+from datetime import datetime
 import fcntl
 import getpass
 import json
@@ -220,9 +221,56 @@ def package_log(label, operation):
     with_log = OperationLog(label, emit=lambda text: None)
     print(f'Working. The result will appear here.\nLog: {with_log.path}', flush=True)
     try:
-        return operation(with_log)
+        result = operation(with_log)
+    except Exception:
+        with_log.write('\nManager result: Failed\n')
+        raise
+    else:
+        failed = (isinstance(result, tuple) and isinstance(result[0], subprocess.CompletedProcess)
+                  and result[0].returncode != 0)
+        with_log.write(f"\nManager result: {'Failed' if failed else 'Finished'}\n")
+        return result
     finally:
         with_log.close()
+
+
+def recent_operations(*, rich=False):
+    def safe_text(value):
+        return ''.join(character if character.isprintable() else ' ' for character in value)
+
+    result = ''
+    while True:
+        choices = []
+        for path, modified, label in saved_logs(log_directory())[:5]:
+            stamp = datetime.fromtimestamp(modified).strftime('%m-%d %H:%M')
+            try:
+                with open_log(path) as source:
+                    size = source.seek(0, os.SEEK_END)
+                    source.seek(max(0, size - 128))
+                    last = source.read(128).rstrip().rsplit(b'\n', 1)[-1]
+            except (OSError, ValueError):
+                continue
+            outcome = {b'Manager result: Failed': 'Failed',
+                       b'Manager result: Finished': 'Finished'}.get(last, 'Result unknown')
+            choices.append((f'{stamp} {outcome} | {safe_text(label)}', path))
+        if not choices:
+            print('No recent operations found.')
+            input('Press Enter to return. ')
+            return
+        selected = choose('Recent operations', choices, rich=rich, result=result)
+        if selected is None:
+            return
+        try:
+            output = log_preview(selected).splitlines()
+        except (OSError, ValueError):
+            result = 'Could not open that record. Select another operation.'
+            continue
+        print('Last lines of the operation log')
+        for row in output[-12:]:
+            line(safe_text(row))
+        line(f'Full log: {safe_text(str(selected))}')
+        input('Press Enter to return. ')
+        result = ''
 
 
 def extension_rows():
@@ -612,6 +660,7 @@ def main(argv=None):
         'updates': ('Check and update extensions', update_extensions),
         'security': ('Review system security updates', security_updates),
         'backup': ('Back up or check your files (HomeBackUp)', lambda: homebackup(rich=rich)),
+        'recent': ('Recent operations', lambda: recent_operations(rich=rich)),
     }
     if args.task:
         result = tasks[args.task][1]()
@@ -639,7 +688,7 @@ if Path(__file__).resolve() == ENTRY:
         sys.exit(f'Error: {exc}')
     sys.path.insert(0, str(INSTALLED))
 import lifecycle
-from execution import OperationLog
+from execution import OperationLog, log_directory, log_preview, open_log, saved_logs
 
 
 if __name__ == '__main__':
