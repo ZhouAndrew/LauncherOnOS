@@ -245,18 +245,23 @@ def recent_operations(*, rich=False):
     def safe_text(value):
         return ''.join(character if character.isprintable() else ' ' for character in value)
 
-    entries = []
+    entries = saved_logs(log_directory())
     outcomes = {f'Manager result: {name}'.encode(): name
                 for name in ('Failed', 'Finished', 'Cancelled', 'Interrupted')}
-    for path, modified, label in saved_logs(log_directory()):
+
+    def outcome_for(path):
         try:
+            if path.name.startswith(('security-updates-standalone-', 'security-updates-terminal-')):
+                result = security_update_result(path)
+                return 'Result unknown' if result == 'No final result recorded' else result
             with open_log(path) as source:
                 size = source.seek(0, os.SEEK_END)
                 source.seek(max(0, size - 128))
                 last = source.read(128).rstrip().rsplit(b'\n', 1)[-1]
+            return outcomes.get(last, 'Result unknown')
         except (OSError, ValueError):
-            continue
-        entries.append((path, modified, label, outcomes.get(last, 'Result unknown')))
+            return 'Unavailable'
+
     if not entries:
         print('No recent operations found.')
         input('Press Enter to return. ')
@@ -269,9 +274,12 @@ def recent_operations(*, rich=False):
         columns = shutil.get_terminal_size((80, 24)).columns
         label_width = max(10, min(columns, 79) - (4 if columns <= 32 else 6))
         choices = []
-        for path, modified, label, outcome in entries[offset:offset + per_page]:
+        for path, modified, label in entries[offset:offset + per_page]:
+            outcome = outcome_for(path)
             stamp = datetime.fromtimestamp(modified).strftime('%m-%d %H:%M')
-            caption = f'{outcome} | {safe_text(label)} | {stamp}'
+            # Keep the task name visible even when the full result is verbose.
+            short_outcome = 'Failed' if outcome.startswith('Failed (') else outcome
+            caption = f'{short_outcome} | {safe_text(label)} | {stamp}'
             if len(caption) > label_width:
                 caption = caption[:label_width - 3].rstrip() + '...'
             choices.append((caption, (path, stamp, label, outcome)))
@@ -716,7 +724,8 @@ if Path(__file__).resolve() == ENTRY:
         sys.exit(f'Error: {exc}')
     sys.path.insert(0, str(INSTALLED))
 import lifecycle
-from execution import OperationLog, log_directory, log_preview, open_log, saved_logs
+from execution import (OperationLog, log_directory, log_preview, open_log, saved_logs,
+                       security_update_result)
 
 
 if __name__ == '__main__':

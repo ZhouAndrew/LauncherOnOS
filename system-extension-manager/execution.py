@@ -51,7 +51,7 @@ def saved_logs(folder):
                 header = source.readline(1024).decode('utf-8', errors='replace').strip()
         except (OSError, ValueError):
             continue
-        label = 'Security Updates terminal' if path.name.startswith('security-updates-terminal-') else 'Operation log'
+        label = 'Security Updates terminal' if path.name.startswith(('security-updates-terminal-', 'security-updates-standalone-')) else 'Operation log'
         if header.startswith('Operation: '):
             label = header.removeprefix('Operation: ')
         entries.append((path, metadata.st_mtime, label))

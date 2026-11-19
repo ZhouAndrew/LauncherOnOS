@@ -454,3 +454,21 @@ class ConsoleTests(unittest.TestCase):
         self.assertIn('Older operations', history)
         self.assertIn('Failed | Install extension', history)
         self.assertIn('The package database was unavailable.', ' '.join(history.split()))
+
+    def test_security_update_history_distinguishes_failure_and_cancellation(self):
+        import contextlib
+        import io
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as state, patch.dict(os.environ, {'XDG_STATE_HOME': state}):
+            folder = tui.log_directory()
+            folder.mkdir(parents=True)
+            (folder / 'security-updates-standalone-cancel.log').write_text(
+                'Cancelled; no packages installed.\n\nExit code: 0\n')
+            (folder / 'security-updates-standalone-fail.log').write_text(
+                'Review stopped before package installation.\n\nExit code: 1\n')
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output), patch('sys.stdin', io.StringIO('\n')):
+                tui.recent_operations()
+        self.assertIn('Failed | Security Updates', output.getvalue())
+        self.assertIn('Cancelled | Security Updates', output.getvalue())
