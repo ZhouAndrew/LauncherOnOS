@@ -498,3 +498,37 @@ class ConsoleTests(unittest.TestCase):
                 log.write('raw command output\n')
                 self.assertNotIn('raw command output', output.getvalue())
             tui.package_log('Install test', operation)
+
+    def test_ctrl_c_at_update_confirmation_returns_to_menu_without_installing(self):
+        import contextlib
+        import io
+
+        output = io.StringIO()
+        planned = [(dict(id='sample', name='Sample', version='2'), '1')]
+        with patch.object(tui, 'local_console', return_value=True), \
+                patch.object(tui.os, 'geteuid', return_value=1000), \
+                patch.object(tui, 'require_installed'), \
+                patch.object(tui.lifecycle, 'update_all_plan', return_value=planned), \
+                patch.object(tui.lifecycle, 'update_all') as apply, \
+                patch('builtins.input', side_effect=['2', KeyboardInterrupt(), '']), \
+                contextlib.redirect_stdout(output):
+            self.assertEqual(tui.main([]), 0)
+        apply.assert_not_called()
+        self.assertIn('Cancelled. No extension updates installed.', output.getvalue())
+
+    def test_interrupted_operation_leaves_recovery_guidance_in_log(self):
+        import contextlib
+        import io
+        import tempfile
+
+        def interrupt(log):
+            raise KeyboardInterrupt()
+
+        with tempfile.TemporaryDirectory() as state, patch.dict(os.environ, {'XDG_STATE_HOME': state}), \
+                contextlib.redirect_stdout(io.StringIO()) as output:
+            with self.assertRaises(KeyboardInterrupt):
+                tui.package_log('Test interrupted installation', interrupt)
+            with patch('sys.stdin', io.StringIO('1\n\n\n')):
+                tui.recent_operations()
+        self.assertIn('Interrupted | Test interrupted installation', output.getvalue())
+        self.assertIn('Check the current status before trying again.', output.getvalue())

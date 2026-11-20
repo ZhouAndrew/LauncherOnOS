@@ -209,7 +209,7 @@ def confirm(summary):
             termios.tcflush(sys.stdin.fileno(), termios.TCIFLUSH)
         if input('Your answer: ').strip().lower() == 'yes':
             return True
-    except EOFError:
+    except (EOFError, KeyboardInterrupt):
         pass
     except (OSError, termios.error):
         print('Could not read a fresh answer.')
@@ -235,7 +235,10 @@ def package_log(label, operation):
     try:
         result = operation(with_log)
     except (KeyboardInterrupt, EOFError):
-        with_log.write('\nManager result: Interrupted\n')
+        message = 'Operation interrupted. Check the current status before trying again.'
+        with_log.write(f'\n{message}\nManager result: Interrupted\n')
+        line(message)
+        line(f'Log: {with_log.path}')
         raise
     except Exception as exc:
         with_log.write(f'\nError: {exc}\nManager result: Failed\n')
