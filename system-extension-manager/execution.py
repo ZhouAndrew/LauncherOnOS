@@ -51,7 +51,7 @@ def saved_logs(folder):
                 header = source.readline(1024).decode('utf-8', errors='replace').strip()
         except (OSError, ValueError):
             continue
-        label = 'Security Updates terminal' if path.name.startswith('security-updates-terminal-') else 'Operation log'
+        label = 'Security Updates terminal' if path.name.startswith(('security-updates-terminal-', 'security-updates-standalone-')) else 'Operation log'
         if header.startswith('Operation: '):
             label = header.removeprefix('Operation: ')
         entries.append((path, metadata.st_mtime, label))
@@ -91,11 +91,12 @@ def export_log(source, destination):
 
 
 class OperationLog:
-    def __init__(self, label, emit=None):
+    def __init__(self, label, emit=None, *, on_stage=None):
         fd, self.path = new_log_file(datetime.now().strftime('%Y%m%d-%H%M%S-'))
         self.stream = os.fdopen(fd, 'w', encoding='utf-8')
         self.emit = emit or (lambda line: print(line, end='', flush=True))
         self.lock = threading.Lock()
+        self.on_stage = on_stage
         self.write(f'Operation: {label}\nLog: {self.path}\n')
 
     def write(self, text):
@@ -106,6 +107,9 @@ class OperationLog:
 
     def stage(self, text):
         self.write(f'\n[{datetime.now().isoformat(timespec="seconds")}] {text}\n')
+
+        if self.on_stage is not None:
+            self.on_stage(text)
 
     def run(self, args, *, cwd=None, check=True, **kwargs):
         args = [str(arg) for arg in args]

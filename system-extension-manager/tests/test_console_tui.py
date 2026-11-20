@@ -1,0 +1,534 @@
+import os
+from pathlib import Path
+import pty
+import subprocess
+import sys
+import unittest
+from unittest.mock import patch
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+import lifecycle
+import tui
+
+
+class ConsoleTests(unittest.TestCase):
+    def test_redirected_input_cannot_start_even_with_console_environment(self):
+        completed = subprocess.run(
+            [sys.executable, str(ROOT / 'tui.py')], input='1\n', text=True,
+            capture_output=True, env={**os.environ, 'XDG_SESSION_TYPE': 'tty'},
+            timeout=5,
+        )
+        self.assertEqual(completed.returncode, 1)
+        self.assertIn('Ctrl+Alt+F3', completed.stderr)
+
+    def test_real_pseudoterminal_cannot_start(self):
+        master, slave = pty.openpty()
+        try:
+            completed = subprocess.run(
+                [sys.executable, str(ROOT / 'tui.py')],
+                stdin=slave, stdout=slave, stderr=slave, timeout=5,
+            )
+            self.assertEqual(completed.returncode, 1)
+            self.assertIn(b'Ctrl+Alt+F3', os.read(master, 4096))
+        finally:
+            os.close(master)
+            os.close(slave)
+
+    def test_failed_task_returns_to_menu_and_enter_exits(self):
+        with patch.object(tui, 'local_console', return_value=True), \
+                patch.object(tui.os, 'geteuid', return_value=1000), \
+                patch.object(sys, 'argv', ['tui.py']), \
+                patch('builtins.input', side_effect=['3', '']), \
+                patch.object(tui, 'security_updates', side_effect=ValueError('APT is busy')), \
+                patch('sys.stdout') as output:
+            self.assertEqual(tui.main(), 0)
+        output.write.assert_any_call('Error: APT is busy')
+        self.assertEqual(output.write.call_args_list.count(
+            unittest.mock.call('\nSystem Extension Manager')), 2)
+
+    def test_extension_update_defaults_to_cancel(self):
+        plan = [({'name': 'ZIP and Trash', 'version': '2'}, '1')]
+        with patch.object(lifecycle, 'update_all_plan', return_value=plan), \
+                patch.object(tui, 'require_installed'), \
+                patch.object(lifecycle, 'update_all') as update, \
+                patch('builtins.input', return_value=''), patch('sys.stdout'):
+            tui.update_extensions()
+        update.assert_not_called()
+
+    def test_stale_approved_plan_does_not_apply_changes(self):
+        with patch.object(lifecycle.os, 'geteuid', return_value=1000), \
+                patch.object(lifecycle, 'update_all_plan', return_value=[]), \
+                patch.object(lifecycle, 'change') as change:
+            with self.assertRaisesRegex(ValueError, 'versions changed'):
+                lifecycle.update_all(unittest.mock.Mock(), include_security=False,
+                                     plan=[({'id': 'zip-trash'}, '1')])
+        change.assert_not_called()
+
+    def test_plain_and_rich_browse_on_real_pseudo_terminal(self):
+        for term, mode, bold in (('dumb', 'rich', False),
+                                 ('sem-unknown-terminal', 'rich', False),
+                                 ('xterm', 'rich', True),
+                                 ('xterm', 'plain', False)):
+            with self.subTest(term=term, mode=mode):
+                master, slave = pty.openpty()
+                try:
+                    os.write(master, b'1\n\n\n')
+                    completed = subprocess.run(
+                        [sys.executable, str(ROOT / 'tui.py'),
+                         '--browse', '--display', mode],
+                        stdin=slave, stdout=slave, stderr=slave, timeout=10,
+                        env={**os.environ, 'TERM': term, 'COLUMNS': '40'},
+                    )
+                    self.assertEqual(completed.returncode, 0)
+                    output = os.read(master, 8192)
+                    self.assertIn(b'Extensions (view only)', output)
+                    self.assertIn(b'ZIP and Trash', output)
+                    self.assertNotIn(b'Uninstall', output)
+                    self.assertEqual(b'\x1b[1m' in output, bold)
+                finally:
+                    os.close(master)
+                    os.close(slave)
+
+    def test_json_status_is_readable_without_a_terminal(self):
+        import json
+
+        completed = subprocess.run(
+            [sys.executable, str(ROOT / 'tui.py'), '--status-json'],
+            capture_output=True, text=True, timeout=10,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        report = json.loads(completed.stdout)
+        self.assertEqual(report['schema_version'], 1)
+        self.assertEqual({row['id'] for row in report['extensions']},
+                         {'zip-trash', 'anki-time-travel', 'homebackup', 'link-provider'})
+
+    def test_navigation_restores_numbered_output_on_real_terminal(self):
+        import fcntl
+        import select
+        import struct
+        import termios
+        import time
+
+        master, slave = pty.openpty()
+        try:
+            fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 10, 40, 0, 0))
+            with subprocess.Popen(
+                [sys.executable, str(ROOT / 'tui.py'), '--browse', '--display', 'rich'],
+                stdin=slave, stdout=slave, stderr=slave,
+                env={**os.environ, 'TERM': 'xterm'},
+            ) as process:
+                def read_until(fragment):
+                    deadline = time.monotonic() + 5
+                    observed = b''
+                    while fragment not in observed:
+                        if not select.select([master], [], [], max(0, deadline - time.monotonic()))[0]:
+                            self.fail(f'Did not see {fragment!r} in {observed!r}')
+                        observed += os.read(master, 4096)
+                    return observed
+
+                try:
+                    read_until(b'Choice:')
+                    os.write(master, b'm\n')
+                    read_until(b'Up/Down')
+                    os.write(master, b'\x1bOB\n')
+                    output = read_until(b'Press Enter to return.')
+                    self.assertIn(b'Nemo verified', output)
+                    self.assertNotIn(b'Choice:', output)
+                    os.write(master, b'\n')
+                    read_until(b'Choice:')
+                    os.write(master, b'\n')
+                    self.assertEqual(process.wait(timeout=5), 0)
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+        finally:
+            os.close(master)
+            os.close(slave)
+
+    def test_browse_labels_package_installation_not_timer_state(self):
+        item = {'name': 'HomeBackUp'}
+        installed = {'state': 'Enabled: 0.1.3 (Update available)'}
+        with patch.object(tui, 'extension_rows', return_value=[(item, installed)]), \
+                patch.object(tui, 'choose', return_value=None) as choose:
+            tui.extensions(read_only=True)
+        self.assertEqual(choose.call_args.args[1][0][0],
+                         'HomeBackUp: Installed: 0.1.3 (Update available)')
+        self.assertEqual(tui.package_label({'state': 'Disabled'}), 'Not installed')
+
+    def test_backup_result_stays_next_to_the_input_prompt(self):
+        import contextlib
+        import io
+
+        scenarios = [
+            ('yes', 0, '', 'Backup succeeded. The new archive was verified.'),
+            ('yes', 1, '未挂载或 UUID 不符', 'Connect or mount the correct backup drive'),
+            ('', None, '', 'Cancelled. No changes made.'),
+        ]
+        for answer, code, status_text, message in scenarios:
+            with self.subTest(code=code):
+                output = io.StringIO()
+                responses = [
+                    (subprocess.CompletedProcess([], code, ''), '/logs/backup.log'),
+                    (subprocess.CompletedProcess([], 0, status_text), '/logs/status.log'),
+                ]
+                with patch.object(tui, 'require_installed'), patch.object(tui, 'trusted_file'), \
+                        patch.object(lifecycle, 'installed_version', return_value='0.1.6'), \
+                        patch('sys.stdin', io.StringIO(f'2\n{answer}\n\n')), \
+                        patch.object(tui, 'backup_command', side_effect=responses) as backup, \
+                        contextlib.redirect_stdout(output):
+                    tui.homebackup()
+                screen = output.getvalue()
+                self.assertIn('may delete older', ' '.join(screen.split()))
+                footer = screen.rsplit('0. Back', 1)[-1]
+                self.assertIn(message, ' '.join(footer.split()))
+                self.assertIn('Enter a number', footer)
+                self.assertEqual(backup.call_count, {None: 0, 0: 1, 1: 2}[code])
+                if code is not None:
+                    self.assertIn('/logs/backup.log', footer)
+
+    def test_multi_line_paste_cannot_confirm_menu_action(self):
+        import select
+        import time
+
+        for answer, accepted in ((b'\n', False), (b'yes\n', True)):
+            with self.subTest(accepted=accepted):
+                master, slave = pty.openpty()
+                try:
+                    child = (
+                        "import tui; menu = tui.choose('Menu', [('Demo', 'demo')]); "
+                        "print('Approved:', tui.confirm('Apply demo?') if menu else False)"
+                    )
+                    with subprocess.Popen(
+                        [sys.executable, '-c', child], cwd=ROOT,
+                        stdin=slave, stdout=slave, stderr=slave,
+                    ) as process:
+                        def read_until(fragment):
+                            end = time.monotonic() + 5
+                            captured = b''
+                            while fragment not in captured:
+                                if not select.select([master], [], [], max(0, end - time.monotonic()))[0]:
+                                    self.fail(f'Missing {fragment!r} in {captured!r}')
+                                captured += os.read(master, 4096)
+                            return captured
+
+                        try:
+                            read_until(b'Choice:')
+                            os.write(master, b'1\nyes\n')
+                            read_until(b'Your answer: ')
+                            os.write(master, answer)
+                            read_until(f'Approved: {accepted}'.encode())
+                            self.assertEqual(process.wait(timeout=5), 0)
+                        finally:
+                            if process.poll() is None:
+                                process.kill()
+                finally:
+                    os.close(master)
+                    os.close(slave)
+
+    def test_backup_status_shows_plain_language_beside_menu_prompt(self):
+        import contextlib
+        import io
+
+        status = ('每月定时器安装状态：disabled\n每月定时器运行状态：inactive\n'
+                  '备份磁盘挂载：未挂载或 UUID 不符\n')
+        result = subprocess.CompletedProcess([], 0, status)
+        output = io.StringIO()
+        with patch.object(tui, 'require_installed'), patch.object(tui, 'trusted_file'), \
+                patch.object(lifecycle, 'installed_version', return_value='0.1.6'), \
+                patch('sys.stdin', io.StringIO('1\n\n')), \
+                patch.object(tui, 'backup_command', return_value=(result, '/logs/status.log')), \
+                contextlib.redirect_stdout(output):
+            tui.homebackup()
+        footer = ' '.join(output.getvalue().rsplit('0. Back', 1)[-1].split())
+        self.assertIn('Backup drive: Connect or mount the backup drive.', footer)
+        self.assertIn('Monthly backups: Off', footer)
+        self.assertIn('Enter a number', footer)
+        self.assertIn('Monthly backups: On', tui.backup_status_summary(
+            '每月定时器安装状态：enabled\n每月定时器运行状态：active\n'))
+        self.assertIn('Monthly backups: Could not verify', tui.backup_status_summary(''))
+
+    def test_monthly_setup_asks_only_when_saved_password_cannot_be_used(self):
+        import contextlib
+        import io
+
+        for code, message, answer, expected in (
+            (0, '', 'fixture', 0),
+            (1, '尚未保存 Borg 密码；请先执行设置。', 'fixture', 0),
+            (1, '已存 Borg 密码无效。', '', 2),
+            (1, 'HomeBackUp 未挂载。', 'fixture', 1),
+        ):
+            with self.subTest(message=message):
+                first = subprocess.CompletedProcess([], code, message)
+                enrolled = subprocess.CompletedProcess([], 0)
+                with patch.object(tui.os, 'geteuid', return_value=0), \
+                        patch.object(tui, 'trusted_file'), \
+                        patch.object(tui.subprocess, 'run', side_effect=[first, enrolled]) as run, \
+                        patch.object(tui.getpass, 'getpass', return_value=answer) as ask, \
+                        contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(tui.enroll_backup(), expected)
+                self.assertEqual(run.call_args_list[0].args[0][-1], 'use-existing')
+                self.assertEqual(ask.call_count, int('Borg' in message))
+                if run.call_count == 2:
+                    self.assertEqual(run.call_args.args[0][-1], 'enroll')
+                    self.assertEqual(run.call_args.kwargs['input'], 'fixture\n')
+
+    def test_package_audit_distinguishes_clean_incomplete_and_unavailable(self):
+        import contextlib
+        import io
+
+        for code, stdout, stderr, label in (
+            (0, '', '', 'No incomplete packages found'),
+            (0, 'Package is unpacked', '', 'Some packages need attention'),
+            (1, '', 'Database unreadable', 'Could not confirm'),
+        ):
+            result = subprocess.CompletedProcess([], code, stdout, stderr)
+            with patch.object(tui.subprocess, 'run', return_value=result) as run, \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertIn(label, tui.package_audit())
+            self.assertEqual(run.call_args.args[0], ['/usr/bin/dpkg', '--audit'])
+
+    def test_read_only_backup_lists_need_no_confirmation(self):
+        import contextlib
+        import io
+
+        for selection, action, message in (
+            ('3', 'list', 'Saved backups are listed above.'),
+            ('4', 'preview', 'No backups were deleted.'),
+        ):
+            with self.subTest(action=action):
+                output = io.StringIO()
+                reply = (subprocess.CompletedProcess([], 0, 'fixture'), '/logs/backup.log')
+                with patch.object(tui, 'require_installed'), patch.object(tui, 'trusted_file'), \
+                        patch.object(lifecycle, 'installed_version', return_value='0.1.6'), \
+                        patch('sys.stdin', io.StringIO(selection + '\n\n')), \
+                        patch.object(tui, 'confirm') as confirm, \
+                        patch.object(tui, 'backup_command', return_value=reply) as command, \
+                        contextlib.redirect_stdout(output):
+                    tui.homebackup()
+                confirm.assert_not_called()
+                self.assertEqual(command.call_args.args[0], action)
+                self.assertIn(message, output.getvalue())
+                self.assertIn('/logs/backup.log', output.getvalue())
+
+    def test_backup_failures_give_the_relevant_next_step(self):
+        for message, next_step in (
+            ('请先设置 Borg 仓库密码。', 'Choose Turn on monthly backups'),
+            ('找不到原有 Borg 仓库；不会新建仓库。', 'correct drive'),
+            ('旧 homebackup-monthly.timer 已启用', 'switching schedules'),
+            ('解密验证失败，保持旧密码不变。', 'drive and backup password'),
+        ):
+            with self.subTest(message=message):
+                self.assertIn(next_step, tui.backup_failure(message))
+
+    def test_invalid_choice_guidance_stays_near_prompt(self):
+        import contextlib
+        import io
+
+        output = io.StringIO()
+        with patch('sys.stdin', io.StringIO('9\n1\n')), contextlib.redirect_stdout(output):
+            self.assertEqual(tui.choose('Menu', [('View status', 'status')]), 'status')
+        last_prompt = output.getvalue().rsplit('0. Back', 1)[-1]
+        self.assertIn('That choice is unavailable.', last_prompt)
+        self.assertIn('Press Enter alone for back.', last_prompt)
+
+    def test_small_browse_menu_keeps_first_choice_visible_after_invalid_input(self):
+        import contextlib
+        import io
+
+        output = io.StringIO()
+        rows = [(dict(name=name), dict(state='Disabled')) for name in
+                ('ZIP and Trash', 'Anki Time Travel', 'HomeBackUp', 'Link Provider')]
+        with patch.object(tui.shutil, 'get_terminal_size', return_value=os.terminal_size((32, 10))), \
+                patch.object(tui, 'extension_rows', return_value=rows), \
+                patch('sys.stdin', io.StringIO('9\n\n')), contextlib.redirect_stdout(output):
+            tui.extensions(read_only=True)
+        for page in output.getvalue().split('Choice: ')[:-1]:
+            self.assertIn('1. ZIP and Trash', '\n'.join((page + 'Choice: ').splitlines()[-10:]))
+
+    def test_python_update_plan_and_json_agree(self):
+        import contextlib
+        import io
+        import json
+
+        output = io.StringIO()
+        plan = [({'id': 'sample', 'version': '2'}, '1')]
+        with patch.object(tui.lifecycle, 'update_all_plan', return_value=plan), \
+                contextlib.redirect_stdout(output):
+            expected = tui.extension_update_plan()
+            self.assertEqual(tui.main(['--update-plan-json']), 0)
+        self.assertEqual(json.loads(output.getvalue()), expected)
+        self.assertEqual(expected['updates'][0]['available'], '2')
+
+    def test_admin_task_requires_console_and_opens_selected_task(self):
+        with patch.object(tui, 'local_console', return_value=False), \
+                patch.object(tui, 'update_extensions', return_value=None) as update:
+            with self.assertRaisesRegex(ValueError, 'Ctrl\\+Alt\\+F3'):
+                tui.main(['--task', 'updates'])
+            update.assert_not_called()
+        with patch.object(tui, 'local_console', return_value=True), \
+                patch.object(tui.os, 'geteuid', return_value=1000), \
+                patch.object(tui, 'update_extensions', return_value=None) as update, \
+                patch.object(tui, 'choose') as choose:
+            self.assertEqual(tui.main(['--task', 'updates']), 0)
+            update.assert_called_once()
+            choose.assert_not_called()
+
+    def test_no_updates_stays_visible_at_the_next_main_menu_prompt(self):
+        import contextlib
+        import io
+
+        output = io.StringIO()
+        with patch.object(tui, 'local_console', return_value=True), \
+                patch.object(tui.os, 'geteuid', return_value=1000), \
+                patch.object(tui.lifecycle, 'update_all_plan', return_value=[]), \
+                patch('sys.stdin', io.StringIO('2\n\n')), \
+                contextlib.redirect_stdout(output):
+            self.assertEqual(tui.main(['--display', 'plain']), 0)
+        footer = output.getvalue().rsplit('0. Exit', 1)[-1]
+        self.assertIn('Installed extensions are up to date.', footer)
+        self.assertIn('Choice:', footer)
+
+    def test_single_extension_result_stays_at_next_choice(self):
+        import contextlib
+        import io
+
+        item = dict(id='sample', name='Sample', description='Sample extension', version='2')
+        state = dict(state='Disabled', install=True, update=False, remove=False)
+        for answer, expected in (('yes', 'Sample 2 is installed.'),
+                                 ('', 'Cancelled. Sample was not changed.')):
+            output = io.StringIO()
+            with patch.object(tui, 'extension_rows', return_value=[(item, state)]), \
+                    patch.object(tui, 'require_installed'), \
+                    patch.object(tui, 'package_log', return_value='2') as operation, \
+                    patch('sys.stdin', io.StringIO(f'1\n1\n{answer}\n\n')), \
+                    contextlib.redirect_stdout(output):
+                tui.extensions()
+            footer = output.getvalue().rsplit('0. Back', 1)[-1]
+            self.assertIn(expected, ' '.join(footer.split()))
+            self.assertIn('Choice:', footer)
+            self.assertEqual(operation.call_count, int(answer == 'yes'))
+
+    def test_recent_operations_opens_failure_details_and_can_go_back(self):
+        import contextlib
+        import io
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as state, patch.dict(os.environ, {'XDG_STATE_HOME': state}):
+            def fail(log):
+                raise RuntimeError('Could not install package')
+
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                with self.assertRaises(RuntimeError):
+                    tui.package_log('Test install', fail)
+                with patch('sys.stdin', io.StringIO('1\n\n\n')):
+                    tui.recent_operations()
+            self.assertIn('Failed | Test install', output.getvalue())
+            self.assertIn('Could not install package', output.getvalue())
+            self.assertIn('Press Enter to return.', output.getvalue())
+
+    def test_old_failure_remains_reachable_on_a_small_screen(self):
+        import contextlib
+        import io
+        import tempfile
+
+        def fail(log):
+            raise RuntimeError('The package database was unavailable.')
+
+        with tempfile.TemporaryDirectory() as state, patch.dict(os.environ, {'XDG_STATE_HOME': state}):
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                with self.assertRaises(RuntimeError):
+                    tui.package_log('Install extension', fail)
+                for _ in range(5):
+                    tui.package_log('Verify every saved file in HomeBackUp', lambda log: None)
+                with patch.object(tui.shutil, 'get_terminal_size', return_value=os.terminal_size((32, 10))), \
+                        patch('sys.stdin', io.StringIO('4\n3\n\n\n')):
+                    tui.recent_operations()
+
+        history = output.getvalue().split('Recent operations', 1)[1]
+        first_view = history.split('Choice:', 1)[0].splitlines()
+        self.assertIn('1. Finished', '\n'.join(first_view[-9:]))
+        self.assertIn('Older operations', history)
+        self.assertIn('Failed | Install extension', history)
+        self.assertIn('The package database was unavailable.', ' '.join(history.split()))
+
+    def test_security_update_history_distinguishes_failure_and_cancellation(self):
+        import contextlib
+        import io
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as state, patch.dict(os.environ, {'XDG_STATE_HOME': state}):
+            folder = tui.log_directory()
+            folder.mkdir(parents=True)
+            (folder / 'security-updates-standalone-cancel.log').write_text(
+                'Cancelled; no packages installed.\n\nExit code: 0\n')
+            (folder / 'security-updates-standalone-fail.log').write_text(
+                'Review stopped before package installation.\n\nExit code: 1\n')
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output), patch('sys.stdin', io.StringIO('\n')):
+                tui.recent_operations()
+        self.assertIn('Failed | Security Updates', output.getvalue())
+        self.assertIn('Cancelled | Security Updates', output.getvalue())
+
+    def test_security_shortcut_reports_failure_as_exit_status(self):
+        import contextlib
+        import io
+
+        with patch.object(tui, 'local_console', return_value=True), \
+                patch.object(tui.os, 'geteuid', return_value=1000), \
+                patch.object(tui, 'require_installed'), patch.object(tui, 'trusted_file'), \
+                patch.object(tui.subprocess, 'run', return_value=subprocess.CompletedProcess([], 7)), \
+                patch('sys.stdin', io.StringIO('\n')), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(tui.main(['--task', 'security']), 7)
+
+    def test_package_stage_is_visible_before_the_operation_finishes(self):
+        import contextlib
+        import io
+        import tempfile
+
+        output = io.StringIO()
+        with tempfile.TemporaryDirectory() as state, patch.dict(os.environ, {'XDG_STATE_HOME': state}), \
+                contextlib.redirect_stdout(output):
+            def operation(log):
+                log.stage('Installing package')
+                self.assertIn('Installing the extension.', output.getvalue())
+                log.write('raw command output\n')
+                self.assertNotIn('raw command output', output.getvalue())
+            tui.package_log('Install test', operation)
+
+    def test_ctrl_c_at_update_confirmation_returns_to_menu_without_installing(self):
+        import contextlib
+        import io
+
+        output = io.StringIO()
+        planned = [(dict(id='sample', name='Sample', version='2'), '1')]
+        with patch.object(tui, 'local_console', return_value=True), \
+                patch.object(tui.os, 'geteuid', return_value=1000), \
+                patch.object(tui, 'require_installed'), \
+                patch.object(tui.lifecycle, 'update_all_plan', return_value=planned), \
+                patch.object(tui.lifecycle, 'update_all') as apply, \
+                patch('builtins.input', side_effect=['2', KeyboardInterrupt(), '']), \
+                contextlib.redirect_stdout(output):
+            self.assertEqual(tui.main([]), 0)
+        apply.assert_not_called()
+        self.assertIn('Cancelled. No extension updates installed.', output.getvalue())
+
+    def test_interrupted_operation_leaves_recovery_guidance_in_log(self):
+        import contextlib
+        import io
+        import tempfile
+
+        def interrupt(log):
+            raise KeyboardInterrupt()
+
+        with tempfile.TemporaryDirectory() as state, patch.dict(os.environ, {'XDG_STATE_HOME': state}), \
+                contextlib.redirect_stdout(io.StringIO()) as output:
+            with self.assertRaises(KeyboardInterrupt):
+                tui.package_log('Test interrupted installation', interrupt)
+            with patch('sys.stdin', io.StringIO('1\n\n\n')):
+                tui.recent_operations()
+        self.assertIn('Interrupted | Test interrupted installation', output.getvalue())
+        self.assertIn('Check the current status before trying again.', output.getvalue())

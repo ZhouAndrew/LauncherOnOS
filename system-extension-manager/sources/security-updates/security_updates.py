@@ -2,6 +2,7 @@
 """Opt-in security updates for Ubuntu Noble-based Linux Mint; no scheduler."""
 # SECURITY WARNING: show this before importing any same-directory-shadowable modules.
 import sys
+import termios
 PRIVILEGED_IMPORT_WARNING = 'SECURITY: Privileged updates use a root-owned checksum-verified snapshot and isolated Python (-I). A modified checkout or failed verification stops execution. Use only a trusted source copy.'
 _warning_shown = False
 
@@ -37,6 +38,7 @@ import re
 import stat
 import subprocess
 import sys
+import termios
 import tempfile
 
 def stop(message):
@@ -217,7 +219,7 @@ def check_locks():
     result = subprocess.run(['/usr/bin/fuser', *locks],
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if result.returncode == 0:
-        raise SafetyError('An APT/dpkg process is already running; no locks were removed.')
+        raise SafetyError('Another package operation is running. Wait for it to finish, then try again.')
     if result.returncode != 1:
         raise SafetyError('Cannot safely determine APT/dpkg lock ownership.')
 
@@ -326,7 +328,7 @@ def apply(expected):
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            raise SafetyError('Another manual security update is already running.') from None
+            raise SafetyError('Another manual security update is running. Wait for it to finish, then try again.') from None
         check_locks()
         check_dpkg()
         packages, frozen = scan()
@@ -343,13 +345,20 @@ def apply(expected):
                    NEEDRESTART_MODE='l', APT_LISTCHANGES_FRONTEND='none')
         print('Installing approved security updates...', flush=True)
         args = [APT, *APT_SCOPE_OPTIONS, '-y', *APT_OPTIONS, '-o', 'Dpkg::Options::=--force-confold', 'install', *specs]
-        result = subprocess.run(args, env=env, check=False)
-        if result.returncode:
-            raise SafetyError('APT exited with {}; installation may be partial.'.format(result.returncode))
-        installed, frozen_after = scan_installed(packages, frozen)
-        if installed or frozen_after:
-            raise SafetyError('Post-install verification failed: ' + str(installed + frozen_after))
-        check_dpkg()
+        try:
+            result = subprocess.run(args, env=env, check=False)
+            if result.returncode:
+                raise SafetyError(f'APT exited with code {result.returncode}.')
+            installed, frozen_after = scan_installed(packages, frozen)
+            if installed or frozen_after:
+                raise SafetyError('Post-install verification failed: ' + str(installed + frozen_after))
+            check_dpkg()
+        except (SafetyError, OSError, ImportError, subprocess.SubprocessError, KeyboardInterrupt) as exc:
+            detail = 'Interrupted.' if isinstance(exc, KeyboardInterrupt) else str(exc)
+            raise SafetyError(
+                'Installation or verification stopped. Some packages may have changed. '
+                'Check package status and the update log before retrying.\n' + detail
+            ) from exc
         print('Verified {} security updates; protected package versions unchanged.'.format(len(packages)), flush=True)
         print('No timers, holds, autoremove or reboots were configured.', flush=True)
 
@@ -376,15 +385,22 @@ def refresh():
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            raise SafetyError('Another manual security update is already running.') from None
+            raise SafetyError('Another manual security update is running. Wait for it to finish, then try again.') from None
         check_locks()
         check_dpkg()
         prepare_apt_scope()
         print('Refreshing official Ubuntu indexes; no packages will be installed...', flush=True)
-        print(command([APT, *APT_SCOPE_OPTIONS, '-o', 'DPkg::Lock::Timeout=0',
-                       '-o', 'APT::Update::Error-Mode=any',
-                       '-o', 'Acquire::http::Timeout=30', '-o', 'Acquire::https::Timeout=30',
-                       '-o', 'Acquire::Retries=2', 'update']), flush=True)
+        args = [APT, *APT_SCOPE_OPTIONS, '-o', 'DPkg::Lock::Timeout=0',
+                '-o', 'APT::Update::Error-Mode=any',
+                '-o', 'Acquire::http::Timeout=30', '-o', 'Acquire::https::Timeout=30',
+                '-o', 'Acquire::Retries=2', 'update']
+        try:
+            print(command(args), flush=True)
+        except (SafetyError, OSError, subprocess.SubprocessError) as exc:
+            raise SafetyError(
+                'Could not refresh the update list. Check the network or repository message, '
+                'then try again.\n' + str(exc)
+            ) from exc
         print('APT index refresh completed.', flush=True)
 
 
@@ -428,26 +444,41 @@ def interactive():
     return code
 
 
+def approve_install():
+    if not sys.stdin.isatty():
+        return False
+    print('Type UPDATE to install.', flush=True)
+    print('Press Enter to cancel.', flush=True)
+    try:
+        termios.tcflush(sys.stdin.fileno(), termios.TCIFLUSH)
+        return input('Your answer: ').strip() == 'UPDATE'
+    except (EOFError, KeyboardInterrupt):
+        return False
+    except (OSError, termios.error):
+        print('Could not read a fresh answer.', flush=True)
+        return False
+
+
 def interactive_root():
     if not sys.stdin.isatty():
         raise SafetyError('An interactive terminal is required.')
     print('=== Manual security updates (Linux Mint 22.x) ===', flush=True)
     print('Kernel / NVIDIA / DKMS / firmware / boot components are protected.', flush=True)
     print('Keep this terminal open. Updates can restart services.', flush=True)
-    refresh()
-    wanted, frozen = scan()
-    print('Eligible security updates: {} (protected packages: {})'.format(len(wanted), len(frozen)), flush=True)
-    if not wanted:
-        print('No eligible security updates. Nothing to install.', flush=True)
-        return
-    for name, version in wanted.items():
-        print('  {} -> {}'.format(name, version), flush=True)
-    simulate(wanted)
     try:
-        approval = input('Type UPDATE to install, or press Enter to cancel: ').strip()
-    except EOFError:
-        approval = ''
-    if approval != 'UPDATE':
+        refresh()
+        wanted, frozen = scan()
+        print('Eligible security updates: {} (protected packages: {})'.format(len(wanted), len(frozen)), flush=True)
+        if not wanted:
+            print('No eligible security updates. Nothing to install.', flush=True)
+            return
+        for name, version in wanted.items():
+            print('  {} -> {}'.format(name, version), flush=True)
+        simulate(wanted)
+    except (SafetyError, OSError, ImportError, subprocess.SubprocessError, KeyboardInterrupt) as exc:
+        detail = 'Interrupted.' if isinstance(exc, KeyboardInterrupt) else str(exc)
+        raise SafetyError('Review stopped before package installation.\n' + detail) from exc
+    if not approve_install():
         print('Cancelled; no packages installed.', flush=True)
         return
     apply(digest(wanted))
@@ -496,7 +527,7 @@ def main(argv=None):
             for name, version in wanted.items():
                 print('  {} -> {}'.format(name, version))
             simulate(wanted)
-            if not sys.stdin.isatty() or input('Type UPDATE to install: ').strip() != 'UPDATE':
+            if not approve_install():
                 print('Cancelled; no packages installed.')
                 return 0
             return privileged_action('--apply-root', '--expect', digest(wanted))

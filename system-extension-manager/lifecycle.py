@@ -473,7 +473,7 @@ def update_all_plan(log=None):
     return updates
 
 
-def update_all(log=None, *, include_security=True, admin=None):
+def update_all(log=None, *, include_security=True, admin=None, plan=None):
     """One opt-in batch: upgrade installed outdated extensions, then open
     Security Updates for a separately approved, kernel-safe APT transaction.
 
@@ -488,6 +488,8 @@ def update_all(log=None, *, include_security=True, admin=None):
     try:
         log.stage('Planning one-time updates for installed extensions only')
         planned = update_all_plan(log)
+        if plan is not None and planned != plan:
+            raise ValueError('Extension versions changed. Review the updated list and try again.')
         if include_security:
             # Verify the portable script and terminal support before changing packages.
             updater = portable_script(plugin('security-updates'))

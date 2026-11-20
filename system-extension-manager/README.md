@@ -232,3 +232,59 @@ Portable updates require a trusted source copy and a terminal kept open through 
 ### Additional warnings (not fixes)
 
 Selected tools describe the root-owned APT install staging, isolated updater source staging and guarded backup locks, while identifying residual plan/backup consistency risks. The package confirmation and CLI logs retain these notices. HomeBackUp 0.1.6 includes the lock notice in its GTK window and runtime scripts. Legacy PDF extraction and website-menu tools warn about output links and unrestricted icon resources. See SECURITY_STATUS.md. Publication remains intentional.
+
+## Local console (TUI)
+
+Install the manager package, press **Ctrl+Alt+F3**, sign in as your normal
+administrator account, and run:
+
+```sh
+system-extension-manager-tui
+```
+
+Use the numbers shown in each menu. Enter by itself goes back or exits. Package
+and backup changes ask for confirmation, and sudo handles system authentication.
+The security updater opens its review in the same console, refreshes APT
+metadata, and waits for approval of the exact security update plan. Kernel,
+NVIDIA, DKMS, firmware and boot components are excluded from that plan.
+
+Extension and security-update logs are saved under
+`~/.local/state/system-extension-manager/logs` (or `$XDG_STATE_HOME`).
+If a package update stops, review the printed log before retrying. A deferred
+HomeBackUp update names the timer or service that needs attention.
+
+The console entry requires the active local Linux virtual console. A graphical
+terminal, SSH session or terminal multiplexer cannot start it. The existing
+desktop launcher remains available. The source checkout can display extension
+status on a local console with `python3 system-extension-manager/tui.py`.
+
+The menu uses English labels. Plain display uses no screen clearing, cursor
+movement, colors or special key combinations. On a capable terminal,
+`--display rich` adds bold headings. Use `--display plain` to force plain
+display. Auto display falls back to plain for unknown terminal capabilities,
+`TERM=dumb` or `NO_COLOR`. The menu follows terminal width on each redraw.
+
+Use `system-extension-manager-tui --browse` to view extension status from a
+graphical terminal, SSH session or multiplexer. Use
+`system-extension-manager-tui --status-json` for developer tools and scripts.
+It writes a versioned JSON object to stdout and exits with status 1 if any
+extension status could not be read. Both options are read-only. Changes still
+require the active local console. HomeBackUp writes the original diagnostics to its operation log.
+
+On a terminal with cursor positioning and arrow-key support, the rich menu
+shows an extra shortcut. Type `m` and Enter to open the arrow-key menu. Use
+Up/Down, Home/End, a number, or Enter to choose. The initial selection is Back
+or Exit. Esc and Tab return to the numbered menu. If the terminal shrinks
+below 28 columns or 8 rows, the arrow-key menu returns to the numbered menu.
+The arrow-key screen closes before confirmations, authentication and results.
+
+To preview extension updates without opening a menu, run
+`system-extension-manager-tui --update-plan-json`. From this source directory,
+Python code can also call `tui.extension_update_plan()` for a dictionary of
+installed and available versions. The plan checks bundled extension updates
+without installing them.
+
+On the local administrator console, `system-extension-manager-tui --task updates`
+opens the extension update review directly. Other task names are `extensions`,
+`security`, and `backup`. Each task uses the same authorization and
+confirmation as its menu entry.
