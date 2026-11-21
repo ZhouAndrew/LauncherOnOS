@@ -1,0 +1,6 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.journalthree.tests">
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
+    <application />
+    <instrumentation android:name="com.journalthree.StoreAcceptance"
+        android:targetPackage="com.journalthree" />
+</manifest>

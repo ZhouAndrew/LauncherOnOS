@@ -1,0 +1,50 @@
+name: Journal Three Android
+
+on:
+  pull_request:
+    paths:
+      - 'journal-three/**'
+      - '.github/workflows/journal-three.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      JOURNAL_BUILD_PREVIEW: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install build and fixture tools
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
+          command -v ffmpeg || { sudo apt-get update -qq && sudo apt-get install -y ffmpeg; }
+      - name: Build and verify preview and acceptance APKs
+        run: |
+          ./journal-three/build.sh "$RUNNER_TEMP/journal-three/Journal-Three-Preview.apk"
+          ./journal-three/tests/build-store-acceptance.sh "$RUNNER_TEMP/journal-three/StoreAcceptance.apk"
+      - name: Enable KVM
+        run: sudo chmod a+rw /dev/kvm
+      - name: Exercise SQLite, continuous editing and in-body MP4 playback
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          target: default
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: bash journal-three/tests/android-acceptance.sh "$RUNNER_TEMP/journal-three"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: journal-three-android-acceptance
+          path: |
+            ${{ runner.temp }}/journal-three/Journal-Three-Preview.apk
+            ${{ runner.temp }}/journal-three/android-acceptance.txt
