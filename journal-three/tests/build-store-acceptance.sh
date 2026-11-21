@@ -20,7 +20,7 @@ if [[ "${JOURNAL_BUILD_PREVIEW:-0}" == 1 ]]; then
   sed 's/android:targetPackage="com.journalthree"/android:targetPackage="com.journalthree.preview"/'     "$manifest" > "$work/AndroidManifest.xml"
   manifest="$work/AndroidManifest.xml"
 fi
-ffmpeg -nostdin -loglevel error -f lavfi -i "testsrc2=size=144x96:rate=12" -t 7 \
+ffmpeg -nostdin -loglevel error -f lavfi -i "testsrc2=size=144x144:rate=12" -t 7 \
     -c:v libx264 -pix_fmt yuv420p -threads 1 -movflags +faststart "$work/assets/playback.mp4"
 "$tools/aapt2" link -I "$platform" --manifest "$manifest" -A "$work/assets" -o "$work/base.apk"
 (cd "$work/dex" && "$tools/aapt" add "$work/base.apk" classes.dex)
