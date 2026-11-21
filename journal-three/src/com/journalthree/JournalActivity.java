@@ -71,6 +71,7 @@ public final class JournalActivity extends Activity {
     private ScrollView editorScroll;
     private NoteEditor noteEditor;
     private VideoView player;
+    private FrameLayout playbackFrame;
     private MediaController videoControls;
     private int mediaStart;
     private String exportType;
@@ -602,7 +603,11 @@ public final class JournalActivity extends Activity {
             (int) bounds.width(), (int) bounds.height());
         geometry.leftMargin = noteEditor.getTotalPaddingLeft() + (int) bounds.left;
         geometry.topMargin = noteEditor.getTotalPaddingTop() + (int) bounds.top;
-        editor.addView(video, geometry);
+        // VideoView measures itself to fit the decoded aspect ratio. Center it
+        // within a fixed-size frame that occupies the original card.
+        playbackFrame = new FrameLayout(this);
+        playbackFrame.addView(video, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER));
+        editor.addView(playbackFrame, geometry);
         videoControls = new MediaController(this);
         videoControls.setAnchorView(video);
         video.setMediaController(videoControls);
@@ -627,9 +632,8 @@ public final class JournalActivity extends Activity {
         videoControls.hide();
         videoControls = null;
         video.stopPlayback();
-        if (video.getParent() instanceof ViewGroup) {
-            ((ViewGroup) video.getParent()).removeView(video);
-        }
+        editor.removeView(playbackFrame);
+        playbackFrame = null;
     }
 
     private void editorMenu() {

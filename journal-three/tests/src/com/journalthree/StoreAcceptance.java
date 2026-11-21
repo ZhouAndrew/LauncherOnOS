@@ -39,7 +39,7 @@ public final class StoreAcceptance extends Instrumentation {
             result.putString("stream", "\nPASS: SQLite create, legacy migration, ordered blocks, "
                 + "search, edits, folders, trash, reopen and rollback\n"
                 + "PASS: continuous editor, cross-media selection and replacement, SQLite readback\n"
-                + "PASS: tapped in-body H.264 MP4, playback advanced and returned to the note\n");
+                + "PASS: tapped in-body H.264 MP4, playback centered, advanced and returned to the note\n");
             finish(Activity.RESULT_OK, result);
         } catch (Throwable error) {
             result.putString("stream", android.util.Log.getStackTraceString(error));
@@ -148,9 +148,19 @@ public final class StoreAcceptance extends Instrumentation {
             });
             awaitUi(() -> {
                 VideoView playing = videoView(root);
-                return playing != null && playing.getParent() == editor(root).getParent()
-                    && playing.isPlaying() && playing.getCurrentPosition() >= 200;
-            }, "inline player advances after tapping the note's video");
+                if (playing == null || !playing.isPlaying() || playing.getCurrentPosition() < 200) return false;
+                NoteEditor field = editor(root);
+                NoteEditor.MediaSpan card = field.getText()
+                    .getSpans(0, field.length(), NoteEditor.MediaSpan.class)[0];
+                int[] editorLocation = new int[2];
+                int[] videoLocation = new int[2];
+                field.getLocationOnScreen(editorLocation);
+                playing.getLocationOnScreen(videoLocation);
+                double cardCenter = editorLocation[0] + field.getTotalPaddingLeft() + card.bounds.centerX();
+                double videoCenter = videoLocation[0] + playing.getWidth() / 2.0;
+                return playing.getWidth() > 0 && playing.getWidth() < card.bounds.width()
+                    && Math.abs(videoCenter - cardCenter) <= 1;
+            }, "inline player advances and is horizontally centered in the card");
             awaitUi(() -> videoView(root) == null && editor(root) != null,
                 "completed playback returns to the video placeholder");
         } finally {
